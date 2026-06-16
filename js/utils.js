@@ -318,6 +318,62 @@ function chartDefaults(dark=false) {
   };
 }
 
+// ── Mistake detection (canonical — single source of truth) ──
+// Used by analytics.js (Mistake Detector cards) AND aiCoach.js
+// (behavioral narrative). Previously each module re-implemented this
+// independently with slightly different/mislabeled thresholds (e.g.
+// aiCoach's "chasingTrades" actually used the FOMO definition). Centralizing
+// here means both consumers always agree on what counts as what.
+
+function detectMistakes(trades) {
+  if (!trades || !trades.length) {
+    return { fomo:0, chase:0, earlyExit:0, holdingLosers:0, addingLosers:0,
+              noStop:0, oversized:0, revenge:0, overtrading:0 };
+  }
+  const sorted = [...trades].sort((a,b) => parseDD(a.sell_date) - parseDD(b.sell_date));
+
+  // FOMO: entered, dropped fast, exited within a day
+  const fomo = trades.filter(t => t.pct < -3 && (t.hold_days||0) <= 1).length;
+
+  // Chase: bought after a big same-day run-up, lost money
+  const chase = trades.filter(t => t.pct > 15 && (t.hold_days||0) === 0 && t.net < 0).length;
+
+  // Early Exit: small win, likely left money on the table
+  const earlyExit = trades.filter(t => t.net > 0 && t.pct > 0 && t.pct < 3).length;
+
+  // Holding Losers: sat in a loss for over a week
+  const holdingLosers = trades.filter(t => t.net < 0 && (t.hold_days||0) > 7).length;
+
+  // Adding to Losers: multiple entries, same symbol+month, all losing
+  const bySymMonth = {};
+  trades.forEach(t => {
+    const k = `${t.symbol}-${t.month}`;
+    (bySymMonth[k] = bySymMonth[k] || []).push(t);
+  });
+  const addingLosers = Object.values(bySymMonth)
+    .filter(arr => arr.length > 1 && arr.every(t => t.net < 0)).length;
+
+  // No Stop: explicitly logged as undisciplined in the journal
+  const noStop = trades.filter(t =>
+    t.respected_stop === 'לא' || t.respected_stop === 'לא היה סטופ').length;
+
+  // Oversized: large position that lost money
+  const oversized = trades.filter(t => (t.cost||0) > 30000 && t.net < 0).length;
+
+  // Revenge: a loss immediately followed by an even bigger loss
+  let revenge = 0;
+  for (let i=1; i<sorted.length; i++) {
+    if (sorted[i-1].net < 0 && sorted[i].net < sorted[i-1].net) revenge++;
+  }
+
+  // Overtrading: more than 4 trades closed on the same day
+  const byDate = {};
+  trades.forEach(t => { byDate[t.sell_date] = (byDate[t.sell_date]||0) + 1; });
+  const overtrading = Object.values(byDate).filter(c => c > 4).length;
+
+  return { fomo, chase, earlyExit, holdingLosers, addingLosers, noStop, oversized, revenge, overtrading };
+}
+
 // ── Score color ────────────────────────────────────────────
 
 function scoreColor(v) {
@@ -338,6 +394,20 @@ function scoreLabelHE(v) {
   return 'להימנע';
 }
 
+// ── Final blended recommendation (Decision Engine v2) ───────
+// 6-bucket label for the combined Technical + Discipline + News +
+// Personal-History score. Separate from scoreLabel()/scoreLabelHE()
+// above, which are used for the single 0-100 sub-scores.
+
+function finalRecommendation(score) {
+  if (score >= 85) return { label:'VERY_STRONG_BUY', labelHE:'קנייה חזקה מאוד',  color:'var(--green)' };
+  if (score >= 70) return { label:'STRONG_BUY',       labelHE:'קנייה חזקה',       color:'var(--green)' };
+  if (score >= 55) return { label:'WATCH',            labelHE:'למעקב',            color:'var(--blue)'  };
+  if (score >= 45) return { label:'WAIT',             labelHE:'להמתין',           color:'var(--gold)'  };
+  if (score >= 30) return { label:'WEAK',             labelHE:'חלש',              color:'var(--gold)'  };
+  return              { label:'AVOID',            labelHE:'להימנע',           color:'var(--red)'   };
+}
+
 // ── Export ─────────────────────────────────────────────────
 
 window.Utils = {
@@ -345,7 +415,7 @@ window.Utils = {
   f$, fILS, fpct, fnum, fprice,
   parseDD, toDD, isoToDD, ddToISO, monthLabel, currentMonthKey,
   rateForMonth, usdToIls, tradesNetIls,
-  normalizeTrade, calcStats,
+  normalizeTrade, calcStats, detectMistakes,
   $, $$, setHTML, show, hide, LS, debounce,
-  chartDefaults, scoreColor, scoreLabel, scoreLabelHE
+  chartDefaults, scoreColor, scoreLabel, scoreLabelHE, finalRecommendation
 };

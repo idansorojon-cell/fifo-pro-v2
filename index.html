@@ -135,7 +135,7 @@
   ═══════════════════════════════════════════════════ -->
   <div id="tab-trades" class="panel">
     <div class="search-row">
-      <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.render()">
+      <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
       <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
       <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
       <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV">⬇️ CSV</button>
@@ -166,7 +166,7 @@
   <div id="tab-journal" class="panel">
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--text-3)">יומן מסחר</span>
-      <input id="journal-search" type="text" placeholder="חיפוש..." oninput="Journal.render()" style="max-width:160px">
+      <input id="journal-search" type="text" placeholder="חיפוש..." oninput="Journal.renderDebounced()" style="max-width:160px">
       <select id="journal-filter-sym"  onchange="Journal.render()" style="max-width:130px"><option value="">כל הסימבולים</option></select>
       <select id="journal-filter-plan" onchange="Journal.render()" style="max-width:150px">
         <option value="">כל העסקאות</option>
@@ -264,7 +264,7 @@
   <div id="tab-symnotes" class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
-      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotes()" style="max-width:160px">
+      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
     </div>
     <div id="sym-notes-container" class="sym-notes-grid"></div>
   </div>
@@ -321,23 +321,27 @@
   ═══════════════════════════════════════════════════ -->
   <div id="tab-decision" class="panel">
     <div class="card">
-      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה</div>
+      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
       <div class="de-grid">
         <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
         <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
         <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
         <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="DecisionEngine.run()">🔍 נתח מניה</button>
         <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
-        הכלי נותן ציון משמעת לפי מגמה, RSI, נפח, R:R והיסטוריית המסחר שלך. לא מחליף שיקול דעת.
+        שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
+        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום AI.
+        לא מחליף שיקול דעת.
       </div>
     </div>
     <div id="decision-result"></div>
-    <!-- Trade Memory -->
+    <!-- Trade Memory / Personal Learning Engine -->
     <div id="trade-memory"></div>
   </div>
 
@@ -553,6 +557,7 @@
      SCRIPTS — order matters!
 ═══════════════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
+<script src="js/learningEngine.js"></script>
 <script src="js/api.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/dashboard.js"></script>

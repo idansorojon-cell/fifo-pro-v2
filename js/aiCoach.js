@@ -38,11 +38,19 @@ const AICoach = (() => {
     else if (swingPct > 50) styleLabel = '🌊 Swing Trader';
     else if (holdPct > 50)  styleLabel = '📦 Position Trader';
 
-    // ── Behavioral patterns ───────────────────────────────────
-    const holdingLosers = losses.filter(t => (t.hold_days||0) > 7);
-    const earlyExits    = wins.filter(t => t.pct < 5 && t.pct > 0);
-    const chasingTrades = trades.filter(t => t.pct < -5 && (t.hold_days||0) <= 1);
-    const noStopTrades  = trades.filter(t => t.respected_stop === 'לא' || t.respected_stop === 'לא היה סטופ');
+    // ── Behavioral patterns ─────────────────────────────────
+    // BUG FIX: these criteria must match analytics.js's Mistake Detector
+    // exactly (both ultimately describe the same patterns) — they had
+    // drifted apart over time. "chasingTrades" in particular was using
+    // the FOMO definition (pct<-5%, hold_days<=1) while being labeled
+    // and narrated as "Chase" in the UI below. Canonical definitions now
+    // live in Utils.detectMistakes(); these arrays mirror them exactly
+    // (kept as arrays here, rather than just counts, because this file
+    // only ever needs their .length).
+    const holdingLosers = losses.filter(t => (t.hold_days||0) > 7);                          // matches detectMistakes().holdingLosers
+    const earlyExits    = wins.filter(t => t.pct > 0 && t.pct < 3);                           // matches detectMistakes().earlyExit
+    const chasingTrades = trades.filter(t => t.pct > 15 && (t.hold_days||0) === 0 && t.net<0);// matches detectMistakes().chase
+    const noStopTrades  = trades.filter(t => t.respected_stop === 'לא' || t.respected_stop === 'לא היה סטופ'); // matches detectMistakes().noStop
     const planTrades    = trades.filter(t => t.followed_plan === 'כן');
     const planRate      = trades.length ? Math.round(planTrades.length / trades.length * 100) : 0;
 

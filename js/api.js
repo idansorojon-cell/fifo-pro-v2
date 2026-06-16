@@ -125,6 +125,25 @@ const API = (() => {
     return data.indicators;
   }
 
+  // ── News (for Decision Engine News Panel) ──────────────
+  // Proxied through Apps Script (see AppScript_PATCH.gs — 'getNews'
+  // action). Never call a news/data provider directly from the browser
+  // with an embedded key. Returns null (not a fake empty object) if the
+  // backend doesn't support this action yet, so the UI can show an
+  // honest "not available" state instead of a blank/fake panel.
+
+  async function getNews(symbol) {
+    try {
+      const res  = await fetch(`${API_URL}?action=getNews&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`, { cache:'no-store' });
+      const text = await res.text();
+      const data = JSON.parse(text);
+      if (!data.ok) return null;
+      return data.news || null;
+    } catch {
+      return null;
+    }
+  }
+
   // ── Live Prices (via Apps Script proxy) ────────────────
 
   async function fetchPrices(symbols) {
@@ -192,7 +211,7 @@ const API = (() => {
     addTrade, updateTrade, deleteTrade, seedAll, setGoal,
     addPosition, updatePosition, deletePosition,
     addWatchlistItem, removeWatchlistItem, getWatchlist,
-    getIndicators,
+    getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS,
     askClaude

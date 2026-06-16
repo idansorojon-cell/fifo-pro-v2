@@ -145,5 +145,8 @@ const Journal = (() => {
     }
   }
 
-  return { render, openModal, closeModal, save, openNote, closeNote, saveNote };
+  // Debounced wrapper for the free-text search input.
+  const renderDebounced = Utils.debounce(render, 200);
+
+  return { render, renderDebounced, openModal, closeModal, save, openNote, closeNote, saveNote };
 })();

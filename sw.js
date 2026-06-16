@@ -3,8 +3,10 @@
  * Service Worker: offline caching + background sync
  */
 
-const CACHE_NAME   = 'fifopro-v1';
-const STATIC_CACHE = 'fifopro-static-v1';
+// Bumped v1 -> v2: STATIC_ASSETS changed (learningEngine.js added,
+// decisionEngine.js rewritten) — old caches are evicted in 'activate'.
+const CACHE_NAME   = 'fifopro-v2';
+const STATIC_CACHE = 'fifopro-static-v2';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
@@ -16,6 +18,7 @@ const STATIC_ASSETS = [
   'css/style.css',
   'css/mobile.css',
   'js/utils.js',
+  'js/learningEngine.js',
   'js/api.js',
   'js/app.js',
   'js/charts.js',

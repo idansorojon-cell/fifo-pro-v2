@@ -223,8 +223,12 @@ const Trades = (() => {
     API.showSpinner(false);
   }
 
+  // Debounced wrapper for the free-text search input — avoids
+  // re-rendering/re-sorting the whole table on every keystroke.
+  const renderDebounced = Utils.debounce(render, 200);
+
   return {
-    render, updateFilters, setSort,
+    render, renderDebounced, updateFilters, setSort,
     openAddForm, openEdit, closeForm, calcPreview, submit, remove
   };
 })();

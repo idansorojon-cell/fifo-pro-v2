@@ -96,59 +96,21 @@ const Analytics = (() => {
     const trades = APP.trades;
     if (!trades.length) { el.innerHTML = '<div style="color:var(--text-3)">אין מספיק נתונים</div>'; return; }
 
-    const sorted = [...trades].sort((a,b) => parseDD(a.sell_date) - parseDD(b.sell_date));
-
-    // FOMO: entered same day as big gap up
-    const fomoCount = trades.filter(t => t.pct < -3 && t.hold_days <= 1).length;
-
-    // Chase: buy price far above previous close (no indicator, use high % on day)
-    const chaseCount = trades.filter(t => t.pct > 15 && t.hold_days === 0 && t.net < 0).length;
-
-    // Early Exit: win but pct < 5%
-    const earlyExitCount = trades.filter(t => t.net > 0 && t.pct > 0 && t.pct < 3).length;
-
-    // Holding Losers: hold_days > 7 and net < 0
-    const holdingLosers = trades.filter(t => t.net < 0 && (t.hold_days||0) > 7).length;
-
-    // Adding to Losers: multiple entries same symbol close dates with losses
-    // (simplified: >1 trade same symbol same month, all losing)
-    const bySymMonth = {};
-    trades.forEach(t => {
-      const k = `${t.symbol}-${t.month}`;
-      if (!bySymMonth[k]) bySymMonth[k] = [];
-      bySymMonth[k].push(t);
-    });
-    const addingLosers = Object.values(bySymMonth).filter(arr =>
-      arr.length > 1 && arr.every(t => t.net < 0)
-    ).length;
-
-    // No Stop: respected_stop === 'לא' or 'לא היה סטופ'
-    const noStop = trades.filter(t => t.respected_stop === 'לא' || t.respected_stop === 'לא היה סטופ').length;
-
-    // Oversized: cost > 30k and loss
-    const oversized = trades.filter(t => (t.cost||0) > 30000 && t.net < 0).length;
-
-    // Revenge: loss followed by bigger loss within 2 trading days
-    let revenge = 0;
-    for (let i=1; i<sorted.length; i++) {
-      if (sorted[i-1].net < 0 && sorted[i].net < sorted[i-1].net) revenge++;
-    }
-
-    // Overtrading: >4 trades same day
-    const byDate = {};
-    trades.forEach(t => { byDate[t.sell_date] = (byDate[t.sell_date]||0)+1; });
-    const overtrading = Object.values(byDate).filter(c => c > 4).length;
+    // Canonical detector (utils.js) — shared with aiCoach.js so both
+    // modules always agree on what counts as a FOMO/Chase/etc. trade
+    // (previously each had its own slightly different, drifting logic).
+    const det = Utils.detectMistakes(trades);
 
     const mistakes = [
-      { icon:'😱', name:'FOMO',             count:fomoCount,     threshold:3, desc:'נכנסת בפחד להפסיד, יצאת בהפסד' },
-      { icon:'🏃', name:'Chase',            count:chaseCount,    threshold:2, desc:'רדפת אחרי מניה מתוקפת' },
-      { icon:'🚪', name:'Early Exit',       count:earlyExitCount,threshold:5, desc:'יצאת עם רווח קטן (<3%)' },
-      { icon:'🤲', name:'Holding Losers',   count:holdingLosers, threshold:3, desc:'החזקת הפסדים >7 ימים' },
-      { icon:'📉', name:'Adding to Losers', count:addingLosers,  threshold:2, desc:'הוספת לפוזיציה מפסידה' },
-      { icon:'🛑', name:'No Stop',          count:noStop,        threshold:3, desc:'מסחר ללא סטופ לוס' },
-      { icon:'💰', name:'Oversized',        count:oversized,     threshold:2, desc:'פוזיציה גדולה מדי שהפסידה' },
-      { icon:'😤', name:'Revenge Trading',  count:revenge,       threshold:2, desc:'הפסד אחרי הפסד גדול יותר' },
-      { icon:'🔄', name:'Overtrading',      count:overtrading,   threshold:2, desc:'יותר מ-4 עסקאות ביום' },
+      { icon:'😱', name:'FOMO',             count:det.fomo,         threshold:3, desc:'נכנסת בפחד להפסיד, יצאת בהפסד' },
+      { icon:'🏃', name:'Chase',            count:det.chase,        threshold:2, desc:'רדפת אחרי מניה מתוקפת' },
+      { icon:'🚪', name:'Early Exit',       count:det.earlyExit,    threshold:5, desc:'יצאת עם רווח קטן (<3%)' },
+      { icon:'🤲', name:'Holding Losers',   count:det.holdingLosers,threshold:3, desc:'החזקת הפסדים >7 ימים' },
+      { icon:'📉', name:'Adding to Losers', count:det.addingLosers, threshold:2, desc:'הוספת לפוזיציה מפסידה' },
+      { icon:'🛑', name:'No Stop',          count:det.noStop,       threshold:3, desc:'מסחר ללא סטופ לוס' },
+      { icon:'💰', name:'Oversized',        count:det.oversized,    threshold:2, desc:'פוזיציה גדולה מדי שהפסידה' },
+      { icon:'😤', name:'Revenge Trading',  count:det.revenge,      threshold:2, desc:'הפסד אחרי הפסד גדול יותר' },
+      { icon:'🔄', name:'Overtrading',      count:det.overtrading,  threshold:2, desc:'יותר מ-4 עסקאות ביום' },
     ];
 
     el.innerHTML = mistakes.map(m => `
@@ -199,6 +161,23 @@ const Analytics = (() => {
     `).join('');
 
     renderSymbolIntelligence(st);
+    renderSectorExposure();
+  }
+
+  // ── Sector Exposure ───────────────────────────────────────
+  // Trades don't currently carry a `sector` field, so this cannot be
+  // computed honestly — rather than fabricate sector buckets, say so
+  // plainly. To enable this, add a `sector` field to the trade schema
+  // (see README_AI.md "Trade Object Schema") and populate it on add/edit.
+
+  function renderSectorExposure() {
+    const el = document.getElementById('sector-exposure');
+    if (!el) return;
+    el.innerHTML = `
+      <div style="color:var(--text-3);font-size:12px;line-height:1.6">
+        אין נתוני סקטור זמינים — לא נשמר שדה "סקטור" בעסקאות.
+        כדי להפעיל תצוגה זו יש להוסיף שדה <code>sector</code> לסכמת העסקה.
+      </div>`;
   }
 
   // ── Symbol Intelligence ───────────────────────────────────
@@ -369,9 +348,13 @@ const Analytics = (() => {
     Charts.renderWeekOfMonth();
   }
 
+  // Debounced wrapper for the free-text symbol-notes search input —
+  // avoids re-rendering the whole grid on every keystroke.
+  const renderSymNotesDebounced = Utils.debounce(renderSymNotes, 200);
+
   return {
     renderInsights, renderMistakeDetector,
     renderPerformance, renderSymbolIntelligence,
-    renderHeatmap, renderSymNotes, renderProgress
+    renderHeatmap, renderSymNotes, renderSymNotesDebounced, renderProgress
   };
 })();

@@ -303,6 +303,12 @@ function switchTab(name, btn) {
     case 'performance':
       Analytics.renderPerformance(st);
       break;
+    case 'goals':
+      // BUG FIX: this tab previously had no case here, so #goal-detail
+      // and #month-history-table were never populated — the Goals tab
+      // rendered permanently blank below the input row.
+      Dashboard.renderGoalsTab(st);
+      break;
   }
 }
 
