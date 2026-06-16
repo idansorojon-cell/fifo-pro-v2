@@ -313,6 +313,29 @@ function handleSetGoal_(goal) {
 // LIVE PRICES (Yahoo Finance — no API key required)
 // ════════════════════════════════════════════════════════════
 
+// BUG FIX (reported live, ONDL example: shown daily change -42.92% while
+// the stock actually moved a normal daily amount):
+//
+// ROOT CAUSE — `meta.chartPreviousClose` from Yahoo's chart endpoint is
+// NOT "yesterday's close". It is the close of the session immediately
+// BEFORE the requested `range` window started. Since fetchYahooChart_
+// requests range=1y, `chartPreviousClose` was the close from ~1 YEAR ago
+// — for ONDL that was ~$20, vs a live price of $11.49, producing a fake
+// "daily" change of -42.92% that was actually the stock's ~1-year decline
+// mislabeled as today's move. The old code prioritized this field first:
+//   meta.chartPreviousClose || meta.previousClose || closes[len-2] || price
+// `meta.previousClose` isn't even a real field on this endpoint (chart
+// meta never sets it) — it always fell through to chartPreviousClose.
+//
+// FIX — derive prevClose ONLY from the actual daily closes series
+// (the second-to-last entry in `closes`, i.e. the prior trading day's
+// real close), never from chart-range metadata. Additionally, sanity-
+// check it: if missing, zero/negative, or implausibly far from the
+// live price (default >35% in a single session — configurable below),
+// treat the daily change as unverifiable and return null rather than a
+// wrong number — the frontend then shows "N/A" instead of guessing.
+const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35; // 35% single-day move triggers "suspicious", not "impossible" — still flagged rather than trusted blindly
+
 function handleGetPrices_(symbolsCsv) {
   const symbols = String(symbolsCsv || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   const prices = {};
@@ -322,20 +345,51 @@ function handleGetPrices_(symbolsCsv) {
       if (!data || !data.closes.length) { prices[sym] = { ok:false }; return; }
       const meta = data.meta || {};
       const price = meta.regularMarketPrice || data.closes[data.closes.length - 1];
-      const prevClose = meta.chartPreviousClose || meta.previousClose || data.closes[data.closes.length - 2] || price;
-      const change = price - prevClose;
-      const changePct = prevClose ? (change / prevClose * 100) : 0;
+
+      // Previous CLOSE, strictly from the daily series — never from
+      // range-metadata (see bug-fix note above).
+      const rawPrevClose = data.closes.length >= 2 ? data.closes[data.closes.length - 2] : null;
+
+      let prevClose = null, change = null, changePct = null, changePctValid = false, dayChangeStatus = 'ok';
+      if (rawPrevClose == null) {
+        dayChangeStatus = 'missing_prevclose';
+      } else if (rawPrevClose <= 0) {
+        dayChangeStatus = 'invalid_prevclose';
+      } else {
+        const diffRatio = Math.abs(price - rawPrevClose) / rawPrevClose;
+        if (diffRatio > SUSPICIOUS_DAY_CHANGE_RATIO) {
+          dayChangeStatus = 'suspicious_prevclose';
+          prevClose = rawPrevClose; // kept for transparency/debug, but % is not trusted
+        } else {
+          prevClose = rawPrevClose;
+          change = price - prevClose;
+          changePct = (change / prevClose) * 100;
+          changePctValid = true;
+        }
+      }
+
       prices[sym] = {
         price: price,
-        prevClose: prevClose,
-        change: change,
-        changePct: changePct,
+        prevClose: prevClose,           // null if missing/invalid; present-but-unverified if "suspicious"
+        change: change,                  // null unless changePctValid
+        changePct: changePct,            // null unless changePctValid — frontend MUST show "N/A", not 0 or a guess
+        changePctValid: changePctValid,  // explicit flag — frontend should gate on this, not just `!= null`
+        dayChangeStatus: dayChangeStatus, // 'ok' | 'missing_prevclose' | 'invalid_prevclose' | 'suspicious_prevclose'
         preMarket: meta.preMarketPrice || null,
         postMarket: meta.postMarketPrice || null,
         volume: meta.regularMarketVolume || data.volumes[data.volumes.length - 1] || 0,
         updated: new Date().toLocaleTimeString('he-IL'),
         source: 'apps-script',
-        ok: true
+        ok: true,
+        // ── TEMPORARY DEBUG FIELDS — requested for verification, remove
+        // once the fix is confirmed correct on the live site ──
+        debug: {
+          livePrice: price,
+          prevCloseUsed: rawPrevClose,
+          source: 'yahoo-chart-daily-closes[-2] (NOT meta.chartPreviousClose)',
+          calculatedChangePct: rawPrevClose ? +(((price - rawPrevClose) / rawPrevClose) * 100).toFixed(2) : null,
+          status: dayChangeStatus,
+        },
       };
     } catch (err) {
       prices[sym] = { ok:false, error: err.message };

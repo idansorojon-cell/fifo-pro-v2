@@ -399,8 +399,34 @@ const DecisionEngine = (() => {
   // ════════════════════════════════════════════════════════════
 
   function blendFinal(technical, discipline, newsScore, personal) {
-    const parts = [];
-    if (!technical.insufficient) parts.push({ key:'technical', w:0.40, score:technical.score });
+    // BUG FIX (production audit, round 2): the Technical Score is 40% of
+    // the blend — the single largest component, and it's the one based
+    // on the actual stock. Previously, when it was "insufficient" this
+    // function silently renormalized weights across Discipline+News+
+    // Personal and still produced a confident-looking Buy/Sell-style
+    // label. That is exactly the misleading behavior the brief calls
+    // out: "shows Insufficient market data but still gives a score and
+    // recommendation." A Trade Discipline Score is NOT a substitute for
+    // knowing anything about the stock — blending around a missing
+    // Technical Score and calling the result "Strong Buy" implies market
+    // analysis happened when it didn't. So: no real Technical Score →
+    // no final Buy/Sell-style recommendation, full stop. The Discipline
+    // Score is still shown on its own (see _renderResult/_scoreCard) —
+    // it just isn't laundered into a fake stock recommendation.
+    if (technical.insufficient) {
+      return {
+        insufficient: true,
+        score: null,
+        rec: null,
+        confidence: 'Low',
+        componentsUsed: [],
+        reason: 'אין מספיק מידע טכני אמיתי על המניה — לא ניתן לייצר המלצת קנייה/מכירה. ' +
+                 'ציון המשמעת שלך (Trade Discipline) עדיין מוצג בנפרד למעלה — הוא תקף תמיד, ' +
+                 'כי הוא מבוסס על ההיסטוריה האמיתית שלך ולא על המניה.',
+      };
+    }
+
+    const parts = [{ key:'technical', w:0.40, score:technical.score }];
     parts.push({ key:'discipline', w:0.30, score:discipline.score }); // always real & available
     if (!newsScore.insufficient) parts.push({ key:'news', w:0.20, score:newsScore.score });
     parts.push({ key:'personal', w:0.10, score:personal.score }); // always available (neutral 50 if no history)
@@ -416,6 +442,7 @@ const DecisionEngine = (() => {
     else if (completeness >= 0.5)                                  confidence = 'Medium';
 
     return {
+      insufficient: false,
       score: Math.round(blended),
       rec: finalRecommendation(blended),
       confidence,
@@ -498,9 +525,14 @@ const DecisionEngine = (() => {
     const rr = (useEntry && stop && target && useEntry > stop)
       ? ((target-useEntry)/(useEntry-stop)).toFixed(2) : '—';
 
-    return `
-      <div class="card" style="margin-top:16px">
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px">
+    const finalCard = final.insufficient ? `
+          <div class="de-score-card" style="min-width:220px;flex:1.3;border-color:var(--red)">
+            <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">${sym} — המלצה סופית</div>
+            <div style="margin-top:10px;padding:10px 12px;background:var(--red-dim);border:1px solid var(--red);border-radius:var(--r-md);font-size:14px;font-weight:700;color:var(--red)">
+              ⚠️ Insufficient market data
+            </div>
+            <div style="font-size:12px;color:var(--text-3);margin-top:8px;line-height:1.5">${final.reason}</div>
+          </div>` : `
           <div class="de-score-card" style="min-width:220px;flex:1.3;border-color:${final.rec.color}">
             <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">${sym} — המלצה סופית</div>
             <div class="de-score" style="color:${final.rec.color}">${final.score}</div>
@@ -510,7 +542,12 @@ const DecisionEngine = (() => {
               משוקלל מ: ${final.componentsUsed.map(k => ({technical:'טכני 40%',discipline:'דיסציפלינה 30%',news:'חדשות 20%',personal:'היסטוריה אישית 10%'}[k])).join(' · ')}
               ${final.weightsRenormalized ? ' (משקלים אוזנו מחדש בשל נתונים חסרים)' : ''}
             </div>
-          </div>
+          </div>`;
+
+    return `
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px">
+          ${finalCard}
           <div style="flex:2;min-width:220px">
             <div class="card-title">🤖 סיכום AI (מבוסס נתונים אמיתיים בלבד)</div>
             <div style="font-size:13px;line-height:1.7;color:var(--text-2)">${_aiSummary(sym, ctx)}</div>
