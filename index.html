@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0e18">
+<title>FIFO PRO — Trading Dashboard</title>
+<link rel="manifest" href="manifest.json">
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<!-- CSS -->
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Sync Status Bar ─────────────────────────────── -->
+  <div id="sync-bar" class="sync-bar" style="display:none"></div>
+
+  <!-- ── Alert Banner ────────────────────────────────── -->
+  <div id="alert-banner" class="alert-banner"></div>
+
+  <!-- ── Header ──────────────────────────────────────── -->
+  <div class="header">
+    <div class="header-logo">
+      <div>
+        <h1>FIFO <span>PRO</span>
+          <span id="sync-spinner" style="display:none" class="spinner" style="width:12px;height:12px;margin-right:6px"></span>
+        </h1>
+        <span id="last-updated" class="header-sub">דשבורד מסחר</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="ws-indicator">
+        <span id="ws-dot"></span>
+        <span id="ws-label">—</span>
+      </div>
+      <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">☀️ Light</button>
+      <button id="add-btn" class="btn btn-primary btn-sm" onclick="Trades.openAddForm()">+ עסקה</button>
+    </div>
+  </div>
+
+  <!-- ── Seed Banner ─────────────────────────────────── -->
+  <div id="seed-banner" class="seed-banner">
+    <span>📋 פעם ראשונה? העלה את 108 העסקאות ההיסטוריות</span>
+    <button class="btn btn-ghost btn-sm" onclick="seedToSheets()">העלה היסטוריה</button>
+  </div>
+
+  <!-- ── Tabs ────────────────────────────────────────── -->
+  <div class="tabs-container">
+    <div class="tabs">
+      <button class="tab active"  onclick="switchTab('dashboard',this)">📊 דשבורד</button>
+      <button class="tab"         onclick="switchTab('positions',this)">📈 פוזיציות</button>
+      <button class="tab"         onclick="switchTab('trades',this)">📋 עסקאות</button>
+      <button class="tab"         onclick="switchTab('journal',this)">📓 יומן</button>
+      <button class="tab"         onclick="switchTab('analysis',this)">🔍 ניתוח</button>
+      <button class="tab"         onclick="switchTab('insights',this)">💡 תובנות</button>
+      <button class="tab"         onclick="switchTab('performance',this)">🏆 ביצועים</button>
+      <button class="tab"         onclick="switchTab('symnotes',this)">📌 לפי סימבול</button>
+      <button class="tab"         onclick="switchTab('heatmap',this)">📅 Heat Map</button>
+      <button class="tab"         onclick="switchTab('goals',this)">🎯 יעדים</button>
+      <button class="tab"         onclick="switchTab('watchlist',this)">👁 Watchlist</button>
+      <button class="tab"         onclick="switchTab('decision',this)">🎯 Decision</button>
+      <button class="tab"         onclick="switchTab('coach',this)">🤖 AI Coach</button>
+      <button class="tab"         onclick="switchTab('aichat',this)">💬 AI Chat</button>
+      <button class="tab"         onclick="switchTab('quicktrade',this)">⚡ Quick Trade</button>
+      <button class="tab"         onclick="switchTab('progress',this)">📈 התקדמות</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       DASHBOARD
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-dashboard" class="panel active">
+    <div id="weekly-summary" class="week-grid" style="display:none"></div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <!-- Portfolio Health -->
+    <div class="card" id="portfolio-health"></div>
+
+    <div class="card">
+      <div class="card-title">📈 Equity Curve — רווח נטו מצטבר ($)</div>
+      <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 רווח נטו לפי חודש ($)</div>
+      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📉 Drawdown Chart</div>
+      <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
+    </div>
+    <div class="card" id="goal-card"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       POSITIONS
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-positions" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices()">🔄 רענן</button>
+        <button class="btn btn-primary btn-sm" onclick="Positions.openForm()">+ פוזיציה חדשה</button>
+      </div>
+    </div>
+    <div id="pos-summary" style="display:none;background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);padding:14px 18px;margin-bottom:14px;display:flex;gap:24px;flex-wrap:wrap"></div>
+    <div id="pos-grid" class="pos-grid"></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>סימבול</th><th>כמות</th><th>כניסה</th><th>מחיר Live</th>
+            <th>P&L $</th><th>P&L ₪</th><th>P&L %</th><th>שווי</th><th>יעד</th><th>סטופ</th><th></th>
+          </tr></thead>
+          <tbody id="pos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:8px">
+      * מחירים דרך Yahoo Finance proxy. Pre/AH מוצג כשזמין.
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TRADES
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-trades" class="panel">
+    <div class="search-row">
+      <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.render()">
+      <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
+      <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV">⬇️ CSV</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort-btn" onclick="Trades.setSort('symbol')">סימבול <span id="s-symbol"></span></th>
+            <th class="sort-btn" onclick="Trades.setSort('sell_date')">מכירה <span id="s-sell_date"></span></th>
+            <th class="sort-btn" onclick="Trades.setSort('qty')">כמות <span id="s-qty"></span></th>
+            <th>קנייה $</th><th>מכירה $</th>
+            <th class="sort-btn" onclick="Trades.setSort('net')">נטו $ <span id="s-net"></span></th>
+            <th>נטו ₪</th>
+            <th class="sort-btn" onclick="Trades.setSort('pct')">% <span id="s-pct"></span></th>
+            <th>ימים</th><th></th>
+          </tr></thead>
+          <tbody id="trades-tbody"></tbody>
+        </table>
+      </div>
+      <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border)" id="trades-count"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       JOURNAL
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-journal" class="panel">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13px;color:var(--text-3)">יומן מסחר</span>
+      <input id="journal-search" type="text" placeholder="חיפוש..." oninput="Journal.render()" style="max-width:160px">
+      <select id="journal-filter-sym"  onchange="Journal.render()" style="max-width:130px"><option value="">כל הסימבולים</option></select>
+      <select id="journal-filter-plan" onchange="Journal.render()" style="max-width:150px">
+        <option value="">כל העסקאות</option>
+        <option value="כן">לפי תוכנית ✓</option>
+        <option value="לא">לא לפי תוכנית</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>סימבול</th><th>תאריך</th><th>נטו</th><th>סיבת כניסה</th><th>סיבת יציאה</th>
+            <th>כיבד סטופ</th><th>לפי תוכנית</th><th>לקח</th><th>מצב רגשי</th><th></th>
+          </tr></thead>
+          <tbody id="journal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       ANALYSIS
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-analysis" class="panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="card-title">רווח נטו לפי סימבול</div>
+        <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Win Rate לפי סימבול</div>
+        <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">סיכום לפי סימבול</div>
+      <div class="table-wrap"><table id="sym-table"></table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       INSIGHTS
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-insights" class="panel">
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">תובנות אוטומטיות מהנתונים שלך</div>
+    <div id="insights-grid" class="insight-grid"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">סטטיסטיקות מתקדמות</div>
+        <div id="adv-stats"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">רווח לפי יום בשבוע</div>
+        <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+      </div>
+    </div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">רווח לפי משך החזקה</div>
+        <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">רווח לפי גודל פוזיציה</div>
+        <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
+      </div>
+    </div>
+    <!-- Mistake Detector -->
+    <div class="card">
+      <div class="card-title">⚠️ Mistake Detector</div>
+      <div id="mistake-grid" class="mistake-grid"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       PERFORMANCE CENTER
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-performance" class="panel">
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">Performance Center — מדדי ביצוע מקצועיים</div>
+    <div id="perf-grid" class="perf-grid"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Symbol Intelligence</div>
+        <div id="sym-intel"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sector Exposure</div>
+        <div id="sector-exposure"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SYMBOL NOTES
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-symnotes" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
+      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotes()" style="max-width:160px">
+    </div>
+    <div id="sym-notes-container" class="sym-notes-grid"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       HEATMAP
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-heatmap" class="panel">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--text-3)">לוח שנה — רווח/הפסד יומי</div>
+      <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
+    </div>
+    <div id="heatmap-container"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       GOALS
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-goals" class="panel">
+    <div class="card">
+      <div class="card-title">יעד חודשי</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <input type="number" id="goal-input" style="max-width:130px" placeholder="יעד $">
+        <button class="btn btn-primary btn-sm" onclick="Dashboard.saveGoal()">עדכן</button>
+      </div>
+      <div id="goal-detail"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">היסטוריית חודשים</div>
+      <div class="table-wrap"><table id="month-history-table"></table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       WATCHLIST
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-watchlist" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="Watchlist.refresh()">🔄 רענן</button>
+        <button class="btn btn-primary btn-sm" onclick="Watchlist.add()">+ הוסף סימבול</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
+      <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
+    </div>
+    <div id="watchlist-grid" class="wl-grid"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       DECISION ENGINE
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-decision" class="panel">
+    <div class="card">
+      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה</div>
+      <div class="de-grid">
+        <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
+        <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="DecisionEngine.run()">🔍 נתח מניה</button>
+        <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
+        הכלי נותן ציון משמעת לפי מגמה, RSI, נפח, R:R והיסטוריית המסחר שלך. לא מחליף שיקול דעת.
+      </div>
+    </div>
+    <div id="decision-result"></div>
+    <!-- Trade Memory -->
+    <div id="trade-memory"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       AI COACH
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-coach" class="panel">
+    <div class="card">
+      <div class="card-title">🤖 AI Coach — ניתוח אופי המסחר שלך</div>
+      <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
+    </div>
+    <!-- Strengths / Weaknesses / Improve -->
+    <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
+    <div id="coach-grid" class="coach-grid"></div>
+    <div class="card">
+      <div class="card-title">🔧 פעולות לשבוע הקרוב</div>
+      <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       AI CHAT
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-aichat" class="panel">
+    <div style="margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px">💬 AI Chat — שאל שאלות על המסחר שלך</div>
+      <div class="chat-suggestions" id="chat-suggestions"></div>
+    </div>
+    <div class="chat-container">
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-footer">
+        <input id="chat-input" placeholder="שאל אותי על המסחר שלך... (למשל: באיזה מניות אני הכי טוב?)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();AIChat.send()}">
+        <button class="btn btn-primary btn-sm" onclick="AIChat.send()">שלח</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       QUICK TRADE
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-quicktrade" class="panel">
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:14px">⚡ הוספת עסקה מהירה</div>
+    <div style="max-width:520px">
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div class="form-group">
+            <label>סימבול</label>
+            <input id="qt-symbol" placeholder="AAPL" style="text-transform:uppercase;font-size:16px;font-weight:700" oninput="QuickTrade.fetchPrice()">
+          </div>
+          <div class="form-group">
+            <label>מחיר נוכחי</label>
+            <div id="qt-live-price" style="padding:9px 12px;font-size:16px;font-weight:700;color:var(--green);border:1px solid var(--border);border-radius:var(--r-md);min-height:40px">—</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+          <div class="form-group">
+            <label>פעולה</label>
+            <select id="qt-action" onchange="QuickTrade.calc()" style="font-weight:700">
+              <option value="buy">🟢 קנייה</option>
+              <option value="sell">🔴 מכירה</option>
+            </select>
+          </div>
+          <div class="form-group"><label>כמות</label><input id="qt-qty" type="number" placeholder="100" oninput="QuickTrade.calc()"></div>
+          <div class="form-group"><label>מחיר ביצוע ($)</label><input id="qt-price" type="number" step="0.01" oninput="QuickTrade.calc()"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+          <div class="form-group"><label>תאריך קנייה</label><input id="qt-buy-date" type="date"></div>
+          <div class="form-group"><label>תאריך מכירה</label><input id="qt-sell-date" type="date"></div>
+          <div class="form-group"><label>מחיר קנייה ($)</label><input id="qt-buy-price" type="number" step="0.01" placeholder="רק למכירה" oninput="QuickTrade.calc()"></div>
+        </div>
+        <!-- Position Sizer -->
+        <div class="sizer-box">
+          <div class="sizer-title">📐 Position Sizer</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group"><label>גודל תיק ($)</label><input id="qt-portfolio" type="number" placeholder="67000" value="67000" oninput="QuickTrade.calc()"></div>
+            <div class="form-group"><label>% סיכון מקס</label><input id="qt-risk-pct" type="number" step="0.1" placeholder="1.0" value="1.0" oninput="QuickTrade.calc()"></div>
+            <div class="form-group"><label>מחיר סטופ ($)</label><input id="qt-stop-price" type="number" step="0.01" oninput="QuickTrade.calc()"></div>
+          </div>
+          <div id="qt-sizer-result" style="font-size:13px;color:var(--text-3)">הזן מחיר וסטופ לחישוב כמות מומלצת</div>
+        </div>
+        <div id="qt-preview" class="preview-box" style="display:none"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="QuickTrade.submit()" style="flex:1;font-size:15px;padding:12px">✓ שמור עסקה</button>
+          <button class="btn btn-ghost" onclick="QuickTrade.reset()">אפס</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       PROGRESS
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-progress" class="panel">
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">האם אתה משתפר לאורך זמן?</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="progress-kpis"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Win Rate לאורך זמן</div>
+        <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
+        <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
+      </div>
+    </div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Profit Factor לאורך זמן</div>
+        <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">שבוע חזק בחודש</div>
+        <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<!-- ═══════════════════════════════════════════════════
+     MODALS
+═══════════════════════════════════════════════════ -->
+
+<!-- Add/Edit Trade -->
+<div id="modal-form" class="modal-overlay" style="display:none" onclick="if(event.target===this)Trades.closeForm()">
+  <div class="modal">
+    <h3 id="modal-title">עסקה חדשה</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>סימבול</label><input id="f-symbol" placeholder="AAPL" oninput="Trades.calcPreview()"></div>
+      <div class="form-group"><label>תאריך קנייה</label><input id="f-buy-date" placeholder="DD/MM/YYYY" oninput="Trades.calcPreview()"></div>
+      <div class="form-group"><label>תאריך מכירה</label><input id="f-sell-date" placeholder="DD/MM/YYYY" oninput="Trades.calcPreview()"></div>
+      <div class="form-group"><label>כמות</label><input id="f-qty" type="number" placeholder="100" oninput="Trades.calcPreview()"></div>
+      <div class="form-group"><label>מחיר קנייה ($)</label><input id="f-buy-price" type="number" step="0.01" placeholder="10.00" oninput="Trades.calcPreview()"></div>
+      <div class="form-group"><label>מחיר מכירה ($)</label><input id="f-sell-price" type="number" step="0.01" placeholder="12.50" oninput="Trades.calcPreview()"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>הערות</label><input id="f-notes" placeholder="אופציונלי..."></div>
+    <div class="preview-box" id="preview-box" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="Trades.submit()">שמור</button>
+      <button class="btn btn-ghost"   onclick="Trades.closeForm()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Position Form -->
+<div id="modal-pos" class="modal-overlay" style="display:none" onclick="if(event.target===this)Positions.closeForm()">
+  <div class="modal">
+    <h3 id="pos-modal-title">פוזיציה חדשה</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>סימבול</label><input id="pf-symbol" placeholder="AAPL" style="text-transform:uppercase"></div>
+      <div class="form-group"><label>תאריך כניסה</label><input id="pf-date" type="date"></div>
+      <div class="form-group"><label>כמות</label><input id="pf-qty" type="number" placeholder="100"></div>
+      <div class="form-group"><label>מחיר קנייה ממוצע ($)</label><input id="pf-price" type="number" step="0.01" placeholder="10.00" oninput="Positions.calcRR()"></div>
+      <div class="form-group"><label>יעד מכירה ($)</label><input id="pf-target" type="number" step="0.01" placeholder="15.00" oninput="Positions.calcRR()"></div>
+      <div class="form-group"><label>סטופ לוס ($)</label><input id="pf-stop" type="number" step="0.01" placeholder="8.00" oninput="Positions.calcRR()"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label>הערות</label><input id="pf-notes" placeholder="אופציונלי..."></div>
+    <div class="rr-box" id="rr-box">
+      <div style="font-weight:700;margin-bottom:8px;color:var(--blue)">📐 Risk/Reward Calculator</div>
+      <div class="rr-row"><span>Risk per share</span><span id="rr-risk">—</span></div>
+      <div class="rr-row"><span>Reward per share</span><span id="rr-reward">—</span></div>
+      <div class="rr-row"><span style="font-weight:700">R:R Ratio</span><span id="rr-ratio" style="font-weight:700">—</span></div>
+      <div class="rr-row"><span>סיכון כולל</span><span id="rr-total-risk">—</span></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="Positions.submit()">שמור</button>
+      <button class="btn btn-ghost"   onclick="Positions.closeForm()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Journal Modal -->
+<div id="modal-journal" class="modal-overlay" style="display:none" onclick="if(event.target===this)Journal.closeModal()">
+  <div class="modal">
+    <h3>יומן עסקה — <span id="j-title"></span></h3>
+    <div class="form-grid">
+      <div class="form-group"><label>סיבת כניסה</label><input id="j-entry" placeholder="למה נכנסת?"></div>
+      <div class="form-group"><label>סיבת יציאה</label><input id="j-exit" placeholder="למה יצאת?"></div>
+      <div class="form-group"><label>כיבדתי סטופ?</label>
+        <select id="j-stop"><option value="">---</option><option value="כן">כן</option><option value="לא">לא</option><option value="לא היה סטופ">לא היה סטופ</option></select>
+      </div>
+      <div class="form-group"><label>פעלתי לפי תוכנית?</label>
+        <select id="j-plan"><option value="">---</option><option value="כן">כן</option><option value="לא">לא</option><option value="חלקית">חלקית</option></select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label>לקח מהעסקה</label><textarea id="j-lesson" rows="2" placeholder="מה למדת?"></textarea></div>
+    <div class="form-group" style="margin-bottom:14px"><label>מצב רגשי / הערה חופשית</label><textarea id="j-emotion" rows="2" placeholder="איך הרגשת?"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="Journal.save()">שמור</button>
+      <button class="btn btn-ghost"   onclick="Journal.closeModal()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Note Modal -->
+<div id="modal-note" class="modal-overlay" style="display:none" onclick="if(event.target===this)Journal.closeNote()">
+  <div class="modal">
+    <h3>הערה לעסקה</h3>
+    <div class="form-group" style="margin-bottom:14px">
+      <textarea id="note-text" class="note-area" placeholder="כתוב הערה..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="Journal.saveNote()">שמור</button>
+      <button class="btn btn-ghost"   onclick="Journal.closeNote()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile FAB -->
+<button class="fab" onclick="Trades.openAddForm()">+ עסקה חדשה</button>
+
+<!-- ═══════════════════════════════════════════════════
+     SCRIPTS — order matters!
+═══════════════════════════════════════════════════ -->
+<script src="js/utils.js"></script>
+<script src="js/api.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/positions.js"></script>
+<script src="js/watchlist.js"></script>
+<script src="js/journal.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/decisionEngine.js"></script>
+<script src="js/aiCoach.js"></script>
+<script src="js/aiChat.js"></script>
+<script src="js/trades.js"></script>
+<script src="js/quicktrade.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

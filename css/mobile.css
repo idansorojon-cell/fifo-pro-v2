@@ -1,0 +1,141 @@
+/* ═══════════════════════════════════════════════════════════
+   FIFO PRO — mobile.css
+   Responsive, PWA-ready, iPhone-optimized
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤900px) ────────────────────────────────────── */
+@media (max-width: 900px) {
+  .stats-2col {
+    grid-template-columns: 1fr;
+  }
+  .de-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Mobile (≤640px) ────────────────────────────────────── */
+@media (max-width: 640px) {
+  .app { padding: 0 12px 80px; }
+
+  /* Header */
+  .header { padding: 12px 0 10px; }
+  .header-logo h1 { font-size: 15px; }
+
+  /* Hide add button — use FAB */
+  #add-btn { display: none; }
+  .fab { display: block; }
+
+  /* KPI Grid */
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-val  { font-size: 18px; }
+
+  /* Week grid */
+  .week-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .week-card-val { font-size: 15px; }
+
+  /* Pos grid */
+  .pos-grid { grid-template-columns: 1fr; }
+
+  /* Insight grid */
+  .insight-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Watchlist */
+  .wl-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Tables */
+  table { font-size: 11.5px; }
+  td, th { padding: 8px 7px; }
+  .actions .btn-icon { padding: 3px 5px; font-size: 12px; }
+
+  /* Search row */
+  .search-row { flex-wrap: wrap; }
+  .search-row input, .search-row select { max-width: 100%; }
+
+  /* Stats */
+  .stats-2col { grid-template-columns: 1fr; }
+  .perf-grid  { grid-template-columns: 1fr 1fr; }
+
+  /* Progress */
+  .prog-kpi-val { font-size: 16px; }
+
+  /* Coach */
+  .coach-grid { grid-template-columns: 1fr; }
+
+  /* DE */
+  .de-grid   { grid-template-columns: 1fr; }
+  .de-score  { font-size: 36px; }
+
+  /* Mistake grid */
+  .mistake-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Modal */
+  .modal { padding: 20px 16px; }
+  .form-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Chart */
+  .chart-wrap { height: 180px; }
+  .chart-wrap-sm { height: 150px; }
+
+  /* Chat */
+  .chat-container { height: 420px; }
+  .chat-msg { max-width: 90%; }
+}
+
+/* ── Small Mobile (≤380px) ──────────────────────────────── */
+@media (max-width: 380px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-val  { font-size: 16px; }
+  .week-grid { grid-template-columns: 1fr; }
+  .wl-grid { grid-template-columns: 1fr; }
+  .insight-grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .mistake-grid { grid-template-columns: 1fr 1fr; }
+  .tabs-container { top: 56px; }
+}
+
+/* ── iPhone safe areas ──────────────────────────────────── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .app { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .header { padding-top: max(16px, env(safe-area-inset-top)); }
+}
+
+/* ── PWA standalone mode ────────────────────────────────── */
+@media (display-mode: standalone) {
+  .header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .live-dot { animation: none; }
+  .spinner  { animation: spin 2s linear infinite; }
+}
+
+/* ── Touch optimizations ────────────────────────────────── */
+@media (hover: none) {
+  .kpi:hover     { transform: none; }
+  .pos-card:hover { transform: none; }
+  .btn:active    { transform: scale(0.96); }
+  .tab:hover     { color: var(--text-3); }
+}
+
+/* ── Landscape mobile ───────────────────────────────────── */
+@media (max-width: 900px) and (orientation: landscape) {
+  .chat-container { height: 300px; }
+  .chart-wrap     { height: 160px; }
+}
+
+/* ── Print ──────────────────────────────────────────────── */
+@media print {
+  .header, .tabs-container, .fab, .sync-bar, .alert-banner { display: none !important; }
+  .app { max-width: 100%; padding: 0; }
+  .card { box-shadow: none; border: 1px solid #ddd; }
+  body { background: white; color: black; }
+}
