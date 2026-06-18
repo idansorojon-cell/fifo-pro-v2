@@ -250,11 +250,28 @@ function renderAll() {
 // ── Category tracking ───────────────────────────────────────
 APP.currentCategory = 'dashboard';
 APP.lastTab = {
-  dashboard: 'dashboard',
-  trading:   'positions',
-  analysis:  'analysis',
-  ai:        'decision',
-  settings:  'settings'
+  dashboard: 'hub-dashboard',
+  trading:   'hub-trading',
+  analysis:  'hub-analysis',
+  ai:        'hub-ai',
+  settings:  'hub-settings'
+};
+
+// Category display names for breadcrumb
+const CAT_LABELS = {
+  dashboard: 'דשבורד', trading: 'מסחר', analysis: 'ניתוח',
+  ai: 'בינה מלאכותית', settings: 'הגדרות'
+};
+const TAB_LABELS = {
+  dashboard:'דשבורד ראשי', brief:'סיכום יומי', goals:'יעדים',
+  progress:'התקדמות', ptimeline:'ציר זמן', grade:'ציון מסחר',
+  positions:'פוזיציות', trades:'עסקאות', quicktrade:'כניסה מהירה',
+  watchlist:'רשימת מעקב', journal:'יומן',
+  analysis:'ניתוח גרפי', performance:'ביצועים', insights:'תובנות',
+  replay:'Trade Replay', portheatmap:'Heatmap תיק',
+  heatmap:'לוח שנה', symnotes:'לפי סימבול',
+  decision:'מנוע החלטות', coach:'מאמן AI', aichat:'שיחה עם AI',
+  settings:'הגדרות מערכת'
 };
 
 // ── Category switching ──────────────────────────────────────
@@ -264,17 +281,28 @@ function switchCategory(cat, btn, fromBottomNav) {
   document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
   document.querySelectorAll(`.nav-cat[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
   document.querySelectorAll(`.bn-item[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
-  document.querySelectorAll('.sub-nav').forEach(n => n.classList.remove('active'));
-  const subnav = document.getElementById('subnav-' + cat);
-  if (subnav) subnav.classList.add('active');
-  switchTab(APP.lastTab[cat] || cat, null);
-  // Highlight correct sub-tab
-  if (subnav) {
-    subnav.querySelectorAll('.tab').forEach(t => {
-      const attr = t.getAttribute('onclick') || '';
-      t.classList.toggle('active', attr.includes(`'${APP.lastTab[cat]}'`));
-    });
-  }
+  // Show the hub panel for this category
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const hub = document.getElementById('tab-hub-' + cat);
+  if (hub) hub.classList.add('active');
+  _hideBreadcrumb();
+  // Reset lastTab so next time we enter the category, we always land on hub first
+  APP.lastTab[cat] = 'hub-' + cat;
+}
+
+// ── Breadcrumb helpers ──────────────────────────────────────
+function _showBreadcrumb(tabName) {
+  const bc    = document.getElementById('breadcrumb');
+  const catEl = document.getElementById('breadcrumb-cat-label');
+  const tabEl = document.getElementById('breadcrumb-tab-label');
+  if (!bc) return;
+  if (catEl) catEl.textContent = CAT_LABELS[APP.currentCategory] || APP.currentCategory;
+  if (tabEl) tabEl.textContent = TAB_LABELS[tabName] || tabName;
+  bc.style.display = 'flex';
+}
+function _hideBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  if (bc) bc.style.display = 'none';
 }
 
 // ── Tab switching ───────────────────────────────────────────
@@ -287,6 +315,7 @@ function switchTab(name, btn) {
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
   APP.lastTab[APP.currentCategory] = name;
+  _showBreadcrumb(name);
 
   const st = getStats();
   switch (name) {
@@ -337,19 +366,19 @@ function switchTab(name, btn) {
       renderDailyBrief();
       break;
     case 'replay':
-      if (window.TradeReplay) TradeReplay.render();
+      if (typeof TradeReplay !== 'undefined') TradeReplay.render();
       break;
     case 'grade':
-      if (window.DailyGrade) DailyGrade.render();
+      if (typeof DailyGrade !== 'undefined') DailyGrade.render();
       break;
     case 'ptimeline':
-      if (window.PerformanceTimeline) PerformanceTimeline.render();
+      if (typeof PerformanceTimeline !== 'undefined') PerformanceTimeline.render();
       break;
     case 'portheatmap':
       renderPortfolioHeatmap();
       break;
     case 'settings':
-      if (window.Settings) Settings.render();
+      if (typeof Settings !== 'undefined') Settings.render();
       break;
   }
 }
@@ -726,6 +755,9 @@ async function _initApp() {
   await load();
   updateSeedBanner();
   renderAll();
+
+  // Land on the dashboard hub
+  switchCategory('dashboard', document.querySelector('.nav-cat[data-cat="dashboard"]'));
 
   document.getElementById('last-updated').textContent =
     'עודכן: ' + new Date().toLocaleTimeString('he-IL');

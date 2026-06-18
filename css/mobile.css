@@ -24,8 +24,16 @@
   /* Show bottom nav, hide main nav */
   .main-nav    { display: none !important; }
   .bottom-nav  { display: block !important; }
-  .fab         { display: none !important; } /* replaced by bottom nav add button */
+  .fab         { display: none !important; }
   .app { padding: 0 12px 88px; }
+
+  /* Hub grid single column on mobile */
+  .hub-grid, .hub-grid-ai { grid-template-columns: 1fr; }
+  .hub-card-featured { grid-column: 1; }
+  .hub-header { padding: 18px 0 16px; }
+  .hub-title { font-size: 20px; }
+  .hub-icon { width: 48px; height: 48px; font-size: 28px; }
+  .breadcrumb { padding: 8px 0 2px; }
 
   /* Header */
   .header { padding: 12px 0 10px; }
@@ -150,7 +158,7 @@
 
 /* ── Print ──────────────────────────────────────────────── */
 @media print {
-  .header, .main-nav, .sub-nav-container, .bottom-nav, .fab, .sync-bar, .alert-banner { display: none !important; }
+  .header, .main-nav, .sub-nav-container, .bottom-nav, .fab, .sync-bar, .alert-banner, .breadcrumb, .hub-panel { display: none !important; }
   .app { max-width: 100%; padding: 0; }
   .card { box-shadow: none; border: 1px solid #ddd; }
   body { background: white; color: black; }
