@@ -98,6 +98,17 @@ const Watchlist = (() => {
     grid.innerHTML = APP.watchlist.map(w => wlCard(w)).join('');
   }
 
+  function _smartRating(symbol, trades, wr) {
+    const sym = trades.filter(t => t.symbol === symbol);
+    if (!sym.length) return { label: '—', cls: '' };
+    const w = wr ?? 0;
+    const avgNet = sym.reduce((s,t)=>s+t.net,0) / sym.length;
+    if (w >= 70 && avgNet > 0)  return { label: 'A+', cls: 'rating-aplus' };
+    if (w >= 60 && avgNet > 0)  return { label: 'A',  cls: 'rating-a' };
+    if (w >= 45)                return { label: 'B',  cls: 'rating-b' };
+    return                             { label: 'Avoid', cls: 'rating-avoid' };
+  }
+
   function wlCard(w) {
     const live  = APP.liveData[w.symbol];
     const price = live?.price;
@@ -112,16 +123,18 @@ const Watchlist = (() => {
       ? Math.round(inTrades.filter(t=>t.net>0).length / inTrades.length * 100)
       : null;
 
-    // AI Score placeholder (from Decision Engine if available)
-    const aiScore = null;
+    const rating = _smartRating(w.symbol, APP.trades, wr);
 
     return `
       <div class="wl-card">
         <button class="wl-remove" onclick="Watchlist.remove('${w.symbol}')" title="הסר">✕</button>
 
-        <div class="wl-sym">
-          ${w.symbol}
-          ${live ? '<span class="live-dot"></span>' : ''}
+        <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+          <div class="wl-sym">
+            ${w.symbol}
+            ${live ? '<span class="live-dot"></span>' : ''}
+          </div>
+          ${rating.label !== '—' ? `<span class="wl-rating ${rating.cls}">${rating.label}</span>` : ''}
         </div>
 
         <div class="wl-price ${!price?'':(chg>=0?'green':'red')}">
@@ -147,8 +160,9 @@ const Watchlist = (() => {
 
         <div class="wl-meta">${live?.updated || ''}</div>
 
-        <div style="display:flex;gap:6px;margin-top:10px">
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">🎯 Analyze</button>
+          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">📋 Trade Plan</button>
         </div>
       </div>
     `;

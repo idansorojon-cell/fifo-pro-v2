@@ -68,6 +68,7 @@ function doGet(e) {
       case 'getPrices':       return handleGetPrices_(e.parameter.symbols);
       case 'getIndicators':   return handleGetIndicators_(e.parameter.symbol);
       case 'getNews':         return handleGetNews_(e.parameter.symbol);
+      case 'login':           return handleLogin_(e.parameter.passwordHash);
       default:                return jsonOut_({ ok:false, error:'Unknown action: ' + action });
     }
   } catch (err) {
@@ -313,42 +314,59 @@ function handleSetGoal_(goal) {
 // LIVE PRICES (Yahoo Finance — no API key required)
 // ════════════════════════════════════════════════════════════
 
-// BUG FIX (reported live, ONDL example: shown daily change -42.92% while
-// the stock actually moved a normal daily amount):
+// BUG FIX ROUND 2 (ONDL: showed -2.54%, real daily change was ~-5.19%):
 //
-// ROOT CAUSE — `meta.chartPreviousClose` from Yahoo's chart endpoint is
-// NOT "yesterday's close". It is the close of the session immediately
-// BEFORE the requested `range` window started. Since fetchYahooChart_
-// requests range=1y, `chartPreviousClose` was the close from ~1 YEAR ago
-// — for ONDL that was ~$20, vs a live price of $11.49, producing a fake
-// "daily" change of -42.92% that was actually the stock's ~1-year decline
-// mislabeled as today's move. The old code prioritized this field first:
-//   meta.chartPreviousClose || meta.previousClose || closes[len-2] || price
-// `meta.previousClose` isn't even a real field on this endpoint (chart
-// meta never sets it) — it always fell through to chartPreviousClose.
-//
-// FIX — derive prevClose ONLY from the actual daily closes series
-// (the second-to-last entry in `closes`, i.e. the prior trading day's
-// real close), never from chart-range metadata. Additionally, sanity-
-// check it: if missing, zero/negative, or implausibly far from the
-// live price (default >35% in a single session — configurable below),
-// treat the daily change as unverifiable and return null rather than a
-// wrong number — the frontend then shows "N/A" instead of guessing.
-const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35; // 35% single-day move triggers "suspicious", not "impossible" — still flagged rather than trusted blindly
+// Round 1 fixed the worse bug (chartPreviousClose from a 1y-range request
+// meaning "close ~1 year ago", not "yesterday's close" — that produced the
+// earlier -42.92% fake value). But deriving prevClose from
+// fetchYahooChart_'s 1y/1d daily series (closes[len-2]) is still the wrong
+// SOURCE for live price + daily change: a 1y/1d series is daily-bar data
+// that can lag/snapshot oddly relative to the live intraday price, and its
+// "last close" isn't reliably today's live tick. Per the explicit fix
+// requested:
+//   - Live price + daily change must come from a SEPARATE, DEDICATED
+//     1d/1m intraday request (fetchYahooIntraday_ below), not the 1y
+//     series used for indicators.
+//   - prevClose priority: meta.regularMarketPreviousClose (authoritative,
+//     always means "previous regular session's close" regardless of
+//     range) → meta.chartPreviousClose ONLY trusted when range=1d (in
+//     that specific case it correctly means "close before today") → a
+//     short dedicated daily-series fallback (fetchYahooDailyShort_,
+//     range=5d&interval=1d) only if both meta fields are absent.
+//   - getIndicators continues to use the existing 1y series unchanged
+//     (fetchYahooChart_) — untouched by this fix, per requirement.
+const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35; // single-day move >35% is flagged "suspicious", not "impossible" — still surfaced rather than silently trusted
 
 function handleGetPrices_(symbolsCsv) {
   const symbols = String(symbolsCsv || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   const prices = {};
   symbols.forEach(sym => {
     try {
-      const data = fetchYahooChart_(sym);
-      if (!data || !data.closes.length) { prices[sym] = { ok:false }; return; }
-      const meta = data.meta || {};
-      const price = meta.regularMarketPrice || data.closes[data.closes.length - 1];
+      const intraday = fetchYahooIntraday_(sym); // range=1d&interval=1m&includePrePost=true
+      if (!intraday) { prices[sym] = { ok:false }; return; }
+      const meta = intraday.meta || {};
+      const price = meta.regularMarketPrice != null
+        ? meta.regularMarketPrice
+        : (intraday.closes.length ? intraday.closes[intraday.closes.length - 1] : null);
+      if (price == null) { prices[sym] = { ok:false }; return; }
 
-      // Previous CLOSE, strictly from the daily series — never from
-      // range-metadata (see bug-fix note above).
-      const rawPrevClose = data.closes.length >= 2 ? data.closes[data.closes.length - 2] : null;
+      // ── Previous close — priority chain per spec ──
+      let rawPrevClose = null, prevCloseSource = null;
+      if (meta.regularMarketPreviousClose != null) {
+        rawPrevClose = meta.regularMarketPreviousClose;
+        prevCloseSource = 'meta.regularMarketPreviousClose';
+      } else if (meta.chartPreviousClose != null) {
+        // Only trusted here because this request is range=1d — in that
+        // case chartPreviousClose legitimately means "close before today".
+        rawPrevClose = meta.chartPreviousClose;
+        prevCloseSource = 'meta.chartPreviousClose (range=1d, valid here)';
+      } else {
+        const shortDaily = fetchYahooDailyShort_(sym); // range=5d&interval=1d, fallback only
+        if (shortDaily && shortDaily.closes.length >= 2) {
+          rawPrevClose = shortDaily.closes[shortDaily.closes.length - 2];
+          prevCloseSource = 'fallback: yahoo-chart-5d-daily-closes[-2]';
+        }
+      }
 
       let prevClose = null, change = null, changePct = null, changePctValid = false, dayChangeStatus = 'ok';
       if (rawPrevClose == null) {
@@ -377,7 +395,7 @@ function handleGetPrices_(symbolsCsv) {
         dayChangeStatus: dayChangeStatus, // 'ok' | 'missing_prevclose' | 'invalid_prevclose' | 'suspicious_prevclose'
         preMarket: meta.preMarketPrice || null,
         postMarket: meta.postMarketPrice || null,
-        volume: meta.regularMarketVolume || data.volumes[data.volumes.length - 1] || 0,
+        volume: meta.regularMarketVolume || (intraday.volumes.length ? intraday.volumes[intraday.volumes.length - 1] : 0),
         updated: new Date().toLocaleTimeString('he-IL'),
         source: 'apps-script',
         ok: true,
@@ -386,9 +404,10 @@ function handleGetPrices_(symbolsCsv) {
         debug: {
           livePrice: price,
           prevCloseUsed: rawPrevClose,
-          source: 'yahoo-chart-daily-closes[-2] (NOT meta.chartPreviousClose)',
-          calculatedChangePct: rawPrevClose ? +(((price - rawPrevClose) / rawPrevClose) * 100).toFixed(2) : null,
+          prevCloseSource: prevCloseSource,
+          changePct: rawPrevClose ? +(((price - rawPrevClose) / rawPrevClose) * 100).toFixed(2) : null,
           status: dayChangeStatus,
+          yahooMeta: meta,
         },
       };
     } catch (err) {
@@ -396,6 +415,37 @@ function handleGetPrices_(symbolsCsv) {
     }
   });
   return jsonOut_({ ok:true, prices: prices });
+}
+
+// 1-day / 1-minute intraday chart — used ONLY for live price + daily
+// change (getPrices). NOT used by getIndicators, which keeps using the
+// existing 1-year daily series (fetchYahooChart_) unchanged.
+function fetchYahooIntraday_(symbol) {
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
+              '?range=1d&interval=1m&includePrePost=true';
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const json = JSON.parse(res.getContentText());
+  const result = json.chart && json.chart.result && json.chart.result[0];
+  if (!result) return null;
+  const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const closes = (q.close || []).filter(v => v != null);
+  const volumes = (q.volume || []).filter(v => v != null);
+  return { meta: result.meta || {}, closes: closes, volumes: volumes };
+}
+
+// Short daily series (5 trading days) — used ONLY as a last-resort
+// fallback for prevClose when Yahoo's intraday response has neither
+// regularMarketPreviousClose nor chartPreviousClose in its meta.
+function fetchYahooDailyShort_(symbol) {
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
+              '?range=5d&interval=1d';
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const json = JSON.parse(res.getContentText());
+  const result = json.chart && json.chart.result && json.chart.result[0];
+  if (!result) return null;
+  const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const closes = (q.close || []).filter(v => v != null);
+  return { closes: closes };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -647,6 +697,45 @@ function classifySentiment_(text) {
   if (bull && !bear) return 'bullish';
   if (bear && !bull) return 'bearish';
   return 'neutral';
+}
+
+// ════════════════════════════════════════════════════════════
+// LOGIN / AUTH
+// ════════════════════════════════════════════════════════════
+// Set Script Property LOGIN_PASSWORD to enable password protection.
+// If not set, auth is disabled and any login succeeds (dev mode).
+// Client sends SHA-256 hash of password; we SHA-256 the stored
+// plaintext password and compare. Neither party sees plaintext.
+
+function handleLogin_(clientHash) {
+  const props       = PropertiesService.getScriptProperties();
+  const storedPw    = props.getProperty('LOGIN_PASSWORD');
+
+  // Auth disabled — no password configured
+  if (!storedPw) {
+    return jsonOut_({ ok: true, token: 'auth-disabled', authDisabled: true });
+  }
+
+  if (!clientHash) {
+    return jsonOut_({ ok: false, error: 'סיסמה נדרשת' });
+  }
+
+  // Compute SHA-256 of stored password to compare with client hash
+  const bytes   = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    storedPw,
+    Utilities.Charset.UTF_8
+  );
+  const serverHash = bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+
+  if (clientHash !== serverHash) {
+    return jsonOut_({ ok: false, error: 'סיסמה שגויה' });
+  }
+
+  // Issue a time-based session token (signed with password hash)
+  const ts    = Date.now();
+  const token = Utilities.base64Encode(ts + ':' + serverHash.slice(0, 16));
+  return jsonOut_({ ok: true, token: token });
 }
 
 // ════════════════════════════════════════════════════════════

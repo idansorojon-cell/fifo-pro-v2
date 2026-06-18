@@ -5,8 +5,8 @@
 
 // Bumped v1 -> v2: STATIC_ASSETS changed (learningEngine.js added,
 // decisionEngine.js rewritten) — old caches are evicted in 'activate'.
-const CACHE_NAME   = 'fifopro-v2';
-const STATIC_CACHE = 'fifopro-static-v2';
+const CACHE_NAME   = 'fifopro-v3';
+const STATIC_CACHE = 'fifopro-static-v3';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
@@ -32,6 +32,11 @@ const STATIC_ASSETS = [
   'js/aiChat.js',
   'js/trades.js',
   'js/quicktrade.js',
+  'js/auth.js',
+  'js/dailyGrade.js',
+  'js/tradeReplay.js',
+  'js/performanceTimeline.js',
+  'js/settings.js',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
 ];
 

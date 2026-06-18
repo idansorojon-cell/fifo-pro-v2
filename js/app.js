@@ -204,12 +204,6 @@ function normalizeWatchlistRows(rows) {
 }
 
 // ── Seed banner ─────────────────────────────────────────────
-function updateSeedBanner() {
-  const b = document.getElementById('seed-banner');
-  if (!b) return;
-  b.style.display = (APP.trades.length === 0 && API.isConfigured()) ? 'flex' : 'none';
-}
-
 async function seedToSheets() {
   API.setStatus('בודק נתונים קיימים...', 'info');
   API.showSpinner(true);
@@ -253,15 +247,47 @@ function renderAll() {
   AICoach.render();
 }
 
+// ── Category tracking ───────────────────────────────────────
+APP.currentCategory = 'dashboard';
+APP.lastTab = {
+  dashboard: 'dashboard',
+  trading:   'positions',
+  analysis:  'analysis',
+  ai:        'decision',
+  settings:  'settings'
+};
+
+// ── Category switching ──────────────────────────────────────
+function switchCategory(cat, btn, fromBottomNav) {
+  APP.currentCategory = cat;
+  document.querySelectorAll('.nav-cat').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`.nav-cat[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
+  document.querySelectorAll(`.bn-item[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
+  document.querySelectorAll('.sub-nav').forEach(n => n.classList.remove('active'));
+  const subnav = document.getElementById('subnav-' + cat);
+  if (subnav) subnav.classList.add('active');
+  switchTab(APP.lastTab[cat] || cat, null);
+  // Highlight correct sub-tab
+  if (subnav) {
+    subnav.querySelectorAll('.tab').forEach(t => {
+      const attr = t.getAttribute('onclick') || '';
+      t.classList.toggle('active', attr.includes(`'${APP.lastTab[cat]}'`));
+    });
+  }
+}
+
 // ── Tab switching ───────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  }
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
-  if (btn)   btn.classList.add('active');
+  APP.lastTab[APP.currentCategory] = name;
 
-  // Lazy-load heavy tabs
   const st = getStats();
   switch (name) {
     case 'positions':
@@ -304,10 +330,26 @@ function switchTab(name, btn) {
       Analytics.renderPerformance(st);
       break;
     case 'goals':
-      // BUG FIX: this tab previously had no case here, so #goal-detail
-      // and #month-history-table were never populated — the Goals tab
-      // rendered permanently blank below the input row.
       Dashboard.renderGoalsTab(st);
+      renderSmartGoals(st);
+      break;
+    case 'brief':
+      renderDailyBrief();
+      break;
+    case 'replay':
+      if (window.TradeReplay) TradeReplay.render();
+      break;
+    case 'grade':
+      if (window.DailyGrade) DailyGrade.render();
+      break;
+    case 'ptimeline':
+      if (window.PerformanceTimeline) PerformanceTimeline.render();
+      break;
+    case 'portheatmap':
+      renderPortfolioHeatmap();
+      break;
+    case 'settings':
+      if (window.Settings) Settings.render();
       break;
   }
 }
@@ -343,8 +385,337 @@ function exportCSV() {
   a.click();
 }
 
+// ── Daily Brief ─────────────────────────────────────────────
+function renderDailyBrief() {
+  const el = document.getElementById('brief-content');
+  if (!el) return;
+
+  const st  = getStats();
+  const now = new Date();
+  const days = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const dateStr = `יום ${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+
+  const curM = Utils.currentMonthKey();
+  const monthTrades = APP.trades.filter(t => t.month === curM);
+  const monthNet    = monthTrades.reduce((s,t) => s+t.net, 0);
+  const goalPct     = APP.monthGoal > 0 ? Math.min(120, Math.round(monthNet / APP.monthGoal * 100)) : 0;
+  const openPnl     = APP.positions.reduce((s,p) => {
+    const live = APP.liveData[p.symbol];
+    return s + (live?.price ? (live.price - p.avg_price) * p.qty : 0);
+  }, 0);
+
+  // What changed since last visit
+  const lastVisit = Auth.getLastVisit();
+  const newTrades = lastVisit ? APP.trades.filter(t => {
+    const d = Utils.parseDD(t.sell_date);
+    return d.getTime() > lastVisit.ts;
+  }).length : 0;
+
+  // Risks for today
+  const risks = [];
+  APP.positions.forEach(p => {
+    const live = APP.liveData[p.symbol];
+    if (live && live.price) {
+      const pnlPct = ((live.price - p.avg_price) / p.avg_price) * 100;
+      if (pnlPct < -8) risks.push(`${p.symbol}: ירד ${pnlPct.toFixed(1)}% מהכניסה`);
+      if (p.stop_loss && live.price < p.stop_loss * 1.02)
+        risks.push(`${p.symbol}: קרוב לסטופ ($${p.stop_loss})`);
+    }
+  });
+
+  // AI coach sentence based on performance
+  let coachMsg = '';
+  if (st.winRate >= 65 && st.totalNet > 0)
+    coachMsg = 'ביצועים מצוינים! שמור על המשמעת והמשך לפי התוכנית.';
+  else if (st.winRate < 50)
+    coachMsg = 'Win Rate מתחת ל-50%. שקול לצמצם גודל פוזיציות עד לשיפור הדיוק.';
+  else if (monthNet < 0)
+    coachMsg = 'חודש מאתגר. זה זמן טוב לעיין ביומן ולזהות תבניות.';
+  else
+    coachMsg = 'בקצב טוב. זכור: עקביות עדיפה על ניסיון לתפוס עסקה גדולה.';
+
+  el.innerHTML = `
+    <div class="brief-hero">
+      <div class="brief-greeting">שלום, בוקר טוב 👋</div>
+      <div class="brief-date">${dateStr}</div>
+
+      <div class="brief-kpis">
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">P&L פתוח</div>
+          <div class="brief-kpi-val ${openPnl >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(openPnl))}</div>
+        </div>
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">רווח החודש</div>
+          <div class="brief-kpi-val ${monthNet >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(monthNet))}</div>
+        </div>
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">יעד חודשי</div>
+          <div class="brief-kpi-val">${goalPct}% (${Utils.f$(APP.monthGoal)})</div>
+        </div>
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">פוזיציות פתוחות</div>
+          <div class="brief-kpi-val">${APP.positions.length}</div>
+        </div>
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">עסקאות החודש</div>
+          <div class="brief-kpi-val">${monthTrades.length}</div>
+        </div>
+        <div class="brief-kpi">
+          <div class="brief-kpi-label">Win Rate כולל</div>
+          <div class="brief-kpi-val ${st.winRate >= 55 ? 'green' : 'red'}">${st.winRate}%</div>
+        </div>
+      </div>
+
+      <div class="brief-coach">
+        <span class="brief-coach-icon">🤖</span>
+        <strong>AI Coach:</strong> ${coachMsg}
+      </div>
+
+      ${newTrades > 0 ? `
+        <div class="brief-changes">
+          <div class="brief-change-item">📊 ${newTrades} עסקאות חדשות מהכניסה האחרונה</div>
+        </div>
+      ` : ''}
+
+      ${risks.length ? `
+        <div class="brief-risk">
+          <strong style="color:var(--red)">⚠️ סיכוני היום:</strong>
+          <ul style="margin-top:6px;padding-right:16px;font-size:12px">
+            ${risks.map(r => `<li>${r}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
+    </div>
+
+    ${APP.watchlist.length ? `
+      <div class="card">
+        <div class="card-title">👁 Watchlist — כדאי לשים לב</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${APP.watchlist.slice(0,8).map(w => {
+            const live = APP.liveData[w.symbol];
+            const price = live?.price;
+            const chgPct = live?.changePctValid ? live.changePct : null;
+            return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:8px 12px;font-size:13px">
+              <strong>${w.symbol}</strong>
+              ${price ? `<span style="margin-right:8px;color:var(--text-3)">$${price.toFixed(2)}</span>` : ''}
+              ${chgPct != null ? `<span class="${chgPct >= 0 ? 'green' : 'red'}">${Utils.fpct(chgPct)}</span>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+
+// ── Smart Goals ──────────────────────────────────────────────
+function renderSmartGoals(st) {
+  const el = document.getElementById('goals-content');
+  if (!el) return;
+
+  const now       = new Date();
+  const curM      = Utils.currentMonthKey();
+  const monthTrades = APP.trades.filter(t => t.month === curM);
+  const monthNet  = monthTrades.reduce((s,t) => s+t.net, 0);
+  const goal      = APP.monthGoal || 5000;
+  const pct       = goal > 0 ? Math.min(120, Math.max(0, (monthNet / goal) * 100)) : 0;
+  const remaining = goal - monthNet;
+
+  // Trading days remaining in month
+  const lastDay   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const daysLeft  = Math.max(0, Math.ceil((lastDay - now) / 86400000));
+  const tdLeft    = Math.max(1, Math.round(daysLeft * 5/7));
+
+  // How much per trading day needed
+  const perDay    = remaining > 0 && tdLeft > 0 ? remaining / tdLeft : 0;
+
+  // Current avg per trade
+  const avgTrade  = monthTrades.length > 0 ? monthNet / monthTrades.length : (st.avgNet || 0);
+
+  // Simulation: at current average, where do we end?
+  const totalTradingDays = Math.round(lastDay.getDate() * 5/7);
+  const elapsedTD = totalTradingDays - tdLeft;
+  const projectedEnd = elapsedTD > 0 && avgTrade
+    ? monthNet + (avgTrade * (monthTrades.length / Math.max(1, elapsedTD)) * tdLeft)
+    : monthNet;
+
+  const isOnTrack  = monthNet >= goal * (1 - daysLeft / lastDay.getDate());
+  const paceClass  = pct >= 100 ? 'ahead' : isOnTrack ? 'on-track' : 'behind';
+  const paceText   = pct >= 100 ? '🎯 הגעת ליעד!' : isOnTrack ? '✓ בקצב טוב' : '⚡ מתחת לקצב';
+
+  const strokeLen  = 2 * Math.PI * 80; // r=80
+  const offset     = strokeLen - (Math.min(100, pct) / 100) * strokeLen;
+  const ringColor  = pct >= 100 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : 'var(--gold)';
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">🎯 יעד חודשי — ${Utils.monthLabel(curM)}</div>
+
+      <div class="goal-ring-wrap">
+        <svg class="goal-ring-svg" viewBox="0 0 180 180">
+          <circle cx="90" cy="90" r="80" fill="none" stroke="var(--surface-3)" stroke-width="12"/>
+          <circle cx="90" cy="90" r="80" fill="none" stroke="${ringColor}" stroke-width="12"
+            stroke-dasharray="${strokeLen}" stroke-dashoffset="${offset}"
+            stroke-linecap="round" style="transition:stroke-dashoffset 0.8s ease"/>
+        </svg>
+        <div class="goal-ring-center">
+          <div class="goal-ring-pct" style="color:${ringColor}">${Math.round(pct)}%</div>
+          <div class="goal-ring-label">מהיעד</div>
+        </div>
+      </div>
+
+      <div class="flex-between mb-12">
+        <div style="font-size:13px;color:var(--text-3)">
+          ${Utils.f$(Math.round(monthNet))} מתוך ${Utils.f$(goal)}
+        </div>
+        <div class="goal-pace ${paceClass}">${paceText}</div>
+      </div>
+
+      <div class="card" style="margin-bottom:0;background:var(--surface-2)">
+        <div class="card-title">📊 סימולציה</div>
+        <div class="goal-sim-row"><span class="goal-sim-label">ימי מסחר שנשארו</span><span class="goal-sim-val">${tdLeft}</span></div>
+        <div class="goal-sim-row"><span class="goal-sim-label">נדרש ליום מסחר</span><span class="goal-sim-val ${remaining > 0 ? '' : 'green'}">${remaining > 0 ? Utils.f$(Math.round(perDay)) : 'הושג ✓'}</span></div>
+        <div class="goal-sim-row"><span class="goal-sim-label">ממוצע לעסקה (החודש)</span><span class="goal-sim-val">${Utils.f$(Math.round(avgTrade))}</span></div>
+        <div class="goal-sim-row"><span class="goal-sim-label">תחזית לסוף החודש</span><span class="goal-sim-val ${projectedEnd >= goal ? 'green' : 'red'}">${Utils.f$(Math.round(projectedEnd))}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Portfolio Heatmap ────────────────────────────────────────
+function renderPortfolioHeatmap() {
+  const el = document.getElementById('portheatmap-content');
+  if (!el) return;
+
+  if (!APP.trades.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><div class="empty-title">אין עסקאות</div></div>`;
+    return;
+  }
+
+  // Aggregate by symbol
+  const bySymbol = {};
+  APP.trades.forEach(t => {
+    if (!bySymbol[t.symbol]) bySymbol[t.symbol] = { net:0, cost:0, trades:0 };
+    bySymbol[t.symbol].net    += t.net;
+    bySymbol[t.symbol].cost   += t.cost;
+    bySymbol[t.symbol].trades += 1;
+  });
+
+  const syms = Object.entries(bySymbol).sort((a,b) => b[1].net - a[1].net);
+  const maxAbs = Math.max(...syms.map(([,v]) => Math.abs(v.net)));
+  const totalCost = syms.reduce((s,[,v]) => s + Math.abs(v.net), 0);
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">🌡️ Portfolio Heatmap — לפי סימבול</div>
+      <div class="porthm-legend">
+        <span><span class="porthm-legend-box" style="background:rgba(78,204,168,0.7)"></span>רווח</span>
+        <span><span class="porthm-legend-box" style="background:rgba(255,107,107,0.7)"></span>הפסד</span>
+        <span style="color:var(--text-3);font-size:11px">גודל התא = גודל הרווח/הפסד</span>
+      </div>
+      <div class="porthm-grid">
+        ${syms.map(([sym, v]) => {
+          const intensity = maxAbs > 0 ? Math.abs(v.net) / maxAbs : 0;
+          const isPos = v.net >= 0;
+          const alpha = 0.15 + intensity * 0.7;
+          const bg    = isPos ? `rgba(78,204,168,${alpha})` : `rgba(255,107,107,${alpha})`;
+          const textColor = intensity > 0.6 ? '#fff' : (isPos ? 'var(--green)' : 'var(--red)');
+          const pct = totalCost > 0 ? ((Math.abs(v.net) / totalCost) * 100).toFixed(1) : '0';
+          return `
+            <div class="porthm-cell" style="background:${bg}" title="${sym}: ${Utils.f$(Math.round(v.net))} | ${v.trades} עסקאות">
+              <div class="porthm-sym" style="color:${textColor}">${sym}</div>
+              <div class="porthm-pct" style="color:${textColor}">${Utils.f$(Math.round(v.net))}</div>
+              <div class="porthm-val" style="color:${textColor}">${v.trades} עסקאות</div>
+              <div class="porthm-size" style="color:${textColor}">${pct}% מסה״כ</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 תרומה לתיק — מיון לפי רווח/הפסד</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>סימבול</th><th>נטו $</th><th>עסקאות</th><th>% מסה"כ</th><th>ממוצע לעסקה</th>
+          </tr></thead>
+          <tbody>
+            ${syms.map(([sym, v]) => {
+              const pct = totalCost > 0 ? ((Math.abs(v.net) / totalCost) * 100).toFixed(1) : '0';
+              const avg = v.trades > 0 ? v.net / v.trades : 0;
+              return `<tr>
+                <td><strong>${sym}</strong></td>
+                <td class="${v.net >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(v.net))}</td>
+                <td>${v.trades}</td>
+                <td>${pct}%</td>
+                <td class="${avg >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(avg))}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ── Proactive AI Coach Warnings ──────────────────────────────
+function checkProactiveCoach() {
+  const alerts = [];
+  const { trades } = APP;
+  if (trades.length < 3) return;
+
+  // Check last 10 trades for patterns
+  const recent = trades.slice(-10);
+  const recentLosses = recent.filter(t => t.net < 0);
+
+  // Consecutive losses
+  let streak = 0;
+  for (let i = trades.length - 1; i >= 0; i--) {
+    if (trades[i].net < 0) streak++;
+    else break;
+  }
+  if (streak >= 3) alerts.push(`⛔ ${streak} הפסדים רצופים — שקול להפסיק לסחור היום`);
+
+  // No stops in recent trades
+  const noStops = recent.filter(t => t.respected_stop === 'לא').length;
+  if (noStops >= 2) alerts.push(`⚠️ ${noStops} עסקאות אחרונות ללא כיבוד סטופ`);
+
+  // High loss rate recently
+  if (recent.length >= 5 && recentLosses.length / recent.length > 0.7)
+    alerts.push(`📉 70%+ הפסדים ב-${recent.length} עסקאות אחרונות`);
+
+  // Open positions near stop loss
+  APP.positions.forEach(p => {
+    const live = APP.liveData[p.symbol];
+    if (live && p.stop_loss && live.price) {
+      const distPct = ((live.price - p.stop_loss) / p.stop_loss) * 100;
+      if (distPct < 3 && distPct >= 0)
+        alerts.push(`🔴 ${p.symbol}: ${distPct.toFixed(1)}% מהסטופ — היה ערוך`);
+    }
+  });
+
+  const alertEl  = document.getElementById('coach-alert');
+  const itemsEl  = document.getElementById('coach-alert-items');
+  if (!alertEl || !itemsEl) return;
+  if (alerts.length) {
+    itemsEl.innerHTML = alerts.map(a => `<div class="coach-alert-item">${a}</div>`).join('');
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
+}
+
+// ── Seed banner — hide when trades exist ─────────────────────
+function updateSeedBanner() {
+  const b = document.getElementById('seed-banner');
+  if (!b) return;
+  // Hide if trades already exist — no need to show upload prompt
+  b.style.display = (APP.trades.length === 0 && API.isConfigured()) ? 'flex' : 'none';
+}
+
 // ── Init ────────────────────────────────────────────────────
-(async () => {
+async function _initApp() {
   // Dark mode — default ON (trading terminal)
   const savedDark = Utils.LS.get('fifo_dark');
   APP.darkMode = savedDark !== '0'; // default dark
@@ -362,10 +733,26 @@ function exportCSV() {
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();
 
+  // Proactive coach check after data loads
+  setTimeout(checkProactiveCoach, 1500);
+
+  // Save last visit timestamp
+  Auth.saveLastVisit();
+
   // Service Worker for PWA
-  // Relative path (no leading "/") so registration works both at a
-  // domain root and under a GitHub Pages project subpath.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+}
+
+(async () => {
+  // Set up auth success callback
+  window._onAuthSuccess = _initApp;
+
+  // Try auth
+  const authed = await Auth.init();
+  if (authed) {
+    await _initApp();
+  }
+  // If not authed, login overlay is shown; _initApp runs after successful login
 })();

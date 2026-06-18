@@ -191,6 +191,20 @@ const API = (() => {
     label.textContent     = connected ? 'Live' : 'Polling';
   }
 
+  // ── Auth (login verification) ──────────────────────────
+  async function verifyLogin(passwordHash) {
+    try {
+      const res = await fetch(
+        `${API_URL}?action=login&passwordHash=${encodeURIComponent(passwordHash)}&t=${Date.now()}`,
+        { cache: 'no-store', redirect: 'follow' }
+      );
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch(e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
   // ── AI Chat (proxied through Apps Script) ──────────────
   // Never call api.anthropic.com directly from the browser — that
   // would require shipping an Anthropic API key in client JS, which
@@ -214,6 +228,7 @@ const API = (() => {
     getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS,
-    askClaude
+    askClaude, verifyLogin,
+    _url: API_URL
   };
 })();
