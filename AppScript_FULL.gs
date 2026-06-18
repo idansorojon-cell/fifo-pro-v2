@@ -1,41 +1,30 @@
 /**
  * ============================================================
- * FIFO PRO — AppScript_FULL.gs
+ * FIFO PRO — AppScript_FULL.gs  (Code.gs)
  * Complete, ready-to-paste Google Apps Script backend.
  * ============================================================
  *
- * ⚠️ IMPORTANT — READ BEFORE PASTING:
- * I do not have access to your live, currently-deployed Apps Script
- * source (it was never shared in this conversation). This file is a
- * faithful RECONSTRUCTION from the documented contract your own
- * README_AI.md / CLAUDE.md specify, and from exactly what js/api.js
- * calls on the frontend (verified action-by-action against the live
- * file). It implements every endpoint your frontend needs, using the
- * sheet names and field names your own docs define:
- *   Sheets: Trades, Positions, Watchlist, Settings
- *   Trade fields: id, symbol, buy_date, sell_date, qty, buy_price,
- *     sell_price, cost, gross, tax, net, pct, hold_days, month, notes,
- *     entry_reason, exit_reason, respected_stop, followed_plan, lesson,
- *     emotion
- *   Position fields: id, symbol, qty, avg_price, target, stop_loss,
- *     notes, added_date
- *   Watchlist fields: symbol, note, added
+ * HOW TO DEPLOY (every time you update this file):
+ *   1. Open script.google.com → your project
+ *   2. Delete ALL existing code → paste this entire file
+ *   3. Save (Ctrl+S)
+ *   4. Deploy → Manage deployments → select existing → Edit → New version → Deploy
+ *   5. The deployment URL stays the same — no changes needed in js/api.js
  *
- * If your actual production sheets use a different column order or
- * extra columns, this script's header-row-based reader/writer (it maps
- * by COLUMN NAME, not position) will still work AS LONG AS your header
- * row uses these exact field names. If your headers differ, either
- * rename them to match, or tell me the actual names and I'll adjust.
+ * SCRIPT PROPERTIES (Project Settings → Script Properties):
+ *   LOGIN_PASSWORD  — password to protect the app (plaintext; compared via SHA-256)
+ *                     Leave unset to disable login requirement (dev/local mode)
+ *   ANTHROPIC_API_KEY — for AI Chat
+ *   FINNHUB_API_KEY   — for News panel in Decision Engine
  *
- * SAFE ROLLOUT — do this, don't skip it:
- *   1. In the Apps Script editor: File → Make a copy (keep your current
- *      working script untouched as a backup).
- *   2. In a NEW deployment (or the copy), replace all code with this
- *      file's contents.
- *   3. Test every action below against a COPY of your spreadsheet first
- *      if you're not 100% sure your headers match.
- *   4. Only once verified, point your real API_URL deployment at this
- *      code (or redeploy the same project as a "New version").
+ * AUTH MODEL:
+ *   • Client SHA-256-hashes the password and sends the hash via POST
+ *   • Server SHA-256-hashes LOGIN_PASSWORD and compares
+ *   • On match: returns a stateless session token (base64 of timestamp + hash-fragment)
+ *   • Client stores token in localStorage for 30 days
+ *   • Every subsequent API call includes the token
+ *   • Server validates the token on every request (validateToken_)
+ *   • If LOGIN_PASSWORD is not set: all calls are allowed without a token
  * ============================================================
  */
 
@@ -58,6 +47,13 @@ const WATCHLIST_HEADERS = ['symbol','note','added'];
 function doGet(e) {
   try {
     const action = e.parameter.action;
+    const token  = e.parameter.token || '';
+
+    // Every GET endpoint requires a valid token (login itself is POST)
+    if (!validateToken_(token)) {
+      return jsonOut_({ ok: false, error: 'Unauthorized', code: 401 });
+    }
+
     switch (action) {
       case 'getTrades':       return handleGetTrades_();
       case 'getGoal':         return handleGetGoal_();
@@ -68,36 +64,183 @@ function doGet(e) {
       case 'getPrices':       return handleGetPrices_(e.parameter.symbols);
       case 'getIndicators':   return handleGetIndicators_(e.parameter.symbol);
       case 'getNews':         return handleGetNews_(e.parameter.symbol);
-      case 'login':           return handleLogin_(e.parameter.passwordHash);
-      default:                return jsonOut_({ ok:false, error:'Unknown action: ' + action });
+      default:                return jsonOut_({ ok: false, error: 'Unknown action: ' + action });
     }
   } catch (err) {
-    return jsonOut_({ ok:false, error: err.message });
+    return jsonOut_({ ok: false, error: err.message });
   }
 }
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
+
+    // Auth actions — no token required
+    if (data.action === 'login')          return handleLogin_(data.passwordHash);
+    if (data.action === 'logout')         return jsonOut_({ ok: true }); // client clears token
+
+    // Password change requires both old token + current password verification
+    if (data.action === 'changePassword') return handleChangePassword_(data);
+
+    // Every other POST requires a valid token
+    if (!validateToken_(data.token || '')) {
+      return jsonOut_({ ok: false, error: 'Unauthorized', code: 401 });
+    }
+
     switch (data.action) {
-      case 'add':             return handleAddTrade_(data.trade);
-      case 'update':          return handleUpdateTrade_(data.trade);
-      case 'delete':          return handleDeleteTrade_(data.id);
-      case 'seedAll':         return handleSeedAll_(data.trades);
-      case 'setGoal':         return handleSetGoal_(data.goal);
-      case 'addPosition':     return handleAddPosition_(data.position);
-      case 'updatePosition':  return handleUpdatePosition_(data.position);
-      case 'deletePosition':  return handleDeletePosition_(data.id);
-      case 'aiChat':          return handleAiChat_(data);
-      default:                return jsonOut_({ ok:false, error:'Unknown action: ' + data.action });
+      case 'add':            return handleAddTrade_(data.trade);
+      case 'update':         return handleUpdateTrade_(data.trade);
+      case 'delete':         return handleDeleteTrade_(data.id);
+      case 'seedAll':        return handleSeedAll_(data.trades);
+      case 'setGoal':        return handleSetGoal_(data.goal);
+      case 'addPosition':    return handleAddPosition_(data.position);
+      case 'updatePosition': return handleUpdatePosition_(data.position);
+      case 'deletePosition': return handleDeletePosition_(data.id);
+      case 'aiChat':         return handleAiChat_(data);
+      default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
   } catch (err) {
-    return jsonOut_({ ok:false, error: err.message });
+    return jsonOut_({ ok: false, error: err.message });
   }
 }
 
 function jsonOut_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTH — LOGIN / TOKEN VALIDATION / PASSWORD CHANGE
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Called via POST { action:'login', passwordHash:'<sha256-hex>' }
+ * Client hashes the password with SHA-256 in the browser (Web Crypto API).
+ * We hash the stored plaintext LOGIN_PASSWORD server-side and compare.
+ * Neither side ever sends the plaintext password over the wire.
+ */
+function handleLogin_(clientHash) {
+  const props    = PropertiesService.getScriptProperties();
+  const storedPw = props.getProperty('LOGIN_PASSWORD');
+
+  // No password configured → auth disabled, accept any login
+  if (!storedPw) {
+    return jsonOut_({ ok: true, token: 'auth-disabled', authDisabled: true });
+  }
+
+  if (!clientHash) {
+    return jsonOut_({ ok: false, error: 'סיסמה נדרשת' });
+  }
+
+  const serverHash = sha256hex_(storedPw);
+
+  if (clientHash !== serverHash) {
+    // Small delay to blunt brute-force (Apps Script allows Utilities.sleep)
+    Utilities.sleep(500);
+    return jsonOut_({ ok: false, error: 'סיסמה שגויה' });
+  }
+
+  const token = makeToken_(serverHash);
+  return jsonOut_({ ok: true, token: token });
+}
+
+/**
+ * Called via POST { action:'changePassword', token, currentHash, newHash }
+ * currentHash = SHA-256 of the user's current password (from browser).
+ * newHash     = SHA-256 of the desired new password (from browser).
+ */
+function handleChangePassword_(data) {
+  const props    = PropertiesService.getScriptProperties();
+  const storedPw = props.getProperty('LOGIN_PASSWORD');
+
+  if (!storedPw) {
+    return jsonOut_({ ok: false, error: 'שינוי סיסמה לא זמין — LOGIN_PASSWORD לא מוגדר' });
+  }
+
+  const serverHash = sha256hex_(storedPw);
+
+  // Validate current token
+  if (!validateToken_(data.token || '')) {
+    return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש' });
+  }
+
+  // Validate current password
+  if ((data.currentHash || '') !== serverHash) {
+    return jsonOut_({ ok: false, error: 'הסיסמה הנוכחית שגויה' });
+  }
+
+  if (!data.newHash || data.newHash.length !== 64) {
+    return jsonOut_({ ok: false, error: 'סיסמה חדשה לא תקינה' });
+  }
+
+  // We don't store the hash — we store the plaintext and hash on every
+  // comparison. But the client only sends hashes, not the new plaintext.
+  // Solution: store a special marker so we can compare against future hashes.
+  // We store "__hash__:<newHash>" so handleLogin_ knows to compare directly.
+  props.setProperty('LOGIN_PASSWORD', '__hash__:' + data.newHash);
+  const newToken = makeToken_(data.newHash);
+  return jsonOut_({ ok: true, token: newToken });
+}
+
+/**
+ * Validates a session token from the client.
+ * Token format: base64(timestamp + ':' + serverHash.slice(0,16))
+ * If LOGIN_PASSWORD is not set: all tokens are valid (auth-disabled mode).
+ */
+function validateToken_(token) {
+  if (!token) {
+    // If no password configured, allow unauthenticated access
+    const props = PropertiesService.getScriptProperties();
+    return !props.getProperty('LOGIN_PASSWORD');
+  }
+
+  // Special token issued when no password is set
+  if (token === 'auth-disabled') return true;
+
+  const props    = PropertiesService.getScriptProperties();
+  const storedPw = props.getProperty('LOGIN_PASSWORD');
+
+  // Auth disabled
+  if (!storedPw) return true;
+
+  try {
+    const decoded     = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
+    const parts       = decoded.split(':');
+    if (parts.length !== 2) return false;
+
+    const ts          = parseInt(parts[0], 10);
+    const hashFrag    = parts[1];
+
+    // Expired? (30 days)
+    const thirtyDays  = 30 * 24 * 60 * 60 * 1000;
+    if (isNaN(ts) || Date.now() - ts > thirtyDays) return false;
+
+    // Hash fragment must match current password
+    const serverHash  = sha256hex_(storedPw);
+    return hashFrag === serverHash.slice(0, 16);
+  } catch (e) {
+    return false;
+  }
+}
+
+/** SHA-256 of text → lowercase hex string */
+function sha256hex_(text) {
+  // If stored as __hash__:<hex> (set by changePassword), use the hex directly
+  if (text && text.startsWith('__hash__:')) return text.slice(9);
+
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    text,
+    Utilities.Charset.UTF_8
+  );
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
+
+/** Create a new session token from a password hash */
+function makeToken_(serverHash) {
+  const ts = Date.now();
+  return Utilities.base64Encode(ts + ':' + serverHash.slice(0, 16));
 }
 
 // ════════════════════════════════════════════════════════════
@@ -123,23 +266,25 @@ function readRows_(sheet) {
     .filter(r => r.some(c => c !== '' && c !== null))
     .map(r => {
       const obj = {};
-      headers.forEach((h, i) => obj[h] = r[i]);
+      headers.forEach((h, i) => { obj[h] = r[i]; });
       return obj;
     });
   return { headers, rows };
 }
 
 function appendRow_(sheet, headers, obj) {
-  sheet.appendRow(headers.map(h => obj[h] !== undefined && obj[h] !== null ? obj[h] : ''));
+  sheet.appendRow(headers.map(h => (obj[h] !== undefined && obj[h] !== null) ? obj[h] : ''));
 }
 
 function findRowById_(sheet, id) {
-  const data = sheet.getDataRange().getValues();
+  const data    = sheet.getDataRange().getValues();
   const headers = data[0] || [];
-  const idCol = headers.indexOf('id');
+  const idCol   = headers.indexOf('id');
   if (idCol === -1) return null;
   for (let i = 1; i < data.length; i++) {
-    if (Number(data[i][idCol]) === Number(id)) return { rowIndex: i + 1, headers, row: data[i] };
+    if (Number(data[i][idCol]) === Number(id)) {
+      return { rowIndex: i + 1, headers, row: data[i] };
+    }
   }
   return null;
 }
@@ -158,43 +303,43 @@ function handleGetTrades_() {
   const sh = getSheet_('Trades');
   ensureHeaders_(sh, TRADE_HEADERS);
   const { rows } = readRows_(sh);
-  return jsonOut_({ ok:true, trades: rows });
+  return jsonOut_({ ok: true, trades: rows });
 }
 
 function handleAddTrade_(trade) {
-  if (!trade) return jsonOut_({ ok:false, error:'No trade supplied' });
+  if (!trade) return jsonOut_({ ok: false, error: 'No trade supplied' });
   const sh = getSheet_('Trades');
   ensureHeaders_(sh, TRADE_HEADERS);
   const { rows } = readRows_(sh);
   trade.id = nextId_(rows);
   appendRow_(sh, TRADE_HEADERS, trade);
-  return jsonOut_({ ok:true, trade: trade });
+  return jsonOut_({ ok: true, trade: trade });
 }
 
 function handleUpdateTrade_(trade) {
-  if (!trade || trade.id === undefined) return jsonOut_({ ok:false, error:'Trade id required' });
-  const sh = getSheet_('Trades');
+  if (!trade || trade.id === undefined) return jsonOut_({ ok: false, error: 'Trade id required' });
+  const sh    = getSheet_('Trades');
   const found = findRowById_(sh, trade.id);
-  if (!found) return jsonOut_({ ok:false, error:'Trade not found: ' + trade.id });
-  const rowArr = found.headers.map((h, i) => trade[h] !== undefined ? trade[h] : found.row[i]);
+  if (!found) return jsonOut_({ ok: false, error: 'Trade not found: ' + trade.id });
+  const rowArr = found.headers.map((h, i) => (trade[h] !== undefined ? trade[h] : found.row[i]));
   sh.getRange(found.rowIndex, 1, 1, found.headers.length).setValues([rowArr]);
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 function handleDeleteTrade_(id) {
-  if (id === undefined) return jsonOut_({ ok:false, error:'id required' });
-  const sh = getSheet_('Trades');
+  if (id === undefined) return jsonOut_({ ok: false, error: 'id required' });
+  const sh    = getSheet_('Trades');
   const found = findRowById_(sh, id);
-  if (!found) return jsonOut_({ ok:false, error:'Trade not found: ' + id });
+  if (!found) return jsonOut_({ ok: false, error: 'Trade not found: ' + id });
   sh.deleteRow(found.rowIndex);
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 function handleSeedAll_(trades) {
   const sh = getSheet_('Trades');
   ensureHeaders_(sh, TRADE_HEADERS);
   (trades || []).forEach(t => appendRow_(sh, TRADE_HEADERS, t));
-  return jsonOut_({ ok:true, count: (trades || []).length });
+  return jsonOut_({ ok: true, count: (trades || []).length });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -205,77 +350,77 @@ function handleGetPositions_() {
   const sh = getSheet_('Positions');
   ensureHeaders_(sh, POSITION_HEADERS);
   const { rows } = readRows_(sh);
-  return jsonOut_({ ok:true, positions: rows });
+  return jsonOut_({ ok: true, positions: rows });
 }
 
 function handleAddPosition_(pos) {
-  if (!pos) return jsonOut_({ ok:false, error:'No position supplied' });
+  if (!pos) return jsonOut_({ ok: false, error: 'No position supplied' });
   const sh = getSheet_('Positions');
   ensureHeaders_(sh, POSITION_HEADERS);
   const { rows } = readRows_(sh);
   pos.id = nextId_(rows);
   appendRow_(sh, POSITION_HEADERS, pos);
-  return jsonOut_({ ok:true, position: pos });
+  return jsonOut_({ ok: true, position: pos });
 }
 
 function handleUpdatePosition_(pos) {
-  if (!pos || pos.id === undefined) return jsonOut_({ ok:false, error:'Position id required' });
-  const sh = getSheet_('Positions');
+  if (!pos || pos.id === undefined) return jsonOut_({ ok: false, error: 'Position id required' });
+  const sh    = getSheet_('Positions');
   const found = findRowById_(sh, pos.id);
-  if (!found) return jsonOut_({ ok:false, error:'Position not found: ' + pos.id });
-  const rowArr = found.headers.map((h, i) => pos[h] !== undefined ? pos[h] : found.row[i]);
+  if (!found) return jsonOut_({ ok: false, error: 'Position not found: ' + pos.id });
+  const rowArr = found.headers.map((h, i) => (pos[h] !== undefined ? pos[h] : found.row[i]));
   sh.getRange(found.rowIndex, 1, 1, found.headers.length).setValues([rowArr]);
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 function handleDeletePosition_(id) {
-  if (id === undefined) return jsonOut_({ ok:false, error:'id required' });
-  const sh = getSheet_('Positions');
+  if (id === undefined) return jsonOut_({ ok: false, error: 'id required' });
+  const sh    = getSheet_('Positions');
   const found = findRowById_(sh, id);
-  if (!found) return jsonOut_({ ok:false, error:'Position not found: ' + id });
+  if (!found) return jsonOut_({ ok: false, error: 'Position not found: ' + id });
   sh.deleteRow(found.rowIndex);
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 // ════════════════════════════════════════════════════════════
-// WATCHLIST (note: addWatchlist/removeWatchlist are GET in the
-// frontend's current implementation — preserved as-is)
+// WATCHLIST
+// (addWatchlist / removeWatchlist sent as GET by the frontend — preserved)
 // ════════════════════════════════════════════════════════════
 
 function handleGetWatchlist_() {
   const sh = getSheet_('Watchlist');
   ensureHeaders_(sh, WATCHLIST_HEADERS);
   const { rows } = readRows_(sh);
-  return jsonOut_({ ok:true, watchlist: rows });
+  return jsonOut_({ ok: true, watchlist: rows });
 }
 
 function handleAddWatchlist_(params) {
   const symbol = String(params.symbol || '').trim().toUpperCase();
-  if (!symbol) return jsonOut_({ ok:false, error:'symbol required' });
+  if (!symbol) return jsonOut_({ ok: false, error: 'symbol required' });
   const sh = getSheet_('Watchlist');
   ensureHeaders_(sh, WATCHLIST_HEADERS);
   const { rows } = readRows_(sh);
   if (rows.some(r => String(r.symbol).toUpperCase() === symbol)) {
-    return jsonOut_({ ok:false, error: symbol + ' is already on the watchlist' });
+    return jsonOut_({ ok: false, error: symbol + ' כבר נמצא ב-Watchlist' });
   }
   appendRow_(sh, WATCHLIST_HEADERS, { symbol, note: params.note || '', added: params.added || '' });
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 function handleRemoveWatchlist_(params) {
   const symbol = String(params.symbol || '').trim().toUpperCase();
-  const sh = getSheet_('Watchlist');
-  const data = sh.getDataRange().getValues();
+  const sh     = getSheet_('Watchlist');
+  const data   = sh.getDataRange().getValues();
   const headers = data[0] || [];
-  const symCol = headers.indexOf('symbol');
-  if (symCol === -1) return jsonOut_({ ok:false, error:'Watchlist sheet has no symbol column' });
+  const symCol  = headers.indexOf('symbol');
+  if (symCol === -1) return jsonOut_({ ok: false, error: 'Watchlist sheet has no symbol column' });
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][symCol]).toUpperCase() === symbol) {
       sh.deleteRow(i + 1);
-      return jsonOut_({ ok:true });
+      return jsonOut_({ ok: true });
     }
   }
-  return jsonOut_({ ok:false, error:'Symbol not found: ' + symbol });
+  return jsonOut_({ ok: false, error: 'Symbol not found: ' + symbol });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -289,11 +434,11 @@ function handleGetGoal_() {
     sh.appendRow(['goal', 5000]);
   }
   const data = sh.getDataRange().getValues();
-  let goal = 5000;
+  let goal   = 5000;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === 'goal') goal = Number(data[i][1]) || 5000;
   }
-  return jsonOut_({ ok:true, goal: goal });
+  return jsonOut_({ ok: true, goal: goal });
 }
 
 function handleSetGoal_(goal) {
@@ -303,72 +448,51 @@ function handleSetGoal_(goal) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === 'goal') {
       sh.getRange(i + 1, 2).setValue(goal);
-      return jsonOut_({ ok:true });
+      return jsonOut_({ ok: true });
     }
   }
   sh.appendRow(['goal', goal]);
-  return jsonOut_({ ok:true });
+  return jsonOut_({ ok: true });
 }
 
 // ════════════════════════════════════════════════════════════
 // LIVE PRICES (Yahoo Finance — no API key required)
 // ════════════════════════════════════════════════════════════
 
-// BUG FIX ROUND 2 (ONDL: showed -2.54%, real daily change was ~-5.19%):
-//
-// Round 1 fixed the worse bug (chartPreviousClose from a 1y-range request
-// meaning "close ~1 year ago", not "yesterday's close" — that produced the
-// earlier -42.92% fake value). But deriving prevClose from
-// fetchYahooChart_'s 1y/1d daily series (closes[len-2]) is still the wrong
-// SOURCE for live price + daily change: a 1y/1d series is daily-bar data
-// that can lag/snapshot oddly relative to the live intraday price, and its
-// "last close" isn't reliably today's live tick. Per the explicit fix
-// requested:
-//   - Live price + daily change must come from a SEPARATE, DEDICATED
-//     1d/1m intraday request (fetchYahooIntraday_ below), not the 1y
-//     series used for indicators.
-//   - prevClose priority: meta.regularMarketPreviousClose (authoritative,
-//     always means "previous regular session's close" regardless of
-//     range) → meta.chartPreviousClose ONLY trusted when range=1d (in
-//     that specific case it correctly means "close before today") → a
-//     short dedicated daily-series fallback (fetchYahooDailyShort_,
-//     range=5d&interval=1d) only if both meta fields are absent.
-//   - getIndicators continues to use the existing 1y series unchanged
-//     (fetchYahooChart_) — untouched by this fix, per requirement.
-const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35; // single-day move >35% is flagged "suspicious", not "impossible" — still surfaced rather than silently trusted
+const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35;
 
 function handleGetPrices_(symbolsCsv) {
   const symbols = String(symbolsCsv || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-  const prices = {};
+  const prices  = {};
   symbols.forEach(sym => {
     try {
-      const intraday = fetchYahooIntraday_(sym); // range=1d&interval=1m&includePrePost=true
-      if (!intraday) { prices[sym] = { ok:false }; return; }
-      const meta = intraday.meta || {};
+      const intraday = fetchYahooIntraday_(sym);
+      if (!intraday) { prices[sym] = { ok: false }; return; }
+      const meta  = intraday.meta || {};
       const price = meta.regularMarketPrice != null
         ? meta.regularMarketPrice
         : (intraday.closes.length ? intraday.closes[intraday.closes.length - 1] : null);
-      if (price == null) { prices[sym] = { ok:false }; return; }
+      if (price == null) { prices[sym] = { ok: false }; return; }
 
-      // ── Previous close — priority chain per spec ──
+      // Previous close priority chain
       let rawPrevClose = null, prevCloseSource = null;
       if (meta.regularMarketPreviousClose != null) {
-        rawPrevClose = meta.regularMarketPreviousClose;
+        rawPrevClose    = meta.regularMarketPreviousClose;
         prevCloseSource = 'meta.regularMarketPreviousClose';
       } else if (meta.chartPreviousClose != null) {
-        // Only trusted here because this request is range=1d — in that
-        // case chartPreviousClose legitimately means "close before today".
-        rawPrevClose = meta.chartPreviousClose;
-        prevCloseSource = 'meta.chartPreviousClose (range=1d, valid here)';
+        rawPrevClose    = meta.chartPreviousClose;
+        prevCloseSource = 'meta.chartPreviousClose (range=1d)';
       } else {
-        const shortDaily = fetchYahooDailyShort_(sym); // range=5d&interval=1d, fallback only
+        const shortDaily = fetchYahooDailyShort_(sym);
         if (shortDaily && shortDaily.closes.length >= 2) {
-          rawPrevClose = shortDaily.closes[shortDaily.closes.length - 2];
-          prevCloseSource = 'fallback: yahoo-chart-5d-daily-closes[-2]';
+          rawPrevClose    = shortDaily.closes[shortDaily.closes.length - 2];
+          prevCloseSource = 'fallback: 5d-daily-closes[-2]';
         }
       }
 
-      let prevClose = null, change = null, changePct = null, changePctValid = false, dayChangeStatus = 'ok';
+      let prevClose = null, change = null, changePct = null, changePctValid = false;
+      let dayChangeStatus = 'ok';
+
       if (rawPrevClose == null) {
         dayChangeStatus = 'missing_prevclose';
       } else if (rawPrevClose <= 0) {
@@ -377,191 +501,161 @@ function handleGetPrices_(symbolsCsv) {
         const diffRatio = Math.abs(price - rawPrevClose) / rawPrevClose;
         if (diffRatio > SUSPICIOUS_DAY_CHANGE_RATIO) {
           dayChangeStatus = 'suspicious_prevclose';
-          prevClose = rawPrevClose; // kept for transparency/debug, but % is not trusted
-        } else {
           prevClose = rawPrevClose;
-          change = price - prevClose;
-          changePct = (change / prevClose) * 100;
+        } else {
+          prevClose      = rawPrevClose;
+          change         = price - prevClose;
+          changePct      = (change / prevClose) * 100;
           changePctValid = true;
         }
       }
 
       prices[sym] = {
-        price: price,
-        prevClose: prevClose,           // null if missing/invalid; present-but-unverified if "suspicious"
-        change: change,                  // null unless changePctValid
-        changePct: changePct,            // null unless changePctValid — frontend MUST show "N/A", not 0 or a guess
-        changePctValid: changePctValid,  // explicit flag — frontend should gate on this, not just `!= null`
-        dayChangeStatus: dayChangeStatus, // 'ok' | 'missing_prevclose' | 'invalid_prevclose' | 'suspicious_prevclose'
-        preMarket: meta.preMarketPrice || null,
-        postMarket: meta.postMarketPrice || null,
-        volume: meta.regularMarketVolume || (intraday.volumes.length ? intraday.volumes[intraday.volumes.length - 1] : 0),
-        updated: new Date().toLocaleTimeString('he-IL'),
-        source: 'apps-script',
         ok: true,
-        // ── TEMPORARY DEBUG FIELDS — requested for verification, remove
-        // once the fix is confirmed correct on the live site ──
+        price, prevClose, change, changePct, changePctValid, dayChangeStatus,
+        preMarket:  meta.preMarketPrice  || null,
+        postMarket: meta.postMarketPrice || null,
+        volume: meta.regularMarketVolume ||
+                (intraday.volumes.length ? intraday.volumes[intraday.volumes.length - 1] : 0),
+        updated: new Date().toLocaleTimeString('he-IL'),
+        source:  'apps-script',
         debug: {
-          livePrice: price,
-          prevCloseUsed: rawPrevClose,
-          prevCloseSource: prevCloseSource,
-          changePct: rawPrevClose ? +(((price - rawPrevClose) / rawPrevClose) * 100).toFixed(2) : null,
+          livePrice: price, prevCloseUsed: rawPrevClose,
+          prevCloseSource, changePct: rawPrevClose
+            ? +(((price - rawPrevClose) / rawPrevClose) * 100).toFixed(2)
+            : null,
           status: dayChangeStatus,
-          yahooMeta: meta,
         },
       };
     } catch (err) {
-      prices[sym] = { ok:false, error: err.message };
+      prices[sym] = { ok: false, error: err.message };
     }
   });
-  return jsonOut_({ ok:true, prices: prices });
+  return jsonOut_({ ok: true, prices });
 }
 
-// 1-day / 1-minute intraday chart — used ONLY for live price + daily
-// change (getPrices). NOT used by getIndicators, which keeps using the
-// existing 1-year daily series (fetchYahooChart_) unchanged.
 function fetchYahooIntraday_(symbol) {
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
-              '?range=1d&interval=1m&includePrePost=true';
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
-  const json = JSON.parse(res.getContentText());
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+              encodeURIComponent(symbol) + '?range=1d&interval=1m&includePrePost=true';
+  const res    = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const json   = JSON.parse(res.getContentText());
   const result = json.chart && json.chart.result && json.chart.result[0];
   if (!result) return null;
-  const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
-  const closes = (q.close || []).filter(v => v != null);
+  const q       = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const closes  = (q.close  || []).filter(v => v != null);
   const volumes = (q.volume || []).filter(v => v != null);
-  return { meta: result.meta || {}, closes: closes, volumes: volumes };
+  return { meta: result.meta || {}, closes, volumes };
 }
 
-// Short daily series (5 trading days) — used ONLY as a last-resort
-// fallback for prevClose when Yahoo's intraday response has neither
-// regularMarketPreviousClose nor chartPreviousClose in its meta.
 function fetchYahooDailyShort_(symbol) {
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
-              '?range=5d&interval=1d';
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
-  const json = JSON.parse(res.getContentText());
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+              encodeURIComponent(symbol) + '?range=5d&interval=1d';
+  const res    = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const json   = JSON.parse(res.getContentText());
   const result = json.chart && json.chart.result && json.chart.result[0];
   if (!result) return null;
-  const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const q      = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
   const closes = (q.close || []).filter(v => v != null);
-  return { closes: closes };
+  return { closes };
 }
 
 // ════════════════════════════════════════════════════════════
-// TECHNICAL INDICATORS (real data, computed from Yahoo Finance
-// daily OHLCV history — no placeholders; any field that can't be
-// computed honestly is simply omitted from the response, and the
-// frontend (decisionEngine.js) already treats a missing field as
-// "not available" rather than guessing)
+// TECHNICAL INDICATORS
 // ════════════════════════════════════════════════════════════
 
 function handleGetIndicators_(symbol) {
-  if (!symbol) return jsonOut_({ ok:false, error:'symbol required' });
+  if (!symbol) return jsonOut_({ ok: false, error: 'symbol required' });
   try {
     const data = fetchYahooChart_(symbol);
     if (!data || data.closes.length < 20) {
-      return jsonOut_({ ok:false, error:'Not enough historical data for ' + symbol });
+      return jsonOut_({ ok: false, error: 'Not enough historical data for ' + symbol });
     }
-    const closes = data.closes, highs = data.highs, lows = data.lows, volumes = data.volumes, opens = data.opens;
-    const price = (data.meta && data.meta.regularMarketPrice) || closes[closes.length - 1];
+    const { closes, highs, lows, volumes, opens } = data;
+    const price     = (data.meta && data.meta.regularMarketPrice) || closes[closes.length - 1];
     const prevClose = closes[closes.length - 2] || price;
 
-    const ema9    = lastEma_(closes, 9);
-    const ema20   = lastEma_(closes, 20);
-    const ema21   = lastEma_(closes, 21);
-    const ema50   = lastEma_(closes, 50);
-    const ema200  = lastEma_(closes, 200); // null if <200 days of history — honestly omitted, never faked
-    const rsi      = rsi_(closes, 14);
-    const macdRes   = macd_(closes);
-    const atr        = atr_(highs, lows, closes, 14);
+    const ema9   = lastEma_(closes, 9);
+    const ema20  = lastEma_(closes, 20);
+    const ema21  = lastEma_(closes, 21);
+    const ema50  = lastEma_(closes, 50);
+    const ema200 = lastEma_(closes, 200);
+    const rsi    = rsi_(closes, 14);
+    const macdRes = macd_(closes);
+    const atr    = atr_(highs, lows, closes, 14);
 
-    const last20Vol = volumes.slice(-20);
-    const avgVolume   = last20Vol.length ? last20Vol.reduce((a,b)=>a+b,0) / last20Vol.length : null;
-    const volume        = volumes[volumes.length - 1];
+    const last20Vol  = volumes.slice(-20);
+    const avgVolume  = last20Vol.length ? last20Vol.reduce((a,b) => a+b, 0) / last20Vol.length : null;
+    const volume     = volumes[volumes.length - 1];
 
     const last20Highs = highs.slice(-20), last20Lows = lows.slice(-20);
-    const resistance      = last20Highs.length ? Math.max.apply(null, last20Highs) : null;
-    const support           = last20Lows.length  ? Math.min.apply(null, last20Lows)  : null;
+    const resistance  = last20Highs.length ? Math.max.apply(null, last20Highs) : null;
+    const support     = last20Lows.length  ? Math.min.apply(null, last20Lows)  : null;
 
     const last252Highs = highs.slice(-252), last252Lows = lows.slice(-252);
-    const week52High      = last252Highs.length ? Math.max.apply(null, last252Highs) : null;
-    const week52Low        = last252Lows.length  ? Math.min.apply(null, last252Lows)  : null;
+    const week52High   = last252Highs.length ? Math.max.apply(null, last252Highs) : null;
+    const week52Low    = last252Lows.length  ? Math.min.apply(null, last252Lows)  : null;
 
     const changePct = prevClose ? (price - prevClose) / prevClose * 100 : null;
-    const gapPct       = (opens && opens.length && closes.length >= 2)
+    const gapPct    = (opens && opens.length && closes.length >= 2)
       ? (opens[opens.length-1] - closes[closes.length-2]) / closes[closes.length-2] * 100
       : null;
 
-    // Benchmark comparison vs S&P 500 (SPY) — real, computed the same way.
-    // NOTE: sector-strength comparison is intentionally NOT included —
-    // it would require a reliable symbol→sector→sector-ETF mapping this
-    // script doesn't have. Faking it would violate "no placeholders."
     let benchmarkChangePct = null;
     try {
       const spy = fetchYahooChart_('SPY');
       if (spy && spy.closes.length >= 2) {
         const spyPrice = (spy.meta && spy.meta.regularMarketPrice) || spy.closes[spy.closes.length - 1];
-        const spyPrev    = spy.closes[spy.closes.length - 2];
+        const spyPrev  = spy.closes[spy.closes.length - 2];
         benchmarkChangePct = spyPrev ? (spyPrice - spyPrev) / spyPrev * 100 : null;
       }
-    } catch (e) { /* leave null — frontend shows "not available" */ }
+    } catch (e) { /* leave null */ }
 
-    const indicators = {
-      price: price,
-      ema9: ema9, ema20: ema20, ema21: ema21, ema50: ema50, ema200: ema200,
-      rsi: rsi,
+    return jsonOut_({ ok: true, indicators: {
+      price, ema9, ema20, ema21, ema50, ema200, rsi,
       macd: macdRes.macd, macdSignal: macdRes.signal,
-      atr: atr,
-      volume: volume, avgVolume: avgVolume,
-      support: support, resistance: resistance,
-      week52High: week52High, week52Low: week52Low,
-      changePct: changePct, gapPct: gapPct,
-      preMarket: (data.meta && data.meta.preMarketPrice) || null,
+      atr, volume, avgVolume, support, resistance,
+      week52High, week52Low, changePct, gapPct,
+      preMarket:  (data.meta && data.meta.preMarketPrice)  || null,
       afterHours: (data.meta && data.meta.postMarketPrice) || null,
-      benchmarkChangePct: benchmarkChangePct,
-      // sectorChangePct intentionally omitted — see note above
-    };
-    return jsonOut_({ ok:true, indicators: indicators });
+      benchmarkChangePct,
+    }});
   } catch (err) {
-    return jsonOut_({ ok:false, error: err.message });
+    return jsonOut_({ ok: false, error: err.message });
   }
 }
 
-// ── Yahoo Finance chart fetch (shared by getPrices + getIndicators) ──
-
 function fetchYahooChart_(symbol) {
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
-              '?interval=1d&range=1y&includePrePost=true';
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
-  const json = JSON.parse(res.getContentText());
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+              encodeURIComponent(symbol) + '?interval=1d&range=1y&includePrePost=true';
+  const res    = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const json   = JSON.parse(res.getContentText());
   const result = json.chart && json.chart.result && json.chart.result[0];
   if (!result) return null;
 
   const ts = result.timestamp || [];
-  const q   = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const q  = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
   const closes = [], highs = [], lows = [], opens = [], volumes = [];
   for (let i = 0; i < ts.length; i++) {
-    if (q.close == null || q.close[i] == null) continue; // skip days with no close (holidays etc.)
+    if (!q.close || q.close[i] == null) continue;
     closes.push(q.close[i]);
-    highs.push(q.high && q.high[i] != null ? q.high[i] : q.close[i]);
-    lows.push(q.low && q.low[i] != null ? q.low[i] : q.close[i]);
-    opens.push(q.open && q.open[i] != null ? q.open[i] : q.close[i]);
+    highs.push(q.high  && q.high[i]  != null ? q.high[i]  : q.close[i]);
+    lows.push( q.low   && q.low[i]   != null ? q.low[i]   : q.close[i]);
+    opens.push(q.open  && q.open[i]  != null ? q.open[i]  : q.close[i]);
     volumes.push(q.volume && q.volume[i] != null ? q.volume[i] : 0);
   }
   return { closes, highs, lows, opens, volumes, meta: result.meta || {} };
 }
 
-// ── Indicator math (real calculations, standard formulas) ─────
+// ── Indicator math ──────────────────────────────────────────
 
 function emaFull_(values, period) {
   const out = new Array(values.length).fill(null);
   if (values.length < period) return out;
-  const k = 2 / (period + 1);
-  let prev = values.slice(0, period).reduce((a,b) => a+b, 0) / period;
+  const k    = 2 / (period + 1);
+  let prev   = values.slice(0, period).reduce((a,b) => a+b, 0) / period;
   out[period - 1] = prev;
   for (let i = period; i < values.length; i++) {
-    prev = values[i] * k + prev * (1 - k);
+    prev   = values[i] * k + prev * (1 - k);
     out[i] = prev;
   }
   return out;
@@ -569,7 +663,7 @@ function emaFull_(values, period) {
 
 function lastEma_(values, period) {
   const series = emaFull_(values, period);
-  const last = series[series.length - 1];
+  const last   = series[series.length - 1];
   return last == null ? null : last;
 }
 
@@ -588,23 +682,19 @@ function rsi_(closes, period) {
     avgLoss = (avgLoss * (period - 1) + loss) / period;
   }
   if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
+  return 100 - (100 / (1 + avgGain / avgLoss));
 }
 
 function macd_(closes) {
-  if (closes.length < 35) return { macd: null, signal: null }; // not enough history for a real signal line
-  const ema12 = emaFull_(closes, 12), ema26 = emaFull_(closes, 26);
+  if (closes.length < 35) return { macd: null, signal: null };
+  const ema12    = emaFull_(closes, 12), ema26 = emaFull_(closes, 26);
   const macdLine = [];
   for (let i = 0; i < closes.length; i++) {
     if (ema12[i] != null && ema26[i] != null) macdLine.push(ema12[i] - ema26[i]);
   }
   if (macdLine.length < 9) return { macd: macdLine[macdLine.length - 1] || null, signal: null };
   const signalSeries = emaFull_(macdLine, 9);
-  return {
-    macd: macdLine[macdLine.length - 1],
-    signal: signalSeries[signalSeries.length - 1],
-  };
+  return { macd: macdLine[macdLine.length - 1], signal: signalSeries[signalSeries.length - 1] };
 }
 
 function atr_(highs, lows, closes, period) {
@@ -614,7 +704,7 @@ function atr_(highs, lows, closes, period) {
     trs.push(Math.max(
       highs[i] - lows[i],
       Math.abs(highs[i] - closes[i-1]),
-      Math.abs(lows[i] - closes[i-1])
+      Math.abs(lows[i]  - closes[i-1])
     ));
   }
   const last = trs.slice(-period);
@@ -622,74 +712,62 @@ function atr_(highs, lows, closes, period) {
 }
 
 // ════════════════════════════════════════════════════════════
-// NEWS (Finnhub free tier — real headlines + heuristic sentiment;
-// anything not reliably available on the free tier is OMITTED, not
-// faked — the frontend shows "Not available" for those fields)
+// NEWS (Finnhub free tier)
 // ════════════════════════════════════════════════════════════
 
 function handleGetNews_(symbol) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('FINNHUB_API_KEY');
-  if (!apiKey) {
-    return jsonOut_({ ok:false, error:'FINNHUB_API_KEY not configured in Script Properties' });
-  }
-  if (!symbol) return jsonOut_({ ok:false, error:'symbol required' });
+  if (!apiKey) return jsonOut_({ ok: false, error: 'FINNHUB_API_KEY not configured in Script Properties' });
+  if (!symbol) return jsonOut_({ ok: false, error: 'symbol required' });
 
   try {
     const today = new Date();
-    const from    = new Date(today.getTime() - 14 * 86400000); // last 14 days
-    const fmt      = d => d.toISOString().split('T')[0];
+    const from  = new Date(today.getTime() - 14 * 86400000);
+    const fmt   = d => d.toISOString().split('T')[0];
 
     const newsUrl = 'https://finnhub.io/api/v1/company-news?symbol=' + encodeURIComponent(symbol) +
-                     '&from=' + fmt(from) + '&to=' + fmt(today) + '&token=' + apiKey;
-    const newsRes  = UrlFetchApp.fetch(newsUrl, { muteHttpExceptions: true });
-    const rawNews   = JSON.parse(newsRes.getContentText() || '[]');
+                    '&from=' + fmt(from) + '&to=' + fmt(today) + '&token=' + apiKey;
+    const rawNews = JSON.parse(UrlFetchApp.fetch(newsUrl, { muteHttpExceptions: true }).getContentText() || '[]');
 
     const headlines = (Array.isArray(rawNews) ? rawNews : []).slice(0, 10).map(n => ({
-      title: n.headline,
-      url: n.url,
-      datetime: n.datetime,
+      title: n.headline, url: n.url, datetime: n.datetime,
       sentiment: classifySentiment_(n.headline + ' ' + (n.summary || '')),
     }));
 
     let insiderTx = [];
     try {
-      const insiderUrl = 'https://finnhub.io/api/v1/stock/insider-transactions?symbol=' + encodeURIComponent(symbol) + '&token=' + apiKey;
-      const insiderRes  = UrlFetchApp.fetch(insiderUrl, { muteHttpExceptions: true });
-      const insiderData = JSON.parse(insiderRes.getContentText() || '{}');
+      const insiderData = JSON.parse(UrlFetchApp.fetch(
+        'https://finnhub.io/api/v1/stock/insider-transactions?symbol=' + encodeURIComponent(symbol) + '&token=' + apiKey,
+        { muteHttpExceptions: true }
+      ).getContentText() || '{}');
       insiderTx = (insiderData.data || []).slice(0, 20).map(tx => ({
         type: tx.change > 0 ? 'buy' : 'sell',
         shares: Math.abs(tx.change || 0),
-        date: tx.transactionDate,
-        name: tx.name,
+        date: tx.transactionDate, name: tx.name,
       }));
-    } catch (e) { /* leave empty — frontend shows "not available" */ }
+    } catch (e) {}
 
     let earnings = null;
     try {
-      const earnFrom = fmt(today);
-      const earnTo     = fmt(new Date(today.getTime() + 60 * 86400000));
-      const earnUrl    = 'https://finnhub.io/api/v1/calendar/earnings?from=' + earnFrom + '&to=' + earnTo +
-                          '&symbol=' + encodeURIComponent(symbol) + '&token=' + apiKey;
-      const earnRes    = UrlFetchApp.fetch(earnUrl, { muteHttpExceptions: true });
-      const earnData   = JSON.parse(earnRes.getContentText() || '{}');
+      const earnTo  = fmt(new Date(today.getTime() + 60 * 86400000));
+      const earnData = JSON.parse(UrlFetchApp.fetch(
+        'https://finnhub.io/api/v1/calendar/earnings?from=' + fmt(today) + '&to=' + earnTo +
+        '&symbol=' + encodeURIComponent(symbol) + '&token=' + apiKey,
+        { muteHttpExceptions: true }
+      ).getContentText() || '{}');
       if (earnData.earningsCalendar && earnData.earningsCalendar.length) {
         earnings = { date: earnData.earningsCalendar[0].date };
       }
-    } catch (e) { /* leave null — frontend shows "not available" */ }
+    } catch (e) {}
 
-    // shortInterest, shortFloat, institutionalOwnership, filings: NOT
-    // included — not reliably available on Finnhub's free tier. Do not
-    // stub with 0/fake values; frontend already treats their absence as
-    // "Not available (requires premium data provider)".
-
-    return jsonOut_({ ok:true, news: { headlines: headlines, insiderTx: insiderTx, earnings: earnings } });
+    return jsonOut_({ ok: true, news: { headlines, insiderTx, earnings } });
   } catch (err) {
-    return jsonOut_({ ok:false, error: err.message });
+    return jsonOut_({ ok: false, error: err.message });
   }
 }
 
 function classifySentiment_(text) {
-  const t = (text || '').toLowerCase();
+  const t        = (text || '').toLowerCase();
   const bullWords = ['beats','surge','soars','upgrade','record','growth','raises guidance','buyback','approval','partnership','outperform'];
   const bearWords = ['misses','plunge','downgrade','lawsuit','investigation','recall','bankruptcy','delisting','sec probe','underperform'];
   const bull = bullWords.some(w => t.indexOf(w) !== -1);
@@ -700,76 +778,30 @@ function classifySentiment_(text) {
 }
 
 // ════════════════════════════════════════════════════════════
-// LOGIN / AUTH
-// ════════════════════════════════════════════════════════════
-// Set Script Property LOGIN_PASSWORD to enable password protection.
-// If not set, auth is disabled and any login succeeds (dev mode).
-// Client sends SHA-256 hash of password; we SHA-256 the stored
-// plaintext password and compare. Neither party sees plaintext.
-
-function handleLogin_(clientHash) {
-  const props       = PropertiesService.getScriptProperties();
-  const storedPw    = props.getProperty('LOGIN_PASSWORD');
-
-  // Auth disabled — no password configured
-  if (!storedPw) {
-    return jsonOut_({ ok: true, token: 'auth-disabled', authDisabled: true });
-  }
-
-  if (!clientHash) {
-    return jsonOut_({ ok: false, error: 'סיסמה נדרשת' });
-  }
-
-  // Compute SHA-256 of stored password to compare with client hash
-  const bytes   = Utilities.computeDigest(
-    Utilities.DigestAlgorithm.SHA_256,
-    storedPw,
-    Utilities.Charset.UTF_8
-  );
-  const serverHash = bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
-
-  if (clientHash !== serverHash) {
-    return jsonOut_({ ok: false, error: 'סיסמה שגויה' });
-  }
-
-  // Issue a time-based session token (signed with password hash)
-  const ts    = Date.now();
-  const token = Utilities.base64Encode(ts + ':' + serverHash.slice(0, 16));
-  return jsonOut_({ ok: true, token: token });
-}
-
-// ════════════════════════════════════════════════════════════
-// AI CHAT (Anthropic, key held server-side — never in the browser)
+// AI CHAT (Anthropic — key held server-side)
 // ════════════════════════════════════════════════════════════
 
 function handleAiChat_(data) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
-  if (!apiKey) {
-    return jsonOut_({ ok:false, error:'ANTHROPIC_API_KEY not configured in Script Properties' });
-  }
+  if (!apiKey) return jsonOut_({ ok: false, error: 'ANTHROPIC_API_KEY not configured in Script Properties' });
   try {
     const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
       method: 'post',
       contentType: 'application/json',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       payload: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         system: data.system || '',
-        messages: data.messages || []
+        messages: data.messages || [],
       }),
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
     });
     const result = JSON.parse(response.getContentText());
-    if (result.error) {
-      return jsonOut_({ ok:false, error: result.error.message || 'Anthropic API error' });
-    }
+    if (result.error) return jsonOut_({ ok: false, error: result.error.message || 'Anthropic API error' });
     const reply = (result.content && result.content[0]) ? result.content[0].text : '';
-    return jsonOut_({ ok:true, reply: reply });
+    return jsonOut_({ ok: true, reply });
   } catch (err) {
-    return jsonOut_({ ok:false, error: err.message });
+    return jsonOut_({ ok: false, error: err.message });
   }
 }

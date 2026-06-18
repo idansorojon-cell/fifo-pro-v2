@@ -31,12 +31,31 @@ const API = (() => {
 
   function isConfigured() { return !!API_URL && API_URL !== 'PLACEHOLDER'; }
 
+  // ── Session token helpers ──────────────────────────────
+  // Token stored by auth.js; we read it here so every request is authenticated.
+
+  function getToken_() {
+    return localStorage.getItem('fifo_session_v1') || '';
+  }
+
+  function authedUrl_(action, extra) {
+    const t     = Date.now();
+    const token = encodeURIComponent(getToken_());
+    let url     = API_URL + '?action=' + action + '&token=' + token + '&t=' + t;
+    if (extra) url += '&' + extra;
+    return url;
+  }
+
   // ── REST post ──────────────────────────────────────────
 
   async function post(body) {
     if (!isConfigured()) { setStatus('⚠️ API לא מוגדר','warn'); return {ok:false}; }
     if (!navigator.onLine) { setStatus('❌ אין חיבור לאינטרנט','error'); return {ok:false}; }
     try {
+      // Inject token into every POST body (except login which sends passwordHash instead)
+      if (body.action !== 'login' && body.action !== 'logout') {
+        body = Object.assign({ token: getToken_() }, body);
+      }
       const res = await fetch(API_URL, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -62,10 +81,10 @@ const API = (() => {
     setStatus('טוען נתונים...','info');
     try {
       const [tr, gr, pr, wl] = await Promise.all([
-        fetch(API_URL+'?action=getTrades&t='+Date.now()).then(r=>r.json()),
-        fetch(API_URL+'?action=getGoal&t='+Date.now()).then(r=>r.json()),
-        fetch(API_URL+'?action=getPositions&t='+Date.now()).then(r=>r.json()),
-        fetch(API_URL+'?action=getWatchlist&t='+Date.now()).then(r=>r.json()).catch(()=>({ok:false}))
+        fetch(authedUrl_('getTrades'),   { cache:'no-store', redirect:'follow' }).then(r=>r.json()),
+        fetch(authedUrl_('getGoal'),     { cache:'no-store', redirect:'follow' }).then(r=>r.json()),
+        fetch(authedUrl_('getPositions'),{ cache:'no-store', redirect:'follow' }).then(r=>r.json()),
+        fetch(authedUrl_('getWatchlist'),{ cache:'no-store', redirect:'follow' }).then(r=>r.json()).catch(()=>({ok:false}))
       ]);
       if (!tr.ok) throw new Error(tr.error || 'שגיאה בטעינת עסקאות');
       return { trades: tr.trades||[], goal: gr.ok?gr.goal:null,
@@ -96,47 +115,42 @@ const API = (() => {
 
   async function addWatchlistItem(symbol, note) {
     const added = new Date().toLocaleDateString('he-IL');
-    const url = `${API_URL}?action=addWatchlist&symbol=${encodeURIComponent(symbol)}&note=${encodeURIComponent(note)}&added=${encodeURIComponent(added)}&t=${Date.now()}`;
+    const url = authedUrl_('addWatchlist',
+      'symbol=' + encodeURIComponent(symbol) +
+      '&note='  + encodeURIComponent(note)   +
+      '&added=' + encodeURIComponent(added));
     const res  = await fetch(url, { cache:'no-store', redirect:'follow' });
-    const text = await res.text();
-    return JSON.parse(text);
+    return JSON.parse(await res.text());
   }
 
   async function removeWatchlistItem(symbol) {
-    const url = `${API_URL}?action=removeWatchlist&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`;
+    const url = authedUrl_('removeWatchlist', 'symbol=' + encodeURIComponent(symbol));
     const res  = await fetch(url, { cache:'no-store', redirect:'follow' });
-    const text = await res.text();
-    return JSON.parse(text);
+    return JSON.parse(await res.text());
   }
 
   async function getWatchlist() {
-    const res  = await fetch(`${API_URL}?action=getWatchlist&t=${Date.now()}`, { cache:'no-store', redirect:'follow' });
-    const text = await res.text();
-    return JSON.parse(text);
+    const res  = await fetch(authedUrl_('getWatchlist'), { cache:'no-store', redirect:'follow' });
+    return JSON.parse(await res.text());
   }
 
   // ── Indicators (for Decision Engine) ──────────────────
 
   async function getIndicators(symbol) {
-    const res  = await fetch(`${API_URL}?action=getIndicators&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`, { cache:'no-store' });
-    const text = await res.text();
-    const data = JSON.parse(text);
+    const url  = authedUrl_('getIndicators', 'symbol=' + encodeURIComponent(symbol));
+    const res  = await fetch(url, { cache:'no-store' });
+    const data = JSON.parse(await res.text());
     if (!data.ok) throw new Error(data.error || 'לא הצלחתי לטעון אינדיקטורים');
     return data.indicators;
   }
 
   // ── News (for Decision Engine News Panel) ──────────────
-  // Proxied through Apps Script (see AppScript_PATCH.gs — 'getNews'
-  // action). Never call a news/data provider directly from the browser
-  // with an embedded key. Returns null (not a fake empty object) if the
-  // backend doesn't support this action yet, so the UI can show an
-  // honest "not available" state instead of a blank/fake panel.
 
   async function getNews(symbol) {
     try {
-      const res  = await fetch(`${API_URL}?action=getNews&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`, { cache:'no-store' });
-      const text = await res.text();
-      const data = JSON.parse(text);
+      const url  = authedUrl_('getNews', 'symbol=' + encodeURIComponent(symbol));
+      const res  = await fetch(url, { cache:'no-store' });
+      const data = JSON.parse(await res.text());
       if (!data.ok) return null;
       return data.news || null;
     } catch {
@@ -149,10 +163,8 @@ const API = (() => {
   async function fetchPrices(symbols) {
     if (!symbols.length) return {};
     try {
-      const res = await fetch(
-        `${API_URL}?action=getPrices&symbols=${symbols.join(',')}&t=${Date.now()}`,
-        { signal: AbortSignal.timeout(15000) }
-      );
+      const url = authedUrl_('getPrices', 'symbols=' + symbols.join(','));
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       const data = await res.json();
       if (data.ok && data.prices) return data.prices;
     } catch(e) { console.warn('fetchPrices error:', e.message); }
@@ -191,18 +203,24 @@ const API = (() => {
     label.textContent     = connected ? 'Live' : 'Polling';
   }
 
-  // ── Auth (login verification) ──────────────────────────
+  // ── Auth (login via POST — credentials must never appear in the URL) ──
   async function verifyLogin(passwordHash) {
     try {
-      const res = await fetch(
-        `${API_URL}?action=login&passwordHash=${encodeURIComponent(passwordHash)}&t=${Date.now()}`,
-        { cache: 'no-store', redirect: 'follow' }
-      );
-      const text = await res.text();
-      return JSON.parse(text);
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'login', passwordHash }),
+        headers: { 'Content-Type': 'text/plain' },
+        redirect: 'follow',
+      });
+      return JSON.parse(await res.text());
     } catch(e) {
       return { ok: false, error: e.message };
     }
+  }
+
+  // ── Password change (POST — sends old + new hashes, never plaintext) ──
+  async function changePassword(currentHash, newHash) {
+    return post({ action: 'changePassword', token: getToken_(), currentHash, newHash });
   }
 
   // ── AI Chat (proxied through Apps Script) ──────────────
@@ -228,7 +246,7 @@ const API = (() => {
     getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS,
-    askClaude, verifyLogin,
+    askClaude, verifyLogin, changePassword,
     _url: API_URL
   };
 })();

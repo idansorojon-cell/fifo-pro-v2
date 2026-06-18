@@ -278,7 +278,12 @@ const Settings = (() => {
       return;
     }
 
-    const res = await Auth.changePasswordLocal(cur, nw);
+    const currentHash = await Auth.sha256(cur);
+    const newHash     = await Auth.sha256(nw);
+    // Try server first; fall back to local-only if auth is disabled
+    const res = API.isConfigured()
+      ? await API.changePassword(currentHash, newHash)
+      : await Auth.changePasswordLocal(cur, nw);
     if (res.ok) {
       if (msg) { msg.textContent = '✓ סיסמה שונתה בהצלחה'; msg.style.color = 'var(--green)'; }
       setTimeout(hidePasswordChange, 2000);

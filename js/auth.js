@@ -190,6 +190,6 @@ const Auth = (() => {
   return {
     init, login, logout, isLoggedIn, getToken,
     handleLoginSubmit, showLoginScreen, hideLoginScreen,
-    changePasswordLocal, saveLastVisit, getLastVisit
+    sha256, changePasswordLocal, saveLastVisit, getLastVisit
   };
 })();
