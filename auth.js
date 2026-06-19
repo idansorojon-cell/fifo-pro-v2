@@ -10,6 +10,38 @@ const Auth = (() => {
   const BRIEF_SHOWN  = 'fifo_brief_shown';
   const LAST_VISIT   = 'fifo_last_visit';
 
+  // All localStorage keys that contain private trading data.
+  // fifo_dark (theme) is intentionally excluded — it is not sensitive.
+  const PRIVATE_KEYS = [
+    'fifo_session_v1',
+    'fifo_positions_backup',
+    'fifo_watchlist',
+    'fifo_trades',
+    'fifo_journal',
+    'fifo_prefs',
+    'fifo_last_visit',
+    'fifo_brief_shown',
+    'fifo_aicoach',
+    'fifo_goal',
+    'fifo_livedata',
+  ];
+
+  function clearPrivateCache() {
+    // Remove known private keys
+    PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
+    // Also sweep for any unknown fifo_ keys except theme
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_local_pw_hash')
+      .forEach(k => localStorage.removeItem(k));
+    // Clear any SW cache partitions named 'fifo-*'
+    if ('caches' in window) {
+      caches.keys().then(names => names
+        .filter(n => n.startsWith('fifo-'))
+        .forEach(n => caches.delete(n))
+      );
+    }
+  }
+
   // ── Web Crypto SHA-256 ──────────────────────────────────
   async function sha256(str) {
     try {
@@ -117,15 +149,13 @@ const Auth = (() => {
     if (API.isConfigured()) {
       try { await API.logoutServer(); } catch(e) { console.warn('Server logout failed:', e.message); }
     }
-    clearToken();
-    localStorage.removeItem(BRIEF_SHOWN);
+    clearPrivateCache(); // wipes token + all cached trading data
     showLoginScreen();
   }
 
   // Called by api.js when the server returns code:401 (expired/invalid session)
   function handle401() {
-    clearToken();
-    localStorage.removeItem(BRIEF_SHOWN);
+    clearPrivateCache();
     showLoginScreen();
   }
 
@@ -165,6 +195,8 @@ const Auth = (() => {
       hideLoginScreen();
       return true;
     }
+    // No valid local token — wipe any stale private data before showing login
+    clearPrivateCache();
     showLoginScreen();
     return false;
   }
@@ -202,6 +234,6 @@ const Auth = (() => {
     init, login, logout, isLoggedIn, getToken,
     handleLoginSubmit, showLoginScreen, hideLoginScreen,
     sha256, changePasswordLocal, saveLastVisit, getLastVisit,
-    handle401
+    handle401, clearPrivateCache
   };
 })();

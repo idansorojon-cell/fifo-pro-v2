@@ -99,13 +99,16 @@ const API = (() => {
     }
   }
 
-  // Wrapper around GET fetches that checks for 401
-  async function authedGet_(url) {
-    const res  = await fetch(url, { cache:'no-store', redirect:'follow' });
+  // Wrapper around GET fetches that checks for 401.
+  // timeoutMs: optional AbortSignal timeout (use for slow endpoints like getPrices).
+  async function authedGet_(url, timeoutMs) {
+    const opts = { cache:'no-store', redirect:'follow' };
+    if (timeoutMs) opts.signal = AbortSignal.timeout(timeoutMs);
+    const res  = await fetch(url, opts);
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch { return {ok:false,error:'Invalid JSON'}; }
-    if (check401_(data)) return {ok:false,error:'Unauthorized'};
+    if (check401_(data)) return {ok:false,error:'Unauthorized',code:401};
     return data;
   }
 
@@ -123,6 +126,8 @@ const API = (() => {
         authedGet_(authedUrl_('getPositions')),
         authedGet_(authedUrl_('getWatchlist')).catch(()=>({ok:false}))
       ]);
+      // 401 is already handled by check401_ (shows login screen); suppress the status bar error
+      if (tr.code === 401) return null;
       if (!tr.ok) throw new Error(tr.error || 'שגיאה בטעינת עסקאות');
       return { trades: tr.trades||[], goal: gr.ok?gr.goal:null,
                positions: pr.ok?pr.positions:null, watchlist: wl.ok?wl.watchlist:null };
@@ -192,7 +197,10 @@ const API = (() => {
   async function fetchPrices(symbols) {
     if (!symbols.length) return {};
     try {
-      const data = await authedGet_(authedUrl_('getPrices', 'symbols=' + symbols.join(',')));
+      // 20s timeout — Apps Script price fetching can be slow
+      const data = await authedGet_(
+        authedUrl_('getPrices', 'symbols=' + symbols.join(',')), 20000
+      );
       if (data.ok && data.prices) return data.prices;
     } catch(e) { console.warn('fetchPrices error:', e.message); }
     return {};
