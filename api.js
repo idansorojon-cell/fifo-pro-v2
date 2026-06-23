@@ -120,19 +120,43 @@ const API = (() => {
     showSpinner(true);
     setStatus('טוען נתונים...','info');
     try {
-      const [tr, gr, pr, wl] = await Promise.all([
-        authedGet_(authedUrl_('getTrades')),
+      // Try getOperations first (derives trades + positions from "פעולות" sheet via FIFO).
+      // Falls back to the legacy getTrades + getPositions endpoints if not available.
+      const [ops, gr, wl] = await Promise.all([
+        authedGet_(authedUrl_('getOperations')),
         authedGet_(authedUrl_('getGoal')),
-        authedGet_(authedUrl_('getPositions')),
-        authedGet_(authedUrl_('getWatchlist')).catch(()=>({ok:false}))
+        authedGet_(authedUrl_('getWatchlist')).catch(() => ({ ok: false }))
       ]);
-      // 401 is already handled by check401_ (shows login screen); suppress the status bar error
+
+      // 401 bubbles up through ops/gr — show login screen (already handled by check401_)
+      if (ops.code === 401 || gr.code === 401) return null;
+
+      if (ops.ok) {
+        return {
+          trades:    ops.trades    || [],
+          positions: ops.positions || [],
+          goal:      gr.ok ? gr.goal : null,
+          watchlist: wl.ok ? wl.watchlist : null,
+          source:    'operations'
+        };
+      }
+
+      // Fallback: separate getTrades + getPositions (used when פעולות sheet is absent)
+      const [tr, pr] = await Promise.all([
+        authedGet_(authedUrl_('getTrades')),
+        authedGet_(authedUrl_('getPositions'))
+      ]);
       if (tr.code === 401) return null;
       if (!tr.ok) throw new Error(tr.error || 'שגיאה בטעינת עסקאות');
-      return { trades: tr.trades||[], goal: gr.ok?gr.goal:null,
-               positions: pr.ok?pr.positions:null, watchlist: wl.ok?wl.watchlist:null };
+      return {
+        trades:    tr.trades    || [],
+        positions: pr.ok ? pr.positions : null,
+        goal:      gr.ok ? gr.goal : null,
+        watchlist: wl.ok ? wl.watchlist : null,
+        source:    'trades-sheet'
+      };
     } catch(err) {
-      setStatus('❌ ' + err.message,'error');
+      setStatus('❌ ' + err.message, 'error');
       return null;
     } finally {
       showSpinner(false);
