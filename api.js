@@ -89,7 +89,16 @@ const API = (() => {
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); }
-      catch { console.error('API parse error:', text.slice(0,200)); return {ok:false,error:'Invalid JSON'}; }
+      catch {
+        // HTML response = deployment misconfiguration (wrong version / access settings)
+        const isHtml = text.trimStart().startsWith('<');
+        const msg = isHtml
+          ? 'שגיאת פריסה — בדוק Deployment ב-Apps Script (Execute as: Me, Who has access: Anyone, גרסה חדשה)'
+          : 'שגיאת תקשורת עם השרת';
+        console.error('API parse error:', text.slice(0, 200));
+        setStatus('❌ ' + msg, 'error');
+        return { ok: false, error: msg, deploymentError: isHtml };
+      }
       check401_(data);
       return data;
     } catch(err) {
@@ -329,6 +338,36 @@ const API = (() => {
     return res.reply || '';
   }
 
+  // ── Deployment diagnostic (call from browser console: API.diagnose()) ──
+  async function diagnose() {
+    console.group('FIFO PRO — API Diagnostic');
+    console.log('URL:', API_URL);
+    const token = getToken_();
+    console.log('Token in localStorage:', token ? token.slice(0,8)+'...' : 'NONE');
+
+    // Test GET
+    try {
+      const r = await fetch(API_URL + '?action=getPrices&symbols=AAPL&token=' + encodeURIComponent(token||''), { redirect:'follow' });
+      const t = await r.text();
+      try {
+        const j = JSON.parse(t);
+        console.log('GET getPrices:', j.ok ? '✅ ok' : '❌ ' + JSON.stringify(j));
+      } catch { console.error('GET returned HTML (deployment error):', t.slice(0,100)); }
+    } catch(e) { console.error('GET failed (network):', e.message); }
+
+    // Test POST (login probe)
+    try {
+      const r = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'login',passwordHash:'probe'}), headers:{'Content-Type':'text/plain'}, redirect:'follow' });
+      const t = await r.text();
+      try {
+        const j = JSON.parse(t);
+        console.log('POST login probe:', j.ok === false && j.error ? '✅ JSON ok (error expected: '+j.error+')' : JSON.stringify(j));
+      } catch { console.error('POST returned HTML — DEPLOYMENT ISSUE:', t.slice(0,100)); }
+    } catch(e) { console.error('POST failed (network):', e.message); }
+
+    console.groupEnd();
+  }
+
   return {
     isConfigured, setStatus, showSpinner,
     loadAll,
@@ -337,7 +376,7 @@ const API = (() => {
     addWatchlistItem, removeWatchlistItem, getWatchlist,
     getIndicators, getNews,
     fetchPrices, fetchPrice,
-    connectWS, disconnectWS,
+    connectWS, disconnectWS, diagnose,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
     _url: API_URL
   };

@@ -121,10 +121,14 @@ const Auth = (() => {
           saveToken('auth-disabled-' + Date.now());
           return { ok: true };
         }
+        // Deployment misconfiguration — don't fall to offline, show clear error
+        if (res.deploymentError) {
+          return { ok: false, error: res.error };
+        }
         return { ok: false, error: res.error || 'סיסמה שגויה' };
       } catch(e) {
-        // Backend unreachable — fall through to offline mode
-        console.warn('Auth backend unavailable, using offline mode:', e.message);
+        // Network error only — fall through to offline mode
+        console.warn('Auth backend unreachable (network), using offline mode:', e.message);
       }
     }
 
