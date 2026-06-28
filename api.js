@@ -230,12 +230,18 @@ const API = (() => {
   async function fetchPrices(symbols) {
     if (!symbols.length) return {};
     try {
-      // 20s timeout — Apps Script price fetching can be slow
       const data = await authedGet_(
-        authedUrl_('getPrices', 'symbols=' + symbols.join(',')), 20000
+        authedUrl_('getPrices', 'symbols=' + symbols.join(',')), 25000
       );
-      if (data.ok && data.prices) return data.prices;
-    } catch(e) { console.warn('fetchPrices error:', e.message); }
+      console.log('[fetchPrices] response:', JSON.stringify(data));
+      if (data.ok && data.prices) {
+        const ok     = Object.entries(data.prices).filter(([,v]) => v && v.ok).map(([k]) => k);
+        const failed = Object.entries(data.prices).filter(([,v]) => !v || !v.ok).map(([k,v]) => k + '(' + (v && v.error || '?') + ')');
+        console.log('[fetchPrices] ok:', ok.join(',') || 'none', '| failed:', failed.join(',') || 'none');
+        return data.prices;
+      }
+      console.warn('[fetchPrices] bad response (ok=false or no prices):', data);
+    } catch(e) { console.warn('[fetchPrices] error:', e.message); }
     return {};
   }
 
