@@ -117,8 +117,9 @@ const Auth = (() => {
           return { ok: true };
         }
         if (res.authDisabled) {
-          // Backend has no password set — allow through
-          saveToken('auth-disabled-' + Date.now());
+          // Backend has no password set — allow through.
+          // MUST save exactly 'auth-disabled' — Apps Script validateToken_() checks this literal.
+          saveToken('auth-disabled');
           return { ok: true };
         }
         // Deployment misconfiguration — don't fall to offline, show clear error

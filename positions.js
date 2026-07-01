@@ -208,19 +208,51 @@ const Positions = (() => {
     API.setStatus('מרענן מחירים...', 'info');
     const syms   = [...new Set(APP.positions.map(p => p.symbol))];
     const prices = await API.fetchPrices(syms);
+
+    let loadedCount = 0;
+    const errors = [];
+
     Object.entries(prices).forEach(([sym, p]) => {
       if (p && p.ok) {
         APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
+        loadedCount++;
       } else {
-        console.warn('[prices] failed for', sym, p && p.error ? p.error : 'no data');
+        const err = (p && p.error) || 'no data';
+        console.warn('[prices] failed for', sym, err);
+        errors.push(sym + ': ' + err);
       }
     });
+
     if (!Object.keys(prices).length) {
-      console.warn('[prices] fetchPrices returned empty — possible auth or network issue');
+      console.error('[prices] fetchPrices returned empty — auth or network error');
+      API.setStatus('❌ מחירים לא נטענו — בדוק חיבור ו-API key', 'error');
+      render();
+      return;
     }
+
     render();
-    const anyLoaded = Object.values(APP.liveData).some(d => d.price > 0);
-    API.setStatus(anyLoaded ? '✓ מחירים עודכנו' : '⚠️ לא ניתן לטעון מחירים', anyLoaded ? 'ok' : 'warn');
+
+    if (loadedCount > 0) {
+      API.setStatus('✓ ' + loadedCount + '/' + syms.length + ' מחירים עודכנו', 'ok');
+    } else {
+      // Surface the first real error rather than a generic message
+      const firstErr = errors[0] || '';
+      let errMsg;
+      if (firstErr.includes('401') || firstErr.includes('Unauthorized') || firstErr.includes('API key'))
+        errMsg = '❌ Polygon 401 — בדוק POLYGON_API_KEY ב-Script Properties';
+      else if (firstErr.includes('429') || firstErr.includes('Rate Limit'))
+        errMsg = '⚠️ Polygon 429 — חרגת ממכסת הקריאות';
+      else if (firstErr.includes('POLYGON_API_KEY חסר'))
+        errMsg = '❌ הגדר POLYGON_API_KEY ב-Script Properties של Apps Script';
+      else if (firstErr.includes('network') || firstErr.includes('רשת'))
+        errMsg = '❌ שגיאת רשת — בדוק חיבור לאינטרנט';
+      else if (firstErr)
+        errMsg = '⚠️ ' + firstErr.slice(0, 80);
+      else
+        errMsg = '⚠️ לא ניתן לטעון מחירים';
+      console.error('[prices] errors:', errors.join(' | '));
+      API.setStatus(errMsg, 'error');
+    }
   }
 
   function connectWS() {
