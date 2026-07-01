@@ -5,6 +5,11 @@
  */
 
 const Auth = (() => {
+  // ── Auth bypass flag ────────────────────────────────────────
+  // true  → skip login screen entirely, load dashboard immediately (testing mode)
+  // false → full session auth enforced (production mode)
+  const AUTH_DISABLED = true;
+
   const TOKEN_KEY    = 'fifo_session_v1';
   const EXPIRY_DAYS  = 30;
   const BRIEF_SHOWN  = 'fifo_brief_shown';
@@ -196,16 +201,9 @@ const Auth = (() => {
 
   // ── Init ────────────────────────────────────────────────
   async function init() {
-    // AUTH_DISABLED mode: probe the server. If it returns authDisabled, skip login entirely.
-    if (API.isConfigured()) {
-      try {
-        const probe = await API.verifyLogin('');
-        if (probe.authDisabled) {
-          saveToken('auth-disabled');
-          hideLoginScreen();
-          return true;
-        }
-      } catch(e) { /* network error — fall through to normal flow */ }
+    if (AUTH_DISABLED) {
+      hideLoginScreen();
+      return true;
     }
 
     if (isLoggedIn()) {
