@@ -196,6 +196,18 @@ const Auth = (() => {
 
   // ── Init ────────────────────────────────────────────────
   async function init() {
+    // AUTH_DISABLED mode: probe the server. If it returns authDisabled, skip login entirely.
+    if (API.isConfigured()) {
+      try {
+        const probe = await API.verifyLogin('');
+        if (probe.authDisabled) {
+          saveToken('auth-disabled');
+          hideLoginScreen();
+          return true;
+        }
+      } catch(e) { /* network error — fall through to normal flow */ }
+    }
+
     if (isLoggedIn()) {
       hideLoginScreen();
       return true;

@@ -34,8 +34,16 @@ const API = (() => {
   // ── Session token helpers ──────────────────────────────
   // Token stored by auth.js; we read it here so every request is authenticated.
 
+  // Reads the actual UUID token from localStorage (stored as JSON by auth.js)
   function getToken_() {
-    return localStorage.getItem('fifo_session_v1') || '';
+    try {
+      const raw = localStorage.getItem('fifo_session_v1');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      return parsed.token || '';
+    } catch {
+      return '';
+    }
   }
 
   function authedUrl_(action, extra) {
@@ -46,14 +54,30 @@ const API = (() => {
     return url;
   }
 
+  // Called when any response comes back with code:401 (expired/invalid session)
+  function handle401_() {
+    localStorage.removeItem('fifo_session_v1');
+    setStatus('Session פג תוקף — מתחבר מחדש...', 'warn');
+    if (typeof Auth !== 'undefined' && Auth.handle401) {
+      Auth.handle401();
+    }
+  }
+
+  // Checks a parsed JSON response for 401 and handles it; returns true if intercepted
+  function check401_(data) {
+    if (data && data.code === 401) { handle401_(); return true; }
+    return false;
+  }
+
   // ── REST post ──────────────────────────────────────────
 
   async function post(body) {
     if (!isConfigured()) { setStatus('⚠️ API לא מוגדר','warn'); return {ok:false}; }
     if (!navigator.onLine) { setStatus('❌ אין חיבור לאינטרנט','error'); return {ok:false}; }
     try {
-      // Inject token into every POST body (except login which sends passwordHash instead)
-      if (body.action !== 'login' && body.action !== 'logout') {
+      // Inject token into every POST body except actions that don't need one
+      const noTokenActions = ['login', 'logout', 'revokeAllSessions'];
+      if (!noTokenActions.includes(body.action)) {
         body = Object.assign({ token: getToken_() }, body);
       }
       const res = await fetch(API_URL, {
@@ -63,13 +87,38 @@ const API = (() => {
         redirect: 'follow'
       });
       const text = await res.text();
-      try { return JSON.parse(text); }
-      catch { console.error('API parse error:', text.slice(0,200)); return {ok:false,error:'Invalid JSON'}; }
+      let data;
+      try { data = JSON.parse(text); }
+      catch {
+        // HTML response = deployment misconfiguration (wrong version / access settings)
+        const isHtml = text.trimStart().startsWith('<');
+        const msg = isHtml
+          ? 'שגיאת פריסה — בדוק Deployment ב-Apps Script (Execute as: Me, Who has access: Anyone, גרסה חדשה)'
+          : 'שגיאת תקשורת עם השרת';
+        console.error('API parse error:', text.slice(0, 200));
+        setStatus('❌ ' + msg, 'error');
+        return { ok: false, error: msg, deploymentError: isHtml };
+      }
+      check401_(data);
+      return data;
     } catch(err) {
       console.error('API post error:', err.message);
       setStatus('❌ שגיאת רשת: ' + err.message, 'error');
       return {ok:false, error:err.message};
     }
+  }
+
+  // Wrapper around GET fetches that checks for 401.
+  // timeoutMs: optional AbortSignal timeout (use for slow endpoints like getPrices).
+  async function authedGet_(url, timeoutMs) {
+    const opts = { cache:'no-store', redirect:'follow' };
+    if (timeoutMs) opts.signal = AbortSignal.timeout(timeoutMs);
+    const res  = await fetch(url, opts);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { return {ok:false,error:'Invalid JSON'}; }
+    if (check401_(data)) return {ok:false,error:'Unauthorized',code:401};
+    return data;
   }
 
   // ── Load all data ──────────────────────────────────────
@@ -80,17 +129,43 @@ const API = (() => {
     showSpinner(true);
     setStatus('טוען נתונים...','info');
     try {
-      const [tr, gr, pr, wl] = await Promise.all([
-        fetch(authedUrl_('getTrades'),   { cache:'no-store', redirect:'follow' }).then(r=>r.json()),
-        fetch(authedUrl_('getGoal'),     { cache:'no-store', redirect:'follow' }).then(r=>r.json()),
-        fetch(authedUrl_('getPositions'),{ cache:'no-store', redirect:'follow' }).then(r=>r.json()),
-        fetch(authedUrl_('getWatchlist'),{ cache:'no-store', redirect:'follow' }).then(r=>r.json()).catch(()=>({ok:false}))
+      // Try getOperations first (derives trades + positions from "פעולות" sheet via FIFO).
+      // Falls back to the legacy getTrades + getPositions endpoints if not available.
+      const [ops, gr, wl] = await Promise.all([
+        authedGet_(authedUrl_('getOperations')),
+        authedGet_(authedUrl_('getGoal')),
+        authedGet_(authedUrl_('getWatchlist')).catch(() => ({ ok: false }))
       ]);
+
+      // 401 bubbles up through ops/gr — show login screen (already handled by check401_)
+      if (ops.code === 401 || gr.code === 401) return null;
+
+      if (ops.ok) {
+        return {
+          trades:    ops.trades    || [],
+          positions: ops.positions || [],
+          goal:      gr.ok ? gr.goal : null,
+          watchlist: wl.ok ? wl.watchlist : null,
+          source:    'operations'
+        };
+      }
+
+      // Fallback: separate getTrades + getPositions (used when פעולות sheet is absent)
+      const [tr, pr] = await Promise.all([
+        authedGet_(authedUrl_('getTrades')),
+        authedGet_(authedUrl_('getPositions'))
+      ]);
+      if (tr.code === 401) return null;
       if (!tr.ok) throw new Error(tr.error || 'שגיאה בטעינת עסקאות');
-      return { trades: tr.trades||[], goal: gr.ok?gr.goal:null,
-               positions: pr.ok?pr.positions:null, watchlist: wl.ok?wl.watchlist:null };
+      return {
+        trades:    tr.trades    || [],
+        positions: pr.ok ? pr.positions : null,
+        goal:      gr.ok ? gr.goal : null,
+        watchlist: wl.ok ? wl.watchlist : null,
+        source:    'trades-sheet'
+      };
     } catch(err) {
-      setStatus('❌ ' + err.message,'error');
+      setStatus('❌ ' + err.message, 'error');
       return null;
     } finally {
       showSpinner(false);
@@ -119,27 +194,21 @@ const API = (() => {
       'symbol=' + encodeURIComponent(symbol) +
       '&note='  + encodeURIComponent(note)   +
       '&added=' + encodeURIComponent(added));
-    const res  = await fetch(url, { cache:'no-store', redirect:'follow' });
-    return JSON.parse(await res.text());
+    return authedGet_(url);
   }
 
   async function removeWatchlistItem(symbol) {
-    const url = authedUrl_('removeWatchlist', 'symbol=' + encodeURIComponent(symbol));
-    const res  = await fetch(url, { cache:'no-store', redirect:'follow' });
-    return JSON.parse(await res.text());
+    return authedGet_(authedUrl_('removeWatchlist', 'symbol=' + encodeURIComponent(symbol)));
   }
 
   async function getWatchlist() {
-    const res  = await fetch(authedUrl_('getWatchlist'), { cache:'no-store', redirect:'follow' });
-    return JSON.parse(await res.text());
+    return authedGet_(authedUrl_('getWatchlist'));
   }
 
   // ── Indicators (for Decision Engine) ──────────────────
 
   async function getIndicators(symbol) {
-    const url  = authedUrl_('getIndicators', 'symbol=' + encodeURIComponent(symbol));
-    const res  = await fetch(url, { cache:'no-store' });
-    const data = JSON.parse(await res.text());
+    const data = await authedGet_(authedUrl_('getIndicators', 'symbol=' + encodeURIComponent(symbol)));
     if (!data.ok) throw new Error(data.error || 'לא הצלחתי לטעון אינדיקטורים');
     return data.indicators;
   }
@@ -148,9 +217,7 @@ const API = (() => {
 
   async function getNews(symbol) {
     try {
-      const url  = authedUrl_('getNews', 'symbol=' + encodeURIComponent(symbol));
-      const res  = await fetch(url, { cache:'no-store' });
-      const data = JSON.parse(await res.text());
+      const data = await authedGet_(authedUrl_('getNews', 'symbol=' + encodeURIComponent(symbol)));
       if (!data.ok) return null;
       return data.news || null;
     } catch {
@@ -163,11 +230,18 @@ const API = (() => {
   async function fetchPrices(symbols) {
     if (!symbols.length) return {};
     try {
-      const url = authedUrl_('getPrices', 'symbols=' + symbols.join(','));
-      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-      const data = await res.json();
-      if (data.ok && data.prices) return data.prices;
-    } catch(e) { console.warn('fetchPrices error:', e.message); }
+      const data = await authedGet_(
+        authedUrl_('getPrices', 'symbols=' + symbols.join(',')), 25000
+      );
+      console.log('[fetchPrices] response:', JSON.stringify(data));
+      if (data.ok && data.prices) {
+        const ok     = Object.entries(data.prices).filter(([,v]) => v && v.ok).map(([k]) => k);
+        const failed = Object.entries(data.prices).filter(([,v]) => !v || !v.ok).map(([k,v]) => k + '(' + (v && v.error || '?') + ')');
+        console.log('[fetchPrices] ok:', ok.join(',') || 'none', '| failed:', failed.join(',') || 'none');
+        return data.prices;
+      }
+      console.warn('[fetchPrices] bad response (ok=false or no prices):', data);
+    } catch(e) { console.warn('[fetchPrices] error:', e.message); }
     return {};
   }
 
@@ -203,7 +277,8 @@ const API = (() => {
     label.textContent     = connected ? 'Live' : 'Polling';
   }
 
-  // ── Auth (login via POST — credentials must never appear in the URL) ──
+  // ── Auth ──────────────────────────────────────────────────
+
   async function verifyLogin(passwordHash) {
     try {
       const res = await fetch(API_URL, {
@@ -218,9 +293,41 @@ const API = (() => {
     }
   }
 
-  // ── Password change (POST — sends old + new hashes, never plaintext) ──
+  // Invalidate this device's session server-side
+  async function logoutServer() {
+    const token = getToken_();
+    if (!token) return { ok: true };
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'logout', token }),
+        headers: { 'Content-Type': 'text/plain' },
+        redirect: 'follow',
+      });
+      return JSON.parse(await res.text());
+    } catch(e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // Revoke ALL sessions on all devices (requires password)
+  async function revokeAllSessions(passwordHash) {
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'revokeAllSessions', passwordHash }),
+        headers: { 'Content-Type': 'text/plain' },
+        redirect: 'follow',
+      });
+      return JSON.parse(await res.text());
+    } catch(e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // Password change (POST — sends old + new hashes, never plaintext)
   async function changePassword(currentHash, newHash) {
-    return post({ action: 'changePassword', token: getToken_(), currentHash, newHash });
+    return post({ action: 'changePassword', currentHash, newHash });
   }
 
   // ── AI Chat (proxied through Apps Script) ──────────────
@@ -237,6 +344,36 @@ const API = (() => {
     return res.reply || '';
   }
 
+  // ── Deployment diagnostic (call from browser console: API.diagnose()) ──
+  async function diagnose() {
+    console.group('FIFO PRO — API Diagnostic');
+    console.log('URL:', API_URL);
+    const token = getToken_();
+    console.log('Token in localStorage:', token ? token.slice(0,8)+'...' : 'NONE');
+
+    // Test GET
+    try {
+      const r = await fetch(API_URL + '?action=getPrices&symbols=AAPL&token=' + encodeURIComponent(token||''), { redirect:'follow' });
+      const t = await r.text();
+      try {
+        const j = JSON.parse(t);
+        console.log('GET getPrices:', j.ok ? '✅ ok' : '❌ ' + JSON.stringify(j));
+      } catch { console.error('GET returned HTML (deployment error):', t.slice(0,100)); }
+    } catch(e) { console.error('GET failed (network):', e.message); }
+
+    // Test POST (login probe)
+    try {
+      const r = await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'login',passwordHash:'probe'}), headers:{'Content-Type':'text/plain'}, redirect:'follow' });
+      const t = await r.text();
+      try {
+        const j = JSON.parse(t);
+        console.log('POST login probe:', j.ok === false && j.error ? '✅ JSON ok (error expected: '+j.error+')' : JSON.stringify(j));
+      } catch { console.error('POST returned HTML — DEPLOYMENT ISSUE:', t.slice(0,100)); }
+    } catch(e) { console.error('POST failed (network):', e.message); }
+
+    console.groupEnd();
+  }
+
   return {
     isConfigured, setStatus, showSpinner,
     loadAll,
@@ -245,8 +382,8 @@ const API = (() => {
     addWatchlistItem, removeWatchlistItem, getWatchlist,
     getIndicators, getNews,
     fetchPrices, fetchPrice,
-    connectWS, disconnectWS,
-    askClaude, verifyLogin, changePassword,
+    connectWS, disconnectWS, diagnose,
+    askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
     _url: API_URL
   };
 })();

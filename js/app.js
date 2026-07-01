@@ -151,47 +151,60 @@ function toggleDark() {
   Utils.LS.set('fifo_dark', APP.darkMode ? '1' : '0');
 }
 
+// ── Clear in-memory private state ──────────────────────────
+function clearAppState() {
+  APP.trades     = [];
+  APP.positions  = [];
+  APP.watchlist  = [];
+  APP.liveData   = {};
+  APP.statsCache = null;
+  APP.monthGoal  = 5000;
+}
+
 // ── Load data ───────────────────────────────────────────────
+// Returns true on success, false on any failure (including 401).
+// When API is configured, NEVER falls back to SEED or localStorage.
 async function load() {
+  // Start from a clean slate so no previous session data leaks through
+  clearAppState();
+
+  if (!API.isConfigured()) {
+    // Dev / offline mode: load SEED data so the UI is usable without a backend
+    APP.trades = JSON.parse(JSON.stringify(SEED)).map(Utils.normalizeTrade);
+    invalidateStats();
+    updateSeedBanner();
+    return true;
+  }
+
   const data = await API.loadAll();
 
-  if (data) {
-    APP.trades    = (data.trades || []).map(Utils.normalizeTrade);
-    if (data.goal !== null) APP.monthGoal = data.goal;
+  // loadAll() returns null on any error, including 401.
+  // On 401, api.js already called Auth.handle401() which shows the login screen.
+  // Either way: leave APP empty — never render stale data.
+  if (!data) return false;
 
-    if (data.positions) {
-      APP.positions = (data.positions || []).map(p => {
-        ['id','qty','avg_price','target','stop_loss'].forEach(k => {
-          if (p[k] !== '' && p[k] !== undefined) p[k] = parseFloat(p[k]) || 0;
-        });
-        return p;
+  APP.trades = (data.trades || []).map(Utils.normalizeTrade);
+  if (data.goal !== null && data.goal !== undefined) APP.monthGoal = data.goal;
+
+  if (data.positions) {
+    APP.positions = data.positions.map(p => {
+      ['id','qty','avg_price','target','stop_loss'].forEach(k => {
+        if (p[k] !== '' && p[k] !== undefined) p[k] = parseFloat(p[k]) || 0;
       });
-      Utils.LS.set('fifo_positions_backup', APP.positions);
-    } else {
-      APP.positions = Utils.LS.get('fifo_positions_backup', []);
-    }
+      return p;
+    });
+  }
 
-    if (data.watchlist) {
-      APP.watchlist = normalizeWatchlistRows(data.watchlist);
-      Utils.LS.set('fifo_watchlist', APP.watchlist);
-    } else {
-      APP.watchlist = Utils.LS.get('fifo_watchlist', []);
-      APP.watchlist = normalizeWatchlistRows(APP.watchlist);
-    }
-  } else {
-    // Fallback: show SEED data if no API configured
-    if (!API.isConfigured() || APP.trades.length === 0) {
-      APP.trades = JSON.parse(JSON.stringify(SEED)).map(Utils.normalizeTrade);
-    }
-    APP.positions = Utils.LS.get('fifo_positions_backup', []);
-    APP.watchlist = normalizeWatchlistRows(Utils.LS.get('fifo_watchlist', []));
+  if (data.watchlist) {
+    APP.watchlist = normalizeWatchlistRows(data.watchlist);
   }
 
   invalidateStats();
   updateSeedBanner();
   API.setStatus('✓ עודכן: ' + new Date().toLocaleTimeString('he-IL'), 'ok');
-  document.getElementById('last-updated').textContent =
-    'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+  const el = document.getElementById('last-updated');
+  if (el) el.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+  return true;
 }
 
 // ── Watchlist normalize ─────────────────────────────────────
@@ -208,12 +221,11 @@ async function seedToSheets() {
   API.setStatus('בודק נתונים קיימים...', 'info');
   API.showSpinner(true);
   try {
-    const r = await fetch(
-      `${API._url}?action=getTrades`
-    ).then(x => x.json()).catch(() => ({ ok: false }));
-    if (r.ok && r.trades && r.trades.length > 0) {
-      API.setStatus('ℹ️ כבר קיימות ' + r.trades.length + ' עסקאות', 'ok');
-      APP.trades = r.trades.map(Utils.normalizeTrade);
+    // Use the authenticated loadAll so the token is included
+    const existing = await API.loadAll();
+    if (existing && existing.trades && existing.trades.length > 0) {
+      API.setStatus('ℹ️ כבר קיימות ' + existing.trades.length + ' עסקאות', 'ok');
+      APP.trades = existing.trades.map(Utils.normalizeTrade);
       updateSeedBanner();
       renderAll();
       API.showSpinner(false);
@@ -745,46 +757,45 @@ function updateSeedBanner() {
 
 // ── Init ────────────────────────────────────────────────────
 async function _initApp() {
-  // Dark mode — default ON (trading terminal)
+  // Dark mode — default ON (trading terminal), safe to read before auth
   const savedDark = Utils.LS.get('fifo_dark');
-  APP.darkMode = savedDark !== '0'; // default dark
+  APP.darkMode = savedDark !== '0';
   if (!APP.darkMode) document.body.classList.add('light');
   const btn = document.getElementById('dark-btn');
   if (btn) btn.textContent = APP.darkMode ? '☀️ Light' : '🌙 Dark';
 
-  await load();
+  // load() clears in-memory state first, then fetches from the authenticated backend.
+  // If it returns false (401 or network failure), do NOT render — the login screen
+  // will already be shown by the 401 handler. Bail out here.
+  const ok = await load();
+  if (!ok) return;
+
   updateSeedBanner();
   renderAll();
 
-  // Land on the dashboard hub
   switchCategory('dashboard', document.querySelector('.nav-cat[data-cat="dashboard"]'));
-
-  document.getElementById('last-updated').textContent =
-    'עודכן: ' + new Date().toLocaleTimeString('he-IL');
 
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();
 
-  // Proactive coach check after data loads
   setTimeout(checkProactiveCoach, 1500);
-
-  // Save last visit timestamp
   Auth.saveLastVisit();
 
-  // Service Worker for PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }
 
 (async () => {
-  // Set up auth success callback
   window._onAuthSuccess = _initApp;
 
-  // Try auth
+  // Boot sequence:
+  // 1. Auth.init() checks local token validity.
+  //    If no valid token: clears all private localStorage, shows login screen.
+  //    If valid token: hides login screen (app div revealed, but still blank).
+  // 2. Only after a successful authenticated loadAll() does renderAll() run.
   const authed = await Auth.init();
   if (authed) {
     await _initApp();
   }
-  // If not authed, login overlay is shown; _initApp runs after successful login
 })();

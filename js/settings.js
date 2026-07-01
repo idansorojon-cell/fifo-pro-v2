@@ -410,10 +410,19 @@ const Settings = (() => {
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">יציאה מהמערכת</span>
-              <span class="settings-row-sub">מסיר Token מהדפדפן</span>
+              <span class="settings-row-sub">מסיר Session מהדפדפן ומהשרת</span>
             </div>
             <button class="btn btn-danger btn-sm" onclick="if(confirm('לצאת מהמערכת?')) Auth.logout()">⎋ Logout</button>
           </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="settings-row-label">בטל כל הSessionים</span>
+              <span class="settings-row-sub">מנתק את כל המכשירים המחוברים באחת</span>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="Settings.revokeAllSessions()">🔒 נתק הכל</button>
+          </div>
+          <div id="revoke-msg" style="margin:0 16px 12px;font-size:12px"></div>
 
         </div>
       </div>
@@ -638,12 +647,27 @@ const Settings = (() => {
     el.style.color = 'var(--' + color + ')';
   }
 
+  // ── Revoke all sessions (all devices) ───────────────────
+  async function revokeAllSessions() {
+    const msg = document.getElementById('revoke-msg');
+    const pw = prompt('הכנס את הסיסמה הנוכחית לאישור:');
+    if (pw === null) return; // cancelled
+    const hash = await Auth.sha256(pw.trim());
+    const res  = await API.revokeAllSessions(hash);
+    if (res.ok) {
+      if (msg) { msg.textContent = '✓ כל הSessionים בוטלו — תצא מהמערכת'; msg.style.color = 'var(--green)'; }
+      setTimeout(() => Auth.logout(), 1500);
+    } else {
+      if (msg) { msg.textContent = res.error || 'שגיאה'; msg.style.color = 'var(--red)'; }
+    }
+  }
+
   // ── Compatibility shim ───────────────────────────────────
   function save() { _syncGoal(); }
 
   return {
     render, get, set, getPrefs, save, setTheme, toggleModule,
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
-    showPasswordChange, hidePasswordChange, changePassword, _syncGoal,
+    showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
   };
 })();

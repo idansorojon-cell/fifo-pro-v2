@@ -10,6 +10,38 @@ const Auth = (() => {
   const BRIEF_SHOWN  = 'fifo_brief_shown';
   const LAST_VISIT   = 'fifo_last_visit';
 
+  // All localStorage keys that contain private trading data.
+  // fifo_dark (theme) is intentionally excluded — it is not sensitive.
+  const PRIVATE_KEYS = [
+    'fifo_session_v1',
+    'fifo_positions_backup',
+    'fifo_watchlist',
+    'fifo_trades',
+    'fifo_journal',
+    'fifo_prefs',
+    'fifo_last_visit',
+    'fifo_brief_shown',
+    'fifo_aicoach',
+    'fifo_goal',
+    'fifo_livedata',
+  ];
+
+  function clearPrivateCache() {
+    // Remove known private keys
+    PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
+    // Also sweep for any unknown fifo_ keys except theme
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_local_pw_hash')
+      .forEach(k => localStorage.removeItem(k));
+    // Clear any SW cache partitions named 'fifo-*'
+    if ('caches' in window) {
+      caches.keys().then(names => names
+        .filter(n => n.startsWith('fifo-'))
+        .forEach(n => caches.delete(n))
+      );
+    }
+  }
+
   // ── Web Crypto SHA-256 ──────────────────────────────────
   async function sha256(str) {
     try {
@@ -85,14 +117,19 @@ const Auth = (() => {
           return { ok: true };
         }
         if (res.authDisabled) {
-          // Backend has no password set — allow through
-          saveToken('auth-disabled-' + Date.now());
+          // Backend has no password set — allow through.
+          // MUST save exactly 'auth-disabled' — Apps Script validateToken_() checks this literal.
+          saveToken('auth-disabled');
           return { ok: true };
+        }
+        // Deployment misconfiguration — don't fall to offline, show clear error
+        if (res.deploymentError) {
+          return { ok: false, error: res.error };
         }
         return { ok: false, error: res.error || 'סיסמה שגויה' };
       } catch(e) {
-        // Backend unreachable — fall through to offline mode
-        console.warn('Auth backend unavailable, using offline mode:', e.message);
+        // Network error only — fall through to offline mode
+        console.warn('Auth backend unreachable (network), using offline mode:', e.message);
       }
     }
 
@@ -112,9 +149,18 @@ const Auth = (() => {
   }
 
   // ── Logout ──────────────────────────────────────────────
-  function logout() {
-    clearToken();
-    localStorage.removeItem(BRIEF_SHOWN);
+  async function logout() {
+    // Revoke server-side session first (fire-and-forget; we log out locally regardless)
+    if (API.isConfigured()) {
+      try { await API.logoutServer(); } catch(e) { console.warn('Server logout failed:', e.message); }
+    }
+    clearPrivateCache(); // wipes token + all cached trading data
+    showLoginScreen();
+  }
+
+  // Called by api.js when the server returns code:401 (expired/invalid session)
+  function handle401() {
+    clearPrivateCache();
     showLoginScreen();
   }
 
@@ -150,10 +196,24 @@ const Auth = (() => {
 
   // ── Init ────────────────────────────────────────────────
   async function init() {
+    // AUTH_DISABLED mode: probe the server. If it returns authDisabled, skip login entirely.
+    if (API.isConfigured()) {
+      try {
+        const probe = await API.verifyLogin('');
+        if (probe.authDisabled) {
+          saveToken('auth-disabled');
+          hideLoginScreen();
+          return true;
+        }
+      } catch(e) { /* network error — fall through to normal flow */ }
+    }
+
     if (isLoggedIn()) {
       hideLoginScreen();
       return true;
     }
+    // No valid local token — wipe any stale private data before showing login
+    clearPrivateCache();
     showLoginScreen();
     return false;
   }
@@ -190,6 +250,7 @@ const Auth = (() => {
   return {
     init, login, logout, isLoggedIn, getToken,
     handleLoginSubmit, showLoginScreen, hideLoginScreen,
-    sha256, changePasswordLocal, saveLastVisit, getLastVisit
+    sha256, changePasswordLocal, saveLastVisit, getLastVisit,
+    handle401, clearPrivateCache
   };
 })();

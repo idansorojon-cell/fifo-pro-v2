@@ -80,8 +80,9 @@ const Watchlist = (() => {
       Utils.LS.set('fifo_watchlist', APP.watchlist);
       render();
     } catch(err) {
+      // On failure (including 401), leave watchlist empty — never show stale cached data.
+      // 401 is handled by api.js which shows the login screen.
       if (!silent) API.setStatus('❌ ' + err.message, 'error');
-      APP.watchlist = normalizeRows(Utils.LS.get('fifo_watchlist', []));
       render();
     }
   }
