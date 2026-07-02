@@ -11,11 +11,29 @@
   .de-grid {
     grid-template-columns: 1fr;
   }
+  .grade-card {
+    grid-template-columns: 1fr;
+  }
+  .ptl-stats {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* ── Mobile (≤640px) ────────────────────────────────────── */
 @media (max-width: 640px) {
-  .app { padding: 0 12px 80px; }
+  /* Show bottom nav, hide main nav */
+  .main-nav    { display: none !important; }
+  .bottom-nav  { display: block !important; }
+  .fab         { display: none !important; }
+  .app { padding: 0 12px 88px; }
+
+  /* Hub grid single column on mobile */
+  .hub-grid, .hub-grid-ai { grid-template-columns: 1fr; }
+  .hub-card-featured { grid-column: 1; }
+  .hub-header { padding: 18px 0 16px; }
+  .hub-title { font-size: 20px; }
+  .hub-icon { width: 48px; height: 48px; font-size: 28px; }
+  .breadcrumb { padding: 8px 0 2px; }
 
   /* Header */
   .header { padding: 12px 0 10px; }
@@ -90,14 +108,20 @@
   .insight-grid { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .mistake-grid { grid-template-columns: 1fr 1fr; }
-  .tabs-container { top: 56px; }
+  .sub-nav-container { top: 54px; }
+  .brief-kpis { grid-template-columns: 1fr 1fr; }
+  .grade-card { grid-template-columns: 1fr; }
+  .rs-stat { padding: 10px 8px; }
+  .rs-val { font-size: 14px; }
 }
+
 
 /* ── iPhone safe areas ──────────────────────────────────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .app { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .app { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
   .header { padding-top: max(16px, env(safe-area-inset-top)); }
+  .bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
 }
 
 /* ── PWA standalone mode ────────────────────────────────── */
@@ -134,8 +158,9 @@
 
 /* ── Print ──────────────────────────────────────────────── */
 @media print {
-  .header, .tabs-container, .fab, .sync-bar, .alert-banner { display: none !important; }
+  .header, .main-nav, .sub-nav-container, .bottom-nav, .fab, .sync-bar, .alert-banner, .breadcrumb, .hub-panel { display: none !important; }
   .app { max-width: 100%; padding: 0; }
   .card { box-shadow: none; border: 1px solid #ddd; }
   body { background: white; color: black; }
+  #login-overlay { display: none !important; }
 }

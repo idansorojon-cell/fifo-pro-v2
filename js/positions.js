@@ -59,10 +59,21 @@ const Positions = (() => {
   function posCard(p) {
     const live      = APP.liveData[p.symbol];
     const price     = live?.price;
+    // P&L is ALWAYS vs your entry price (p.avg_price) — never touches
+    // prevClose. This was already correct; kept exactly as-is.
     const pnl       = price ? (price - p.avg_price) * p.qty : null;
     const pnlPct    = price ? (price - p.avg_price) / p.avg_price * 100 : null;
     const val       = price ? price * p.qty : p.avg_price * p.qty;
-    const dayChg    = live ? (live.price - live.prevClose) / live.prevClose * 100 : null;
+
+    // BUG FIX: daily change must come from the backend's own validated
+    // changePct, gated on changePctValid — NEVER recomputed client-side
+    // from live.prevClose. The backend may still return a `prevClose`
+    // value even when it's flagged "suspicious" (kept for transparency/
+    // debugging), so blindly recomputing (price-prevClose)/prevClose
+    // here would silently resurrect exactly the bug this fix addresses
+    // (e.g. ONDL's fake -42.92% from a ~1-year-old reference close).
+    const dayChgValid = !!(live && live.changePctValid && live.changePct != null);
+    const dayChg      = dayChgValid ? live.changePct : null;
     const targetPct = p.target && price ? (p.target - price) / price * 100 : null;
     const stopPct   = p.stop_loss && price ? (price - p.stop_loss) / price * 100 : null;
 
@@ -80,15 +91,16 @@ const Positions = (() => {
           ${price ? fprice(price) : '—'}
         </div>
 
-        ${dayChg !== null ? `
-          <div style="font-size:12px;color:${dayChg>=0?'var(--green)':'var(--red)'}">
-            יומי: ${dayChg>=0?'+':''}${dayChg.toFixed(2)}%
-          </div>` : ''}
+        ${live ? (
+          dayChgValid
+            ? `<div style="font-size:12px;color:${dayChg>=0?'var(--green)':'var(--red)'}">יומי: ${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</div>`
+            : `<div style="font-size:12px;color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי: N/A</div>`
+        ) : ''}
 
         ${live?.preMarket ? `
           <div style="font-size:11px;padding:2px 8px;background:var(--gold-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--gold)">
             🌅 Pre: <b>${fprice(live.preMarket)}</b>
-            ${live.prevClose ? ` (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)` : ''}
+            ${dayChgValid ? ` (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)` : ''}
           </div>` : ''}
 
         ${live?.postMarket ? `
@@ -131,6 +143,17 @@ const Positions = (() => {
     `;
   }
 
+  // Human-readable tooltip for why daily change is unavailable —
+  // matches the dayChangeStatus values returned by getPrices.
+  function _dayChangeStatusTitle(status) {
+    switch (status) {
+      case 'missing_prevclose':   return 'אין נתון מחיר סגירה קודם — לא ניתן לחשב שינוי יומי';
+      case 'invalid_prevclose':   return 'מחיר סגירה קודם לא תקין (אפס/שלילי) — לא ניתן לחשב שינוי יומי';
+      case 'suspicious_prevclose':return 'מחיר סגירה קודם נראה לא סביר (שינוי חד מאוד) — מוצג N/A במקום ערך שגוי';
+      default:                    return 'שינוי יומי לא זמין';
+    }
+  }
+
   function renderTable() {
     const tbody = document.getElementById('pos-tbody');
     if (!tbody) return;
@@ -138,12 +161,21 @@ const Positions = (() => {
     tbody.innerHTML = APP.positions.map(p => {
       const live    = APP.liveData[p.symbol];
       const price   = live?.price;
+      // P&L always vs entry price (p.avg_price) — never prevClose. Unchanged.
       const pnl     = price ? (price - p.avg_price) * p.qty : null;
       const pnlPct  = price ? (price - p.avg_price) / p.avg_price * 100 : null;
 
+      // BUG FIX: gate on the backend's validated changePctValid flag,
+      // never just `!= null` (prevClose/changePct can be present-but-
+      // flagged-suspicious). See posCard() above for the full explanation.
+      const dayChgValid = !!(live && live.changePctValid && live.changePct != null);
+      const dayChgCell = dayChgValid
+        ? `<div style="font-size:10px;color:${live.changePct>=0?'var(--green)':'var(--red)'}">${live.changePct>=0?'+':''}${live.changePct.toFixed(2)}%</div>`
+        : live ? `<div style="font-size:10px;color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">N/A</div>` : '';
+
       const liveCell = price
         ? `<div style="font-weight:700">${fprice(price)}</div>
-           ${live.changePct!=null?`<div style="font-size:10px;color:${live.changePct>=0?'var(--green)':'var(--red)'}">${live.changePct>=0?'+':''}${live.changePct.toFixed(2)}%</div>`:''}
+           ${dayChgCell}
            ${live.preMarket?`<div style="font-size:10px;color:var(--gold)">Pre: ${fprice(live.preMarket)}</div>`:''}
            ${live.postMarket?`<div style="font-size:10px;color:var(--purple)">AH: ${fprice(live.postMarket)}</div>`:''}`
         : '<span style="color:var(--text-3)">—</span>';
@@ -176,12 +208,51 @@ const Positions = (() => {
     API.setStatus('מרענן מחירים...', 'info');
     const syms   = [...new Set(APP.positions.map(p => p.symbol))];
     const prices = await API.fetchPrices(syms);
+
+    let loadedCount = 0;
+    const errors = [];
+
     Object.entries(prices).forEach(([sym, p]) => {
-      if (p && p.ok) APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
+      if (p && p.ok) {
+        APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
+        loadedCount++;
+      } else {
+        const err = (p && p.error) || 'no data';
+        console.warn('[prices] failed for', sym, err);
+        errors.push(sym + ': ' + err);
+      }
     });
+
+    if (!Object.keys(prices).length) {
+      console.error('[prices] fetchPrices returned empty — auth or network error');
+      API.setStatus('❌ מחירים לא נטענו — בדוק חיבור ו-API key', 'error');
+      render();
+      return;
+    }
+
     render();
-    const anyLoaded = Object.values(APP.liveData).some(d => d.price > 0);
-    API.setStatus(anyLoaded ? '✓ מחירים עודכנו' : '⚠️ לא ניתן לטעון מחירים', anyLoaded ? 'ok' : 'warn');
+
+    if (loadedCount > 0) {
+      API.setStatus('✓ ' + loadedCount + '/' + syms.length + ' מחירים עודכנו', 'ok');
+    } else {
+      // Surface the first real error rather than a generic message
+      const firstErr = errors[0] || '';
+      let errMsg;
+      if (firstErr.includes('401') || firstErr.includes('Unauthorized') || firstErr.includes('API key'))
+        errMsg = '❌ Polygon 401 — בדוק POLYGON_API_KEY ב-Script Properties';
+      else if (firstErr.includes('429') || firstErr.includes('Rate Limit'))
+        errMsg = '⚠️ Polygon 429 — חרגת ממכסת הקריאות';
+      else if (firstErr.includes('POLYGON_API_KEY חסר'))
+        errMsg = '❌ הגדר POLYGON_API_KEY ב-Script Properties של Apps Script';
+      else if (firstErr.includes('network') || firstErr.includes('רשת'))
+        errMsg = '❌ שגיאת רשת — בדוק חיבור לאינטרנט';
+      else if (firstErr)
+        errMsg = '⚠️ ' + firstErr.slice(0, 80);
+      else
+        errMsg = '⚠️ לא ניתן לטעון מחירים';
+      console.error('[prices] errors:', errors.join(' | '));
+      API.setStatus(errMsg, 'error');
+    }
   }
 
   function connectWS() {

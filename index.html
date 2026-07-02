@@ -18,13 +18,25 @@
 </head>
 <body>
 
-<div class="app">
+<!-- ═══════════════════════════════════════════════════
+     LOGIN OVERLAY (shown before app loads)
+═══════════════════════════════════════════════════ -->
+<!-- login-overlay removed — auth disabled, app auto-starts -->
+
+<div class="app" id="app">
 
   <!-- ── Sync Status Bar ─────────────────────────────── -->
   <div id="sync-bar" class="sync-bar" style="display:none"></div>
 
   <!-- ── Alert Banner ────────────────────────────────── -->
   <div id="alert-banner" class="alert-banner"></div>
+
+  <!-- ── Coach Alert (proactive warnings) ──────────── -->
+  <div id="coach-alert" class="coach-alert" style="display:none">
+    <button class="coach-alert-close" onclick="document.getElementById('coach-alert').style.display='none'">×</button>
+    <div class="coach-alert-title">⚡ AI Coach — התראה</div>
+    <div id="coach-alert-items" class="coach-alert-items"></div>
+  </div>
 
   <!-- ── Header ──────────────────────────────────────── -->
   <div class="header">
@@ -43,6 +55,7 @@
       </div>
       <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">☀️ Light</button>
       <button id="add-btn" class="btn btn-primary btn-sm" onclick="Trades.openAddForm()">+ עסקה</button>
+      <button class="logout-btn" onclick="Auth.logout()" title="יציאה">⎋</button>
     </div>
   </div>
 
@@ -52,38 +65,252 @@
     <button class="btn btn-ghost btn-sm" onclick="seedToSheets()">העלה היסטוריה</button>
   </div>
 
-  <!-- ── Tabs ────────────────────────────────────────── -->
-  <div class="tabs-container">
-    <div class="tabs">
-      <button class="tab active"  onclick="switchTab('dashboard',this)">📊 דשבורד</button>
-      <button class="tab"         onclick="switchTab('positions',this)">📈 פוזיציות</button>
-      <button class="tab"         onclick="switchTab('trades',this)">📋 עסקאות</button>
-      <button class="tab"         onclick="switchTab('journal',this)">📓 יומן</button>
-      <button class="tab"         onclick="switchTab('analysis',this)">🔍 ניתוח</button>
-      <button class="tab"         onclick="switchTab('insights',this)">💡 תובנות</button>
-      <button class="tab"         onclick="switchTab('performance',this)">🏆 ביצועים</button>
-      <button class="tab"         onclick="switchTab('symnotes',this)">📌 לפי סימבול</button>
-      <button class="tab"         onclick="switchTab('heatmap',this)">📅 Heat Map</button>
-      <button class="tab"         onclick="switchTab('goals',this)">🎯 יעדים</button>
-      <button class="tab"         onclick="switchTab('watchlist',this)">👁 Watchlist</button>
-      <button class="tab"         onclick="switchTab('decision',this)">🎯 Decision</button>
-      <button class="tab"         onclick="switchTab('coach',this)">🤖 AI Coach</button>
-      <button class="tab"         onclick="switchTab('aichat',this)">💬 AI Chat</button>
-      <button class="tab"         onclick="switchTab('quicktrade',this)">⚡ Quick Trade</button>
-      <button class="tab"         onclick="switchTab('progress',this)">📈 התקדמות</button>
+  <!-- ── Main Navigation (5 Categories) ─────────────── -->
+  <nav class="main-nav" id="main-nav">
+    <button class="nav-cat active" data-cat="dashboard" onclick="switchCategory('dashboard',this)">
+      <span class="nav-cat-icon">📊</span>
+      <span class="nav-cat-label">דשבורד</span>
+    </button>
+    <button class="nav-cat" data-cat="trading" onclick="switchCategory('trading',this)">
+      <span class="nav-cat-icon">📈</span>
+      <span class="nav-cat-label">מסחר</span>
+    </button>
+    <button class="nav-cat" data-cat="analysis" onclick="switchCategory('analysis',this)">
+      <span class="nav-cat-icon">🔍</span>
+      <span class="nav-cat-label">ניתוח</span>
+    </button>
+    <button class="nav-cat" data-cat="ai" onclick="switchCategory('ai',this)">
+      <span class="nav-cat-icon">🤖</span>
+      <span class="nav-cat-label">בינה מלאכותית</span>
+    </button>
+    <button class="nav-cat" data-cat="settings" onclick="switchCategory('settings',this)">
+      <span class="nav-cat-icon">⚙️</span>
+      <span class="nav-cat-label">הגדרות</span>
+    </button>
+  </nav>
+
+  <!-- ── Breadcrumb (back to section hub) ────────────── -->
+  <div id="breadcrumb" class="breadcrumb" style="display:none">
+    <button class="breadcrumb-back" onclick="switchCategory(APP.currentCategory, document.querySelector('.nav-cat.active'))">
+      <span class="bc-arrow">←</span>
+      <span id="breadcrumb-cat-label"></span>
+    </button>
+    <span class="bc-sep">/</span>
+    <span id="breadcrumb-tab-label" class="bc-current"></span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       HUB PANELS — Section landing pages
+  ═══════════════════════════════════════════════════ -->
+
+  <!-- HUB: דשבורד -->
+  <div id="tab-hub-dashboard" class="panel hub-panel">
+    <div class="hub-header">
+      <div class="hub-icon">📊</div>
+      <div>
+        <div class="hub-title">דשבורד</div>
+        <div class="hub-sub">סקירה כוללת של הפעילות שלך</div>
+      </div>
+    </div>
+    <div class="hub-grid">
+      <button class="hub-card" onclick="switchTab('dashboard')">
+        <span class="hub-card-icon">📊</span>
+        <span class="hub-card-label">דשבורד ראשי</span>
+        <span class="hub-card-desc">KPIs, גרפים, equity curve</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('brief')">
+        <span class="hub-card-icon">📋</span>
+        <span class="hub-card-label">סיכום יומי</span>
+        <span class="hub-card-desc">מה קרה מהביקור האחרון</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('goals')">
+        <span class="hub-card-icon">🎯</span>
+        <span class="hub-card-label">יעדים</span>
+        <span class="hub-card-desc">מטרה חודשית, התקדמות, סימולציה</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('progress')">
+        <span class="hub-card-icon">📈</span>
+        <span class="hub-card-label">התקדמות</span>
+        <span class="hub-card-desc">נתוני ביצועים לאורך זמן</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('ptimeline')">
+        <span class="hub-card-icon">📅</span>
+        <span class="hub-card-label">ציר זמן</span>
+        <span class="hub-card-desc">חודש אחר חודש — חוזקות וחולשות</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('grade')">
+        <span class="hub-card-icon">🏅</span>
+        <span class="hub-card-label">ציון מסחר</span>
+        <span class="hub-card-desc">ביצוע, ריסק, משמעת, פסיכולוגיה</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- HUB: מסחר -->
+  <div id="tab-hub-trading" class="panel hub-panel">
+    <div class="hub-header">
+      <div class="hub-icon">📈</div>
+      <div>
+        <div class="hub-title">מסחר</div>
+        <div class="hub-sub">ניהול פוזיציות, עסקאות ורשימות מעקב</div>
+      </div>
+    </div>
+    <div class="hub-grid">
+      <button class="hub-card hub-card-primary" onclick="switchTab('positions')">
+        <span class="hub-card-icon">📈</span>
+        <span class="hub-card-label">פוזיציות פתוחות</span>
+        <span class="hub-card-desc">מחירים חיים, P&L, stop loss</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('trades')">
+        <span class="hub-card-icon">📋</span>
+        <span class="hub-card-label">היסטוריית עסקאות</span>
+        <span class="hub-card-desc">כל העסקאות הסגורות</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('quicktrade')">
+        <span class="hub-card-icon">⚡</span>
+        <span class="hub-card-label">כניסה מהירה</span>
+        <span class="hub-card-desc">הוסף עסקה בקלות ובמהירות</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('watchlist')">
+        <span class="hub-card-icon">👁</span>
+        <span class="hub-card-label">רשימת מעקב</span>
+        <span class="hub-card-desc">סימבולים, דירוג AI, מחירים חיים</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('journal')">
+        <span class="hub-card-icon">📓</span>
+        <span class="hub-card-label">יומן מסחר</span>
+        <span class="hub-card-desc">רשומות, מחשבות, לקחים</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- HUB: ניתוח -->
+  <div id="tab-hub-analysis" class="panel hub-panel">
+    <div class="hub-header">
+      <div class="hub-icon">🔍</div>
+      <div>
+        <div class="hub-title">ניתוח</div>
+        <div class="hub-sub">העמק בנתונים — זהה דפוסים ומגמות</div>
+      </div>
+    </div>
+    <div class="hub-grid">
+      <button class="hub-card" onclick="switchTab('analysis')">
+        <span class="hub-card-icon">📊</span>
+        <span class="hub-card-label">ניתוח גרפי</span>
+        <span class="hub-card-desc">גרפים לפי סימבול ותקופה</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('performance')">
+        <span class="hub-card-icon">🏆</span>
+        <span class="hub-card-label">ביצועים</span>
+        <span class="hub-card-desc">Win rate, expectancy, risk/reward</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('insights')">
+        <span class="hub-card-icon">💡</span>
+        <span class="hub-card-label">תובנות</span>
+        <span class="hub-card-desc">דפוסים, ימים, שעות — מה עובד</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('replay')">
+        <span class="hub-card-icon">🎬</span>
+        <span class="hub-card-label">Trade Replay</span>
+        <span class="hub-card-desc">ציר זמן ויזואלי לפי חודש</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('portheatmap')">
+        <span class="hub-card-icon">🌡️</span>
+        <span class="hub-card-label">Heatmap תיק</span>
+        <span class="hub-card-desc">תרומת כל סימבול לתיק</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('heatmap')">
+        <span class="hub-card-icon">📅</span>
+        <span class="hub-card-label">לוח שנה</span>
+        <span class="hub-card-desc">P&L לפי יום — heatmap קלנדרי</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card" onclick="switchTab('symnotes')">
+        <span class="hub-card-icon">📌</span>
+        <span class="hub-card-label">לפי סימבול</span>
+        <span class="hub-card-desc">ביצועים מרוכזים לכל מניה</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- HUB: בינה מלאכותית -->
+  <div id="tab-hub-ai" class="panel hub-panel">
+    <div class="hub-header">
+      <div class="hub-icon">🤖</div>
+      <div>
+        <div class="hub-title">בינה מלאכותית</div>
+        <div class="hub-sub">כלי AI לניתוח, אימון וקבלת החלטות</div>
+      </div>
+    </div>
+    <div class="hub-grid hub-grid-ai">
+      <button class="hub-card hub-card-ai" onclick="switchTab('decision')">
+        <span class="hub-card-icon">🎯</span>
+        <span class="hub-card-label">מנוע החלטות</span>
+        <span class="hub-card-desc">אינדיקטורים, חדשות, המלצת כניסה</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card hub-card-ai" onclick="switchTab('coach')">
+        <span class="hub-card-icon">🧠</span>
+        <span class="hub-card-label">מאמן AI</span>
+        <span class="hub-card-desc">ניתוח שגיאות, תובנות, שיפור</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+      <button class="hub-card hub-card-ai hub-card-featured" onclick="switchTab('aichat')">
+        <span class="hub-card-icon">💬</span>
+        <span class="hub-card-label">שיחה עם AI</span>
+        <span class="hub-card-desc">שאל כל שאלה על המסחר שלך</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- HUB: הגדרות -->
+  <div id="tab-hub-settings" class="panel hub-panel">
+    <div class="hub-header">
+      <div class="hub-icon">⚙️</div>
+      <div>
+        <div class="hub-title">הגדרות</div>
+        <div class="hub-sub">התאמת החשבון, תצוגה ועדפות</div>
+      </div>
+    </div>
+    <div class="hub-grid">
+      <button class="hub-card" onclick="switchTab('settings')">
+        <span class="hub-card-icon">⚙️</span>
+        <span class="hub-card-label">הגדרות מערכת</span>
+        <span class="hub-card-desc">סיסמה, theme, יעד חודשי, מודולים</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       DASHBOARD
+       DASHBOARD CATEGORY
   ═══════════════════════════════════════════════════ -->
+
+  <!-- DASHBOARD (main) -->
   <div id="tab-dashboard" class="panel active">
+    <!-- Hero status bar -->
+    <div id="dash-hero" class="dash-hero"></div>
     <div id="weekly-summary" class="week-grid" style="display:none"></div>
     <div class="kpi-grid" id="kpi-grid"></div>
-
-    <!-- Portfolio Health -->
     <div class="card" id="portfolio-health"></div>
-
     <div class="card">
       <div class="card-title">📈 Equity Curve — רווח נטו מצטבר ($)</div>
       <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
@@ -99,14 +326,68 @@
     <div class="card" id="goal-card"></div>
   </div>
 
+  <!-- DAILY BRIEF -->
+  <div id="tab-brief" class="panel">
+    <div id="brief-content"></div>
+  </div>
+
+  <!-- GOALS (improved) -->
+  <div id="tab-goals" class="panel">
+    <div id="goals-content"></div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">יעד חודשי — עדכון</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <input type="number" id="goal-input" style="max-width:130px" placeholder="יעד $">
+        <button class="btn btn-primary btn-sm" onclick="Dashboard.saveGoal()">עדכן</button>
+      </div>
+      <div id="goal-detail"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">היסטוריית חודשים</div>
+      <div class="table-wrap"><table id="month-history-table"></table></div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div id="tab-progress" class="panel">
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">האם אתה משתפר לאורך זמן?</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="progress-kpis"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Win Rate לאורך זמן</div>
+        <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
+        <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
+      </div>
+    </div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Profit Factor לאורך זמן</div>
+        <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">שבוע חזק בחודש</div>
+        <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE TIMELINE (new) -->
+  <div id="tab-ptimeline" class="panel"></div>
+
+  <!-- DAILY GRADE (new) -->
+  <div id="tab-grade" class="panel"></div>
+
   <!-- ═══════════════════════════════════════════════════
-       POSITIONS
+       TRADING CATEGORY
   ═══════════════════════════════════════════════════ -->
+
+  <!-- POSITIONS -->
   <div id="tab-positions" class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
-      </div>
+      <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices()">🔄 רענן</button>
         <button class="btn btn-primary btn-sm" onclick="Positions.openForm()">+ פוזיציה חדשה</button>
@@ -130,9 +411,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════
-       TRADES
-  ═══════════════════════════════════════════════════ -->
+  <!-- TRADES -->
   <div id="tab-trades" class="panel">
     <div class="search-row">
       <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
@@ -160,9 +439,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════
-       JOURNAL
-  ═══════════════════════════════════════════════════ -->
+  <!-- JOURNAL -->
   <div id="tab-journal" class="panel">
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--text-3)">יומן מסחר</span>
@@ -187,201 +464,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════
-       ANALYSIS
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-analysis" class="panel">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card">
-        <div class="card-title">רווח נטו לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Win Rate לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">סיכום לפי סימבול</div>
-      <div class="table-wrap"><table id="sym-table"></table></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       INSIGHTS
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-insights" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">תובנות אוטומטיות מהנתונים שלך</div>
-    <div id="insights-grid" class="insight-grid"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">סטטיסטיקות מתקדמות</div>
-        <div id="adv-stats"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח לפי יום בשבוע</div>
-        <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
-      </div>
-    </div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">רווח לפי משך החזקה</div>
-        <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח לפי גודל פוזיציה</div>
-        <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
-      </div>
-    </div>
-    <!-- Mistake Detector -->
-    <div class="card">
-      <div class="card-title">⚠️ Mistake Detector</div>
-      <div id="mistake-grid" class="mistake-grid"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       PERFORMANCE CENTER
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-performance" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">Performance Center — מדדי ביצוע מקצועיים</div>
-    <div id="perf-grid" class="perf-grid"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Symbol Intelligence</div>
-        <div id="sym-intel"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Sector Exposure</div>
-        <div id="sector-exposure"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       SYMBOL NOTES
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-symnotes" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
-      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
-    </div>
-    <div id="sym-notes-container" class="sym-notes-grid"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       HEATMAP
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-heatmap" class="panel">
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">לוח שנה — רווח/הפסד יומי</div>
-      <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
-    </div>
-    <div id="heatmap-container"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       GOALS
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-goals" class="panel">
-    <div class="card">
-      <div class="card-title">יעד חודשי</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="number" id="goal-input" style="max-width:130px" placeholder="יעד $">
-        <button class="btn btn-primary btn-sm" onclick="Dashboard.saveGoal()">עדכן</button>
-      </div>
-      <div id="goal-detail"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">היסטוריית חודשים</div>
-      <div class="table-wrap"><table id="month-history-table"></table></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       WATCHLIST
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-watchlist" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="Watchlist.refresh()">🔄 רענן</button>
-        <button class="btn btn-primary btn-sm" onclick="Watchlist.add()">+ הוסף סימבול</button>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
-      <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
-    </div>
-    <div id="watchlist-grid" class="wl-grid"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       DECISION ENGINE
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-decision" class="panel">
-    <div class="card">
-      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
-      <div class="de-grid">
-        <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
-        <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
-        <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
-        <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
-        <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
-        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="DecisionEngine.run()">🔍 נתח מניה</button>
-        <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
-      </div>
-      <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
-        שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
-        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום AI.
-        לא מחליף שיקול דעת.
-      </div>
-    </div>
-    <div id="decision-result"></div>
-    <!-- Trade Memory / Personal Learning Engine -->
-    <div id="trade-memory"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       AI COACH
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-coach" class="panel">
-    <div class="card">
-      <div class="card-title">🤖 AI Coach — ניתוח אופי המסחר שלך</div>
-      <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
-    </div>
-    <!-- Strengths / Weaknesses / Improve -->
-    <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
-    <div id="coach-grid" class="coach-grid"></div>
-    <div class="card">
-      <div class="card-title">🔧 פעולות לשבוע הקרוב</div>
-      <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       AI CHAT
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-aichat" class="panel">
-    <div style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px">💬 AI Chat — שאל שאלות על המסחר שלך</div>
-      <div class="chat-suggestions" id="chat-suggestions"></div>
-    </div>
-    <div class="chat-container">
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-footer">
-        <input id="chat-input" placeholder="שאל אותי על המסחר שלך... (למשל: באיזה מניות אני הכי טוב?)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();AIChat.send()}">
-        <button class="btn btn-primary btn-sm" onclick="AIChat.send()">שלח</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       QUICK TRADE
-  ═══════════════════════════════════════════════════ -->
+  <!-- QUICK TRADE -->
   <div id="tab-quicktrade" class="panel">
     <div style="font-size:13px;color:var(--text-3);margin-bottom:14px">⚡ הוספת עסקה מהירה</div>
     <div style="max-width:520px">
@@ -412,7 +495,6 @@
           <div class="form-group"><label>תאריך מכירה</label><input id="qt-sell-date" type="date"></div>
           <div class="form-group"><label>מחיר קנייה ($)</label><input id="qt-buy-price" type="number" step="0.01" placeholder="רק למכירה" oninput="QuickTrade.calc()"></div>
         </div>
-        <!-- Position Sizer -->
         <div class="sizer-box">
           <div class="sizer-title">📐 Position Sizer</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
@@ -431,33 +513,179 @@
     </div>
   </div>
 
+  <!-- WATCHLIST -->
+  <div id="tab-watchlist" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="Watchlist.refresh()">🔄 רענן</button>
+        <button class="btn btn-primary btn-sm" onclick="Watchlist.add()">+ הוסף סימבול</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
+      <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
+    </div>
+    <div id="watchlist-grid" class="wl-grid"></div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════
-       PROGRESS
+       ANALYSIS CATEGORY
   ═══════════════════════════════════════════════════ -->
-  <div id="tab-progress" class="panel">
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">האם אתה משתפר לאורך זמן?</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="progress-kpis"></div>
-    <div class="stats-2col">
+
+  <!-- ANALYSIS -->
+  <div id="tab-analysis" class="panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="card">
-        <div class="card-title">Win Rate לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
+        <div class="card-title">רווח נטו לפי סימבול</div>
+        <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
-        <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
+        <div class="card-title">Win Rate לפי סימבול</div>
+        <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">סיכום לפי סימבול</div>
+      <div class="table-wrap"><table id="sym-table"></table></div>
+    </div>
+  </div>
+
+  <!-- INSIGHTS -->
+  <div id="tab-insights" class="panel">
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">תובנות אוטומטיות מהנתונים שלך</div>
+    <div id="insights-grid" class="insight-grid"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">סטטיסטיקות מתקדמות</div>
+        <div id="adv-stats"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">רווח לפי יום בשבוע</div>
+        <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
       </div>
     </div>
     <div class="stats-2col">
       <div class="card">
-        <div class="card-title">Profit Factor לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
+        <div class="card-title">רווח לפי משך החזקה</div>
+        <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">שבוע חזק בחודש</div>
-        <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
+        <div class="card-title">רווח לפי גודל פוזיציה</div>
+        <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠️ Mistake Detector</div>
+      <div id="mistake-grid" class="mistake-grid"></div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE CENTER -->
+  <div id="tab-performance" class="panel">
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">Performance Center — מדדי ביצוע מקצועיים</div>
+    <div id="perf-grid" class="perf-grid"></div>
+    <div class="stats-2col">
+      <div class="card">
+        <div class="card-title">Symbol Intelligence</div>
+        <div id="sym-intel"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sector Exposure</div>
+        <div id="sector-exposure"></div>
       </div>
     </div>
   </div>
+
+  <!-- TRADE REPLAY (new) -->
+  <div id="tab-replay" class="panel"></div>
+
+  <!-- CALENDAR HEATMAP -->
+  <div id="tab-heatmap" class="panel">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--text-3)">לוח שנה — רווח/הפסד יומי</div>
+      <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
+    </div>
+    <div id="heatmap-container"></div>
+  </div>
+
+  <!-- PORTFOLIO HEATMAP (new, by symbol) -->
+  <div id="tab-portheatmap" class="panel">
+    <div id="portheatmap-content"></div>
+  </div>
+
+  <!-- SYMBOL NOTES -->
+  <div id="tab-symnotes" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
+      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
+    </div>
+    <div id="sym-notes-container" class="sym-notes-grid"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       AI CATEGORY
+  ═══════════════════════════════════════════════════ -->
+
+  <!-- DECISION ENGINE -->
+  <div id="tab-decision" class="panel">
+    <div class="card">
+      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
+      <div class="de-grid">
+        <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
+        <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="DecisionEngine.run()">🔍 נתח מניה</button>
+        <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
+        שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
+        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום AI.
+        לא מחליף שיקול דעת.
+      </div>
+    </div>
+    <div id="decision-result"></div>
+    <div id="trade-memory"></div>
+  </div>
+
+  <!-- AI COACH -->
+  <div id="tab-coach" class="panel">
+    <div class="card">
+      <div class="card-title">🤖 AI Coach — ניתוח אופי המסחר שלך</div>
+      <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
+    </div>
+    <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
+    <div id="coach-grid" class="coach-grid"></div>
+    <div class="card">
+      <div class="card-title">🔧 פעולות לשבוע הקרוב</div>
+      <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
+    </div>
+  </div>
+
+  <!-- AI CHAT -->
+  <div id="tab-aichat" class="panel">
+    <div style="margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px">💬 AI Chat — שאל שאלות על המסחר שלך</div>
+      <div class="chat-suggestions" id="chat-suggestions"></div>
+    </div>
+    <div class="chat-container">
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-footer">
+        <input id="chat-input" placeholder="שאל אותי על המסחר שלך... (למשל: באיזה מניות אני הכי טוב?)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();AIChat.send()}">
+        <button class="btn btn-primary btn-sm" onclick="AIChat.send()">שלח</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SETTINGS CATEGORY
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-settings" class="panel"></div>
 
 </div><!-- /.app -->
 
@@ -550,13 +778,39 @@
   </div>
 </div>
 
-<!-- Mobile FAB -->
-<button class="fab" onclick="Trades.openAddForm()">+ עסקה חדשה</button>
+<!-- ═══════════════════════════════════════════════════
+     MOBILE BOTTOM NAV
+═══════════════════════════════════════════════════ -->
+<nav class="bottom-nav" id="bottom-nav">
+  <div class="bn-items">
+    <button class="bn-item active" data-cat="dashboard" onclick="switchCategory('dashboard', this, true)">
+      <span class="bn-icon">📊</span>
+      <span class="bn-label">דשבורד</span>
+    </button>
+    <button class="bn-item" data-cat="trading" onclick="switchCategory('trading', this, true)">
+      <span class="bn-icon">📈</span>
+      <span class="bn-label">מסחר</span>
+    </button>
+    <button class="bn-item" data-cat="analysis" onclick="switchCategory('analysis', this, true)">
+      <span class="bn-icon">🔍</span>
+      <span class="bn-label">ניתוח</span>
+    </button>
+    <button class="bn-item" data-cat="ai" onclick="switchCategory('ai', this, true)">
+      <span class="bn-icon">🤖</span>
+      <span class="bn-label">AI</span>
+    </button>
+    <button class="bn-item" data-cat="settings" onclick="switchCategory('settings', this, true)">
+      <span class="bn-icon">⚙️</span>
+      <span class="bn-label">הגדרות</span>
+    </button>
+  </div>
+</nav>
 
 <!-- ═══════════════════════════════════════════════════
      SCRIPTS — order matters!
 ═══════════════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/learningEngine.js"></script>
 <script src="js/api.js"></script>
 <script src="js/charts.js"></script>
@@ -570,6 +824,10 @@
 <script src="js/aiChat.js"></script>
 <script src="js/trades.js"></script>
 <script src="js/quicktrade.js"></script>
+<script src="js/dailyGrade.js"></script>
+<script src="js/tradeReplay.js"></script>
+<script src="js/performanceTimeline.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 
 </body>

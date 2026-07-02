@@ -11,10 +11,73 @@ const Dashboard = (() => {
   // ── Main render ─────────────────────────────────────────
 
   function render(st) {
+    renderHero(st);
     renderKPIs(st);
     renderWeeklySummary();
     renderGoalCard(st);
     renderPortfolioHealth(st);
+  }
+
+  // ── Dashboard hero ──────────────────────────────────────
+  function renderHero(st) {
+    const el = document.getElementById('dash-hero');
+    if (!el) return;
+
+    const now = new Date();
+    const curM = currentMonthKey();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - ((now.getDay() + 1) % 7));
+    weekStart.setHours(0,0,0,0);
+
+    const today = now.toISOString().split('T')[0];
+    const todayTrades = APP.trades.filter(t => t.sell_date === today);
+    const weekTrades  = APP.trades.filter(t => { const d = parseDD(t.sell_date); return d >= weekStart && d <= now; });
+    const monthTrades = APP.trades.filter(t => t.month === curM);
+
+    const todayPnl = todayTrades.reduce((s,t) => s+t.net, 0);
+    const weekPnl  = weekTrades.reduce((s,t) => s+t.net, 0);
+    const monthPnl = monthTrades.reduce((s,t) => s+t.net, 0);
+
+    const goal = APP.monthGoal || 5000;
+    const goalPct = Math.min(Math.round((monthPnl / goal) * 100), 100);
+    const goalPctDisplay = Math.round((monthPnl / goal) * 100);
+
+    const openPnl = APP.positions.reduce((s, p) => {
+      const live = APP.liveData[p.symbol];
+      return s + (live?.price ? (live.price - p.avg_price) * p.qty : 0);
+    }, 0);
+
+    const hr = now.getHours();
+    const greeting = hr < 12 ? 'בוקר טוב' : hr < 17 ? 'צהריים טובים' : 'ערב טוב';
+    const dayName  = now.toLocaleDateString('he-IL', { weekday:'long', month:'long', day:'numeric' });
+
+    const _pill = (val, label) => {
+      const pos = val >= 0;
+      return `<div class="dh-pill ${pos?'dh-pill-green':'dh-pill-red'}">
+        <span class="dh-pill-label">${label}</span>
+        <span class="dh-pill-val">${pos?'+':''}${f$(Math.round(val))}</span>
+      </div>`;
+    };
+
+    el.innerHTML = `
+      <div class="dh-greeting">
+        <span class="dh-greeting-text">${greeting} 👋</span>
+        <span class="dh-date">${dayName}</span>
+      </div>
+      <div class="dh-stats">
+        ${_pill(todayPnl, 'היום')}
+        ${_pill(weekPnl, 'השבוע')}
+        ${_pill(monthPnl, 'החודש')}
+        ${APP.positions.length ? _pill(openPnl, 'פתוח') : ''}
+        <div class="dh-goal-pill">
+          <span class="dh-pill-label">יעד חודשי</span>
+          <div class="dh-goal-bar-wrap">
+            <div class="dh-goal-bar" style="width:${goalPct}%"></div>
+          </div>
+          <span class="dh-pill-val">${goalPctDisplay}%</span>
+        </div>
+      </div>
+    `;
   }
 
   // ── Portfolio KPIs ──────────────────────────────────────
