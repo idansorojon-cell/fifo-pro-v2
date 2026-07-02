@@ -787,15 +787,6 @@ async function _initApp() {
 }
 
 (async () => {
-  window._onAuthSuccess = _initApp;
-
-  // Boot sequence:
-  // 1. Auth.init() checks local token validity.
-  //    If no valid token: clears all private localStorage, shows login screen.
-  //    If valid token: hides login screen (app div revealed, but still blank).
-  // 2. Only after a successful authenticated loadAll() does renderAll() run.
-  const authed = await Auth.init();
-  if (authed) {
-    await _initApp();
-  }
+  // Auth disabled — boot directly into the dashboard, no login screen.
+  await _initApp();
 })();

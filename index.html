@@ -21,35 +21,9 @@
 <!-- ═══════════════════════════════════════════════════
      LOGIN OVERLAY (shown before app loads)
 ═══════════════════════════════════════════════════ -->
-<div id="login-overlay" style="display:none">
-  <div class="login-card">
-    <div class="login-brand">
-      <div class="login-brand-name">FIFO <span>PRO</span></div>
-      <div class="login-brand-sub">Trading Dashboard</div>
-    </div>
-    <div class="login-form">
-      <div class="form-group">
-        <label>סיסמה</label>
-        <div class="login-input-wrap">
-          <input type="password" id="login-password" placeholder="הכנס סיסמה..."
-            onkeydown="if(event.key==='Enter') Auth.handleLoginSubmit()">
-          <span class="login-input-icon">🔒</span>
-        </div>
-      </div>
-      <button id="login-btn" class="login-btn" onclick="Auth.handleLoginSubmit()">כניסה</button>
-      <div id="login-error" class="login-error"></div>
-      <div class="login-hint">
-        בפעם הראשונה — הסיסמה שתכניס תהפוך לסיסמת הגישה שלך.<br>
-        שמור אותה במקום בטוח.
-      </div>
-    </div>
-  </div>
-</div>
+<!-- login-overlay removed — auth disabled, app auto-starts -->
 
-<!-- ═══════════════════════════════════════════════════
-     APP (hidden until login)
-═══════════════════════════════════════════════════ -->
-<div class="app" id="app" style="display:none">
+<div class="app" id="app">
 
   <!-- ── Sync Status Bar ─────────────────────────────── -->
   <div id="sync-bar" class="sync-bar" style="display:none"></div>
