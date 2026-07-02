@@ -1,0 +1,2649 @@
+<script>
+'use strict';
+
+// ============================================================================
+// OFFLINE QUEUE
+// ============================================================================
+var OfflineQueue = {
+  KEY: 'medflow_offline_visits',
+  get: function () { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } },
+  enqueue: function (fields) {
+    var q = this.get(); q.push({ id: Date.now(), fields: fields });
+    localStorage.setItem(this.KEY, JSON.stringify(q));
+    var b = document.getElementById('offline-banner'); if (b) b.hidden = false;
+  },
+  flush: function () {
+    var q = this.get();
+    if (!q.length) { var b = document.getElementById('offline-banner'); if (b) b.hidden = true; return; }
+    var item = q[0];
+    api('api_createVisit', item.fields)
+      .then(function (v) { return api('api_finalizeVisit', v.RecordId); })
+      .then(function () {
+        var remaining = OfflineQueue.get().slice(1);
+        localStorage.setItem(OfflineQueue.KEY, JSON.stringify(remaining));
+        if (remaining.length) OfflineQueue.flush();
+        else { var b = document.getElementById('offline-banner'); if (b) b.hidden = true; }
+        Toast.show('ביקור סונכרן בהצלחה ✓', 'success');
+      }).catch(function () {});
+  }
+};
+
+// ============================================================================
+// API CLIENT — strict switch-based dispatcher
+// ============================================================================
+function api(fnName) {
+  var extra = Array.prototype.slice.call(arguments, 1);
+  var args  = [App.clinicId].concat(extra);
+  return new Promise(function (resolve, reject) {
+    var runner = google.script.run
+      .withSuccessHandler(function (resp) {
+        if (resp && resp.success) resolve(resp.data);
+        else reject(new Error((resp && resp.error && resp.error.message) || 'שגיאת שרת'));
+      })
+      .withFailureHandler(function (err) { reject(new Error((err && err.message) || 'שגיאת רשת')); });
+    switch (args.length) {
+      case 1: runner[fnName](args[0]); break;
+      case 2: runner[fnName](args[0], args[1]); break;
+      case 3: runner[fnName](args[0], args[1], args[2]); break;
+      case 4: runner[fnName](args[0], args[1], args[2], args[3]); break;
+      default: runner[fnName](args[0], args[1], args[2], args[3], args[4]);
+    }
+  });
+}
+
+// ============================================================================
+// TOAST
+// ============================================================================
+var Toast = {
+  _t: null,
+  show: function (msg, type, ms) {
+    var el = document.getElementById('toast'); if (!el) return;
+    el.textContent = msg;
+    el.className = 'toast show' + (type === 'success' ? ' toast-success' : type === 'warn' ? ' toast-warn' : '');
+    clearTimeout(this._t);
+    this._t = setTimeout(function () { el.classList.remove('show'); }, ms || 3000);
+  }
+};
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+function initials(name) {
+  if (!name) return '?';
+  var p = String(name).trim().split(/\s+/);
+  if (p.length === 1) return p[0].charAt(0).toUpperCase();
+  return (p[0].charAt(0) + p[p.length - 1].charAt(0)).toUpperCase();
+}
+
+function formatDate(val) {
+  if (!val) return '—';
+  var d = new Date(val);
+  if (isNaN(d.getTime())) return String(val).substring(0, 10) || '—';
+  return [String(d.getDate()).padStart(2,'0'), String(d.getMonth()+1).padStart(2,'0'), d.getFullYear()].join('/');
+}
+
+function formatDateTime(val) {
+  if (!val) return '—';
+  var d = new Date(val); if (isNaN(d.getTime())) return formatDate(val);
+  return formatDate(val) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function escHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function todayISO() {
+  var d = new Date();
+  return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+}
+
+function todayLong() {
+  return new Date().toLocaleDateString('he-IL', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+}
+
+function getAge(dob) {
+  if (!dob) return null;
+  var b = new Date(dob), n = new Date(), a = n.getFullYear() - b.getFullYear();
+  if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a--;
+  return a >= 0 ? a : null;
+}
+
+function calcBmi(w, h) {
+  var wn = parseFloat(w), hn = parseFloat(h) / 100;
+  if (!wn || !hn || hn <= 0) return '';
+  return (wn / (hn * hn)).toFixed(1);
+}
+
+function avatarColor(name) {
+  var colors = ['#1a6fbd','#0fa37f','#d4850f','#c23b3b','#6b46c1','#0891b2','#0f766e','#9d6b00'];
+  var i = 0; if (name) for (var j = 0; j < name.length; j++) i = (i + name.charCodeAt(j)) % colors.length;
+  return colors[i];
+}
+
+function fileIcon(mime) {
+  if (!mime) return '📎';
+  if (mime.indexOf('image') === 0) return '🖼️';
+  if (mime === 'application/pdf') return '📄';
+  return '📎';
+}
+
+function isOverdue(dateStr) {
+  if (!dateStr) return false;
+  var d = new Date(dateStr); if (isNaN(d.getTime())) return false;
+  return d < new Date();
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  var d = new Date(dateStr); if (isNaN(d.getTime())) return null;
+  var diff = Math.round((d - new Date()) / 86400000);
+  return diff;
+}
+
+// ============================================================================
+// ROLES & PERMISSIONS
+// ============================================================================
+var ROLE_NURSE     = 'Nurse';
+var ROLE_PHYSICIAN = 'Physician';
+var ROLE_DOCTOR    = 'Doctor';
+var ROLE_SECRETARY = 'Secretary';
+var ROLE_ADMIN     = 'Admin';
+
+var USER_PERMISSION_KEYS = [
+  'CanViewPatients','CanCreatePatients','CanEditPatients','CanDeletePatients',
+  'CanViewVisits','CanCreateVisits','CanEditVisits','CanDeleteVisits',
+  'CanViewReports','CanManageUsers','CanImportData','CanExportData'
+];
+var USER_PERMISSION_LABELS = {
+  CanViewPatients:'צפייה במטופלים', CanCreatePatients:'יצירת מטופלים',
+  CanEditPatients:'עריכת מטופלים',  CanDeletePatients:'מחיקת מטופלים',
+  CanViewVisits:'צפייה בביקורים',   CanCreateVisits:'יצירת ביקורים',
+  CanEditVisits:'עריכת ביקורים',    CanDeleteVisits:'מחיקת ביקורים',
+  CanViewReports:'צפייה בדוחות',    CanManageUsers:'ניהול צוות',
+  CanImportData:'ייבוא נתונים',     CanExportData:'ייצוא נתונים'
+};
+var PERMISSION_GROUPS = [
+  { label:'👥 מטופלים', keys:['CanViewPatients','CanCreatePatients','CanEditPatients','CanDeletePatients'] },
+  { label:'📋 ביקורים', keys:['CanViewVisits','CanCreateVisits','CanEditVisits','CanDeleteVisits'] },
+  { label:'📊 דוחות',   keys:['CanViewReports','CanExportData','CanImportData'] },
+  { label:'⚙️ ניהול',   keys:['CanManageUsers'] }
+];
+
+function boolPermission(value, fallback) {
+  if (value === true)  return true;
+  if (value === false) return false;
+  if (value === undefined || value === null || value === '') return !!fallback;
+  return ['true','1','yes','y','כן'].indexOf(String(value).trim().toLowerCase()) !== -1;
+}
+
+function defaultPermissionsForRole(role) {
+  var p = {}; USER_PERMISSION_KEYS.forEach(function(k){ p[k]=false; });
+  if (role === ROLE_ADMIN) { USER_PERMISSION_KEYS.forEach(function(k){ p[k]=true; }); }
+  else if (role === ROLE_NURSE) { p.CanViewPatients=p.CanCreatePatients=p.CanEditPatients=p.CanViewVisits=p.CanCreateVisits=p.CanEditVisits=p.CanViewReports=true; }
+  else if (role === ROLE_PHYSICIAN || role === ROLE_DOCTOR) { p.CanViewPatients=p.CanViewVisits=p.CanEditVisits=p.CanViewReports=p.CanExportData=true; }
+  else if (role === ROLE_SECRETARY) { p.CanViewPatients=p.CanCreatePatients=p.CanEditPatients=p.CanViewVisits=p.CanViewReports=true; }
+  return p;
+}
+
+function permissionForUser(user, key) {
+  var def = defaultPermissionsForRole(user && user.Role);
+  var src = (user && user.permissions) || (user && user.Permissions) || user || {};
+  if (src[key] !== undefined) return boolPermission(src[key], def[key]);
+  return boolPermission(user && user[key], def[key]);
+}
+
+function renderPermissionToggles(user, prefix) {
+  return '<div class="permission-groups">' +
+    PERMISSION_GROUPS.map(function(grp) {
+      return '<div class="permission-group">' +
+        '<div class="permission-group-title">' + escHtml(grp.label) + '</div>' +
+        '<div class="permission-grid">' +
+        grp.keys.map(function(key) {
+          var checked = permissionForUser(user||{}, key) ? ' checked' : '';
+          return '<label class="permission-toggle">' +
+            '<input type="checkbox" name="' + escHtml(prefix||'perm') + '-' + escHtml(key) + '" data-permission-key="' + escHtml(key) + '"' + checked + '>' +
+            '<span>' + escHtml(USER_PERMISSION_LABELS[key]||key) + '</span></label>';
+        }).join('') +
+        '</div></div>';
+    }).join('') + '</div>';
+}
+
+function collectPermissions(root) {
+  var p = {}; USER_PERMISSION_KEYS.forEach(function(k){ p[k]=false; });
+  Array.prototype.slice.call(root.querySelectorAll('[data-permission-key]')).forEach(function(inp){
+    p[inp.getAttribute('data-permission-key')] = !!inp.checked;
+  });
+  return p;
+}
+
+// ============================================================================
+// APP — router
+// ============================================================================
+var App = {
+  clinicId: '',
+  user: null,
+  navStack: [],
+  activeNav: 'dashboard',
+  _current: null,
+  _cache: {},
+  _cacheTTL: {},       // key → expiry ms
+  _PAGE_SIZE: 30,      // patient list page size
+
+  // Set cache with TTL (seconds). Pass 0 to cache forever (until explicit invalidation).
+  setCache: function(key, data, ttlSeconds) {
+    this._cache[key] = data;
+    this._cacheTTL[key] = ttlSeconds ? (Date.now() + ttlSeconds * 1000) : 0;
+  },
+  getCache: function(key) {
+    if (!(key in this._cache)) return null;
+    var exp = this._cacheTTL[key];
+    if (exp && Date.now() > exp) { delete this._cache[key]; delete this._cacheTTL[key]; return null; }
+    return this._cache[key];
+  },
+  invalidatePatientCache: function(patientId) {
+    delete this._cache['patient_' + patientId];
+    delete this._cache.patientList;
+    delete this._cache.dashboardSummary;
+    delete this._cacheTTL.patientList;
+    delete this._cacheTTL.dashboardSummary;
+  },
+
+  go: function(view, params) {
+    if (this._current) this.navStack.push(this._current);
+    this._render(view, params || {});
+  },
+  back: function() {
+    var prev = this.navStack.pop();
+    if (prev) this._render(prev.view, prev.params);
+    else this._render('dashboard', {});
+  },
+  tab: function(view) {
+    this.navStack = []; this.activeNav = view; this._render(view, {});
+  },
+
+  _render: function(view, params) {
+    this._current = { view: view, params: params };
+    window.scrollTo(0, 0);
+    var map = {
+      dashboard:       renderDashboard,
+      patients:        renderPatients,
+      'patient-detail':renderPatientDetail,
+      'add-patient':   renderAddPatient,
+      'edit-patient':  renderEditPatient,
+      'new-visit':     renderNewVisit,
+      'users':            renderUsers,
+      'add-user':         renderAddUser,
+      'audit-log':        renderAuditLog,
+      'clinic-settings':  renderClinicSettings,
+      'my-profile':       renderMyProfile,
+      boot:            renderBoot,
+      error:           renderError
+    };
+    var fn = map[view];
+    if (fn) fn(params);
+    else setAppHTML(sidebarNav('') + '<div class="screen no-nav">' + backHeader('?') + '<div class="screen-body"><div class="error-card">לא נמצא המסך: ' + escHtml(view) + '</div></div></div>');
+  },
+
+  init: function() {
+    this.clinicId = document.body.getAttribute('data-clinic-id') || '';
+    if (!this.clinicId) { this._render('error', { message:'מזהה מרפאה חסר ב-URL.' }); return; }
+    renderBoot();
+    OfflineQueue.flush();
+    var self = this;
+    api('api_whoAmI')
+      .then(function(u) {
+        self.user = u;
+        if (u && u.clinicId) self.clinicId = u.clinicId;
+        self._render('dashboard', {});
+      })
+      .catch(function(err) { self._render('error', { message: err.message, hint: true }); });
+  },
+
+  hasPermission: function(key) {
+    if (!this.user) return false;
+    if (this.user.role === ROLE_ADMIN) return true;
+    return boolPermission(this.user.permissions && this.user.permissions[key], defaultPermissionsForRole(this.user.role)[key]);
+  },
+  isAdmin:     function() { return this.user && this.user.role === ROLE_ADMIN; },
+  isPhysician: function() { return this.user && (this.user.role === ROLE_PHYSICIAN || this.user.role === ROLE_DOCTOR); },
+  canCreatePatients: function() { return this.hasPermission('CanCreatePatients'); },
+  canEditPatients:   function() { return this.hasPermission('CanEditPatients'); },
+  canDeletePatients: function() { return this.hasPermission('CanDeletePatients'); },
+  canCreateVisits:   function() { return this.hasPermission('CanCreateVisits'); },
+  canEditVisits:     function() { return this.hasPermission('CanEditVisits'); },
+  canManageUsers:    function() { return this.hasPermission('CanManageUsers'); },
+  canExportData:     function() { return this.hasPermission('CanExportData'); }
+};
+
+// ============================================================================
+// SHARED PARTIALS
+// ============================================================================
+function setAppHTML(html) { document.getElementById('app').innerHTML = html; }
+
+function bottomNav(active) {
+  var items = [
+    { key:'dashboard',  icon:'⌂',  label:'בית' },
+    { key:'patients',   icon:'👥', label:'מטופלים' }
+  ];
+  if (App.canManageUsers()) {
+    items.push({ key:'users',         icon:'👤', label:'צוות' });
+    items.push({ key:'audit-log',     icon:'📋', label:'לוג' });
+    items.push({ key:'clinic-settings', icon:'⚙', label:'הגדרות' });
+  }
+  items.push({ key:'my-profile', icon:'◉', label:'פרופיל' });
+  return '<nav class="bottom-nav" role="navigation">' +
+    items.map(function(item) {
+      return '<button class="nav-item' + (active === item.key ? ' active' : '') +
+        '" data-action="tab" data-view="' + item.key + '">' +
+        '<span class="nav-icon">' + item.icon + '</span>' +
+        '<span>' + item.label + '</span></button>';
+    }).join('') + '</nav>';
+}
+
+function sidebarNav(active) {
+  var u = App.user || {};
+  var roleLabels = { Admin:'מנהל/ת', Nurse:'אחות/אח', Physician:'רופא/ה', Doctor:'רופא/ה', Secretary:'מזכיר/ה' };
+  var color = avatarColor(u.fullName || u.email || '');
+
+  function navItem(item) {
+    return '<div class="sidebar-item' + (active === item.key ? ' active' : '') +
+      '" data-action="tab" data-view="' + item.key + '">' +
+      '<span class="sidebar-item-icon">' + item.icon + '</span>' +
+      escHtml(item.label) + '</div>';
+  }
+
+  var mainItems = [
+    { key:'dashboard', icon:'⌂',  label:'לוח בקרה' },
+    { key:'patients',  icon:'👥', label:'מטופלים' }
+  ];
+
+  var adminHtml = '';
+  if (App.canManageUsers()) {
+    adminHtml = '<div class="sidebar-section">ניהול</div>' +
+      [{ key:'users',           icon:'👤', label:'ניהול צוות' },
+       { key:'audit-log',       icon:'📋', label:'לוג פעולות' },
+       { key:'clinic-settings', icon:'⚙',  label:'הגדרות' }].map(navItem).join('');
+  }
+
+  return '<nav class="sidebar-nav" role="navigation">' +
+    '<div class="sidebar-brand">' +
+      '<div class="sidebar-brand-icon">🩺</div>' +
+      '<div>' +
+        '<div class="sidebar-product-name">MedFlow</div>' +
+        '<div class="sidebar-clinic-tag">מעקב פוסט-אופרטיבי</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="sidebar-section">ראשי</div>' +
+    mainItems.map(navItem).join('') +
+    adminHtml +
+    '<div class="sidebar-footer">' +
+      '<div class="sidebar-user" data-action="tab" data-view="my-profile">' +
+        '<div class="sidebar-user-avatar" style="background:' + color + '">' + escHtml(initials(u.fullName||u.email||'?')) + '</div>' +
+        '<div class="sidebar-user-info">' +
+          '<div class="sidebar-user-name">' + escHtml((u.fullName||u.email||'').split(' ').slice(0,2).join(' ')) + '</div>' +
+          '<div class="sidebar-user-role">' + escHtml(roleLabels[u.role]||u.role||'') + '</div>' +
+        '</div>' +
+        '<div class="sidebar-online-dot"></div>' +
+      '</div>' +
+    '</div>' +
+  '</nav>';
+}
+
+function backHeader(title, rightHtml) {
+  return '<header class="screen-header">' +
+    '<button class="btn-back" data-action="back" aria-label="חזרה">‹</button>' +
+    '<span class="header-title">' + escHtml(title) + '</span>' +
+    (rightHtml || '<div style="width:40px"></div>') +
+    '</header>';
+}
+
+function tabHeader(title, rightHtml) {
+  return '<header class="screen-header">' +
+    '<div style="width:40px"></div>' +
+    '<span class="header-title">' + escHtml(title) + '</span>' +
+    (rightHtml || '<div style="width:40px"></div>') +
+    '</header>';
+}
+
+function skeletons(n, h) {
+  var s = ''; for (var i = 0; i < n; i++) s += '<div class="skeleton-card" style="min-height:' + (h||80) + 'px"></div>'; return s;
+}
+
+function infoRow(label, value) {
+  if (value === null || value === undefined || String(value).trim() === '' || value === '—') return '';
+  return '<div class="info-row"><span class="info-label">' + escHtml(label) + '</span><span class="info-value">' + escHtml(String(value)) + '</span></div>';
+}
+
+function visitStatusPill(status) {
+  if (status === 'finalized') return '<span class="pill pill-green">✓ הושלמה</span>';
+  if (status === 'draft')     return '<span class="pill pill-gray">טיוטה</span>';
+  return '<span class="pill pill-blue">' + escHtml(status||'') + '</span>';
+}
+
+function showFormError(form, msg) {
+  var ex = form.querySelector('.error-card'); if (ex) ex.remove();
+  var div = document.createElement('div'); div.className = 'error-card'; div.textContent = msg;
+  form.insertBefore(div, form.firstChild);
+  div.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function formGroup(name, label, type, value, placeholder, required) {
+  var id = escHtml(name), req = required ? '<span class="required">*</span>' : '';
+  if (type === 'textarea') {
+    return '<div class="form-group"><label class="form-label" for="' + id + '">' + escHtml(label) + req + '</label>' +
+      '<textarea class="form-input" id="' + id + '" name="' + id + '" placeholder="' + escHtml(placeholder||'') + '" rows="3">' + escHtml(value||'') + '</textarea></div>';
+  }
+  if (type === 'select2') return ''; // handled inline
+  return '<div class="form-group"><label class="form-label" for="' + id + '">' + escHtml(label) + req + '</label>' +
+    '<input class="form-input" type="' + escHtml(type) + '" id="' + id + '" name="' + id + '" value="' + escHtml(value||'') + '" placeholder="' + escHtml(placeholder||'') + '"' + (required?' required':'') + '></div>';
+}
+
+function roleOption(value, selected, label) {
+  return '<option value="' + escHtml(value) + '"' + (value===selected?' selected':'') + '>' + escHtml(label) + '</option>';
+}
+
+function populateUserDropdown(selectId, users, preselect, empty) {
+  var el = document.getElementById(selectId); if (!el) return;
+  el.innerHTML = '<option value="">' + escHtml(empty||'בחר…') + '</option>';
+  (users||[]).forEach(function(u) {
+    var opt = document.createElement('option');
+    opt.value = u.RecordId;
+    opt.textContent = (u.FullName||u.Email) + ' (' + u.Role + ')';
+    if (u.RecordId === preselect) opt.selected = true;
+    el.appendChild(opt);
+  });
+}
+
+// ============================================================================
+// VIEW: BOOT
+// ============================================================================
+function renderBoot() {
+  setAppHTML(
+    '<div class="boot-screen">' +
+    '<div class="boot-logo"><span class="boot-logo-icon">🩺</span> MedFlow</div>' +
+    '<div class="boot-sub">ניהול מעקב פוסט-אופרטיבי</div>' +
+    '<div class="spinner" style="margin-top:8px"></div>' +
+    '</div>'
+  );
+}
+
+// ============================================================================
+// VIEW: ERROR
+// ============================================================================
+function renderError(p) {
+  var hint = p.hint ? '<p>ודא שחשבון Google שלך (<strong>' + escHtml((App.user&&App.user.email)||'') + '</strong>) מוגדר במערכת MedFlow ושיש לך הרשאת גישה.</p>' : '';
+  setAppHTML(
+    '<div class="boot-error">' +
+    '<div style="font-size:52px">🔒</div>' +
+    '<h2>לא ניתן לטעון</h2>' +
+    '<p>' + escHtml(p.message||'שגיאה בלתי צפויה') + '</p>' +
+    hint +
+    '<p style="font-size:12px;color:var(--text-3)">פנה למנהל המערכת לקבלת גישה</p>' +
+    '</div>'
+  );
+}
+
+// ============================================================================
+// VIEW: DASHBOARD — helpers
+// ============================================================================
+function qaBtn(icon, label, action, view, colorClass) {
+  return '<button class="qa-btn" data-action="' + escHtml(action) + '" data-view="' + escHtml(view) + '">' +
+    '<div class="qa-icon-wrap ' + escHtml(colorClass) + '">' + icon + '</div>' +
+    '<div class="qa-label">' + escHtml(label) + '</div>' +
+    '</button>';
+}
+
+function renderAttentionCard(p) {
+  var name = p.FullName || '—';
+  var color = avatarColor(name);
+  var pod = (p.pod !== null && p.pod !== undefined) ? 'POD ' + p.pod : '';
+  var surgery = p.SurgeryType ? String(p.SurgeryType).substring(0, 24) : '';
+  var sub = [surgery, pod].filter(Boolean).join(' · ') || (p.AssignedNurseName ? p.AssignedNurseName.split(' ')[0] : '');
+
+  var stripClass = p.UrgencyStatus === 'urgent' ? 'urgent'
+    : p.UrgencyStatus === 'watch'  ? 'watch'
+    : (p.NextFollowUpDate && isOverdue(p.NextFollowUpDate)) ? 'overdue'
+    : 'today';
+
+  var pillLabel = p.UrgencyStatus === 'urgent' ? '🚨 דחוף'
+    : p.UrgencyStatus === 'watch' ? '👁 מעקב'
+    : (p.NextFollowUpDate && isOverdue(p.NextFollowUpDate)) ? '⏳ ' + formatDate(p.NextFollowUpDate)
+    : '📅 היום';
+
+  return '<div class="att-card" data-action="open-patient" data-patient-id="' + escHtml(p.RecordId) + '">' +
+    '<div class="att-strip ' + stripClass + '"></div>' +
+    '<div class="att-body">' +
+      '<div class="att-avatar" style="background:' + color + '">' + escHtml(initials(name)) + '</div>' +
+      '<div class="att-info">' +
+        '<div class="att-name">' + escHtml(name) + '</div>' +
+        '<div class="att-sub">' + escHtml(sub) + '</div>' +
+      '</div>' +
+      '<div class="att-right">' +
+        (pod ? '<span class="att-pod">' + escHtml(pod) + '</span>' : '') +
+        '<span class="att-pill ' + stripClass + '">' + pillLabel + '</span>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// ============================================================================
+// VIEW: DASHBOARD
+// ============================================================================
+function renderDashboard() {
+  var user = App.user || {};
+  var firstName = (user.fullName || user.email || 'משתמש').split(/[\s@]/)[0];
+  var hour = new Date().getHours();
+  var greeting = hour < 5 ? 'לילה טוב' : hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב';
+  var avatarColor_ = avatarColor(user.fullName || user.email || '');
+  var avatarInitials_ = initials(user.fullName || user.email || '?');
+
+  var qaBtns = '';
+  if (App.canCreatePatients()) qaBtns += qaBtn('➕', 'מטופל חדש', 'go',  'add-patient', 'qa-blue');
+  if (App.canCreateVisits())   qaBtns += qaBtn('📋', 'ביקור חדש', 'tab', 'patients',    'qa-teal');
+  if (App.canExportData())     qaBtns += qaBtn('📄', 'ייצוא PDF',  'tab', 'patients',    'qa-amber');
+  if (App.canManageUsers())    qaBtns += qaBtn('👤', 'ניהול צוות', 'tab', 'users',       'qa-purple');
+  else                         qaBtns += qaBtn('◉',  'הפרופיל שלי','tab', 'my-profile',  'qa-gray');
+
+  setAppHTML(
+    sidebarNav('dashboard') +
+    '<div class="screen">' +
+
+    // ── Premium Hero (replaces screen-header on dashboard) ──
+    '<div class="dash-hero">' +
+      '<div class="dash-hero-inner">' +
+        '<div class="dash-hero-toprow">' +
+          '<div class="dash-hero-wordmark">MedFlow</div>' +
+          '<div class="dash-hero-controls">' +
+            '<div class="dash-hero-avatar-btn" style="background:' + avatarColor_ + '" data-action="tab" data-view="my-profile">' +
+              escHtml(avatarInitials_) +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="dash-hero-date">' + todayLong() + '</div>' +
+        '<div class="dash-hero-greeting">' + greeting + ', <strong>' + escHtml(firstName) + '</strong></div>' +
+        '<div class="dash-hero-summary" id="dash-hero-summary">טוען נתונים…</div>' +
+        '<div class="dash-hero-tag" id="dash-hero-tag"></div>' +
+      '</div>' +
+    '</div>' +
+
+    // ── Screen body ──
+    '<div class="screen-body" style="padding-top:18px">' +
+
+    // KPI grid
+    '<div class="kpi-grid anim-in">' +
+      '<div class="kpi-card kpi-red" data-action="tab" data-view="patients" data-filter-on-arrive="urgent">' +
+        '<div class="kpi-icon">🚨</div>' +
+        '<div class="kpi-num" id="ds-urgent">—</div>' +
+        '<div class="kpi-label">דחופים</div>' +
+      '</div>' +
+      '<div class="kpi-card kpi-amber" data-action="tab" data-view="patients" data-filter-on-arrive="overdue">' +
+        '<div class="kpi-icon">⏳</div>' +
+        '<div class="kpi-num" id="ds-overdue">—</div>' +
+        '<div class="kpi-label">באיחור</div>' +
+      '</div>' +
+      '<div class="kpi-card kpi-blue" data-action="tab" data-view="patients" data-filter-on-arrive="today">' +
+        '<div class="kpi-icon">📅</div>' +
+        '<div class="kpi-num" id="ds-followup">—</div>' +
+        '<div class="kpi-label">מעקבי היום</div>' +
+      '</div>' +
+      '<div class="kpi-card kpi-teal">' +
+        '<div class="kpi-icon">👥</div>' +
+        '<div class="kpi-num" id="ds-total">—</div>' +
+        '<div class="kpi-label">מטופלים פעילים</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Quick actions
+    '<p class="section-label anim-in anim-in-d1">פעולות מהירות</p>' +
+    '<div class="qa-grid anim-in anim-in-d1">' + qaBtns + '</div>' +
+
+    // Attention
+    '<p class="section-label anim-in anim-in-d2" id="attention-label">זקוקים לתשומת לב</p>' +
+    '<div id="dashboard-list" style="display:flex;flex-direction:column;gap:8px">' + skeletons(3) + '</div>' +
+
+    '</div>' + bottomNav('dashboard') + '</div>'
+  );
+
+  var cached = App.getCache('dashboardSummary');
+  if (cached) { _applyDashSummary(cached); }
+
+  api('api_getDashboardSummary')
+    .then(function(summary) {
+      App.setCache('dashboardSummary', summary, 180);
+      _applyDashSummary(summary);
+    })
+    .catch(function(err) {
+      var summaryEl = document.getElementById('dash-hero-summary');
+      if (summaryEl) summaryEl.textContent = '';
+      var el = document.getElementById('dashboard-list');
+      if (el) el.innerHTML = '<div class="error-card">' + friendlyError(err.message) + '</div>';
+    });
+}
+
+function _applyDashSummary(summary) {
+  function gid(id) { return document.getElementById(id); }
+  var urg = summary.urgentCount  || 0;
+  var ovd = summary.overdueCount || 0;
+  var tod = summary.todayCount   || 0;
+  var act = summary.activeCount  || 0;
+
+  if (gid('ds-urgent'))   gid('ds-urgent').textContent   = urg;
+  if (gid('ds-overdue'))  gid('ds-overdue').textContent  = ovd;
+  if (gid('ds-followup')) gid('ds-followup').textContent = tod;
+  if (gid('ds-total'))    gid('ds-total').textContent    = act;
+
+  // Pulse animation on urgent card when count > 0
+  var urgCard = gid('ds-urgent') && gid('ds-urgent').closest && gid('ds-urgent').closest('.kpi-card');
+  if (urgCard) urgCard.classList.toggle('kpi-live', urg > 0);
+
+  // Hero summary line
+  var summaryEl = gid('dash-hero-summary');
+  if (summaryEl) {
+    var needs = urg + ovd + tod;
+    summaryEl.textContent = needs > 0
+      ? 'יש לך היום ' + needs + ' מטופל' + (needs > 1 ? 'ות' : '') + ' הדור' + (needs > 1 ? 'שות' : 'שת') + ' תשומת לב'
+      : act > 0 ? 'כל המטופלים מטופלים. יום נהדר! 👏' : '';
+  }
+
+  // Hero status badge
+  var tagEl = gid('dash-hero-tag');
+  if (tagEl) {
+    if (urg > 0) {
+      tagEl.innerHTML = '<div class="dash-hero-tag-inner has-urgent">🚨 ' + urg + ' דחוף — טיפול מיידי נדרש</div>';
+    } else if (ovd + tod > 0) {
+      tagEl.innerHTML = '<div class="dash-hero-tag-inner">' + (ovd + tod) + ' מטופלים ממתינים למעקב</div>';
+    } else if (act > 0) {
+      tagEl.innerHTML = '<div class="dash-hero-tag-inner all-ok">✅ הכל תחת שליטה</div>';
+    } else {
+      tagEl.innerHTML = '';
+    }
+  }
+
+  var attention = summary.attention || [];
+  var listEl = document.getElementById('dashboard-list');
+  var lblEl  = document.getElementById('attention-label');
+  if (!listEl) return;
+
+  if (!attention.length) {
+    if (lblEl) lblEl.style.display = 'none';
+    listEl.innerHTML = !act
+      ? emptyState('🏥', 'אין מטופלים עדיין', App.canCreatePatients() ? 'לחץ + כדי להוסיף מטופל ראשון' : '', App.canCreatePatients() ? 'add-patient' : '')
+      : '<div class="attention-all-ok">' +
+          '<div style="font-size:36px;margin-bottom:4px">✅</div>' +
+          '<div class="attention-ok-title">הכל בסדר!</div>' +
+          '<div class="attention-ok-sub">אין מקרים דחופים או מעקבים באיחור</div>' +
+          '<button class="btn-outline" style="width:auto;margin-top:12px" data-action="tab" data-view="patients">צפה בכל ' + act + ' המטופלים</button>' +
+        '</div>';
+    return;
+  }
+
+  listEl.innerHTML = attention.map(function(p){ return renderAttentionCard(p); }).join('') +
+    (act > attention.length
+      ? '<button class="btn-outline" style="margin-top:4px" data-action="tab" data-view="patients">צפה בכל ' + act + ' המטופלים ›</button>'
+      : '');
+}
+
+// ============================================================================
+// EMPTY STATE helper
+// ============================================================================
+function emptyState(icon, title, body, action) {
+  return '<div class="empty-state">' +
+    '<div class="empty-icon">' + icon + '</div>' +
+    '<div class="empty-title">' + escHtml(title) + '</div>' +
+    (body ? '<div class="empty-body">' + escHtml(body) + '</div>' : '') +
+    (action ? '<button class="btn-primary" data-action="go" data-view="' + escHtml(action) + '" style="max-width:200px;min-height:44px">הוספה</button>' : '') +
+    '</div>';
+}
+
+function friendlyError(msg) {
+  if (!msg) return 'שגיאה לא ידועה';
+  if (msg.toLowerCase().indexOf('network') !== -1 || msg.indexOf('שגיאת רשת') !== -1) return 'בעיית חיבור לרשת. בדוק/י אינטרנט ונסה שנית.';
+  if (msg.toLowerCase().indexOf('permission') !== -1 || msg.indexOf('גישה') !== -1) return 'אין לך הרשאה לפעולה זו.';
+  if (msg.toLowerCase().indexOf('not found') !== -1) return 'הרשומה לא נמצאה.';
+  return msg;
+}
+
+// ============================================================================
+// PATIENT CARD
+// ============================================================================
+function patientStatus(p) {
+  if (p.UrgencyStatus === 'urgent' || p.urgent) return 'urgent';
+  if (p.UrgencyStatus === 'watch') return 'watch';
+  if (p.NextFollowUpDate && isOverdue(p.NextFollowUpDate)) return 'followup';
+  if (p.visitedToday || p.status === 'completed') return 'ok';
+  if (p.Status === 'archived' || p.status === 'archived' || p.status === 'inactive') return 'inactive';
+  return '';
+}
+
+function patientStatusPill(p) {
+  var s = patientStatus(p);
+  if (s === 'urgent')   return '<span class="pill pill-red">🚨 דחוף</span>';
+  if (s === 'watch')    return '<span class="pill pill-amber">👁 מעקב</span>';
+  if (s === 'followup') return '<span class="pill pill-amber">⏳ פג תוקף</span>';
+  if (s === 'ok')       return '<span class="pill pill-green">✓ ביקר</span>';
+  if (s === 'inactive') return '<span class="pill pill-gray">לא פעיל</span>';
+  return '<span class="pill pill-gray">ממתין</span>';
+}
+
+function podBadgeClass(pod) {
+  if (pod === null || pod === undefined) return '';
+  if (pod <= 3)  return 'pod-badge pod-early';
+  if (pod <= 14) return 'pod-badge';
+  if (pod > 30)  return 'pod-badge pod-late';
+  return 'pod-badge';
+}
+
+function renderPatientCard(p) {
+  var name    = p.FullName || '—';
+  var color   = avatarColor(name);
+  var age     = getAge(p.DateOfBirth);
+  var surgery = p.SurgeryType || '';
+  var pod     = (p.pod !== null && p.pod !== undefined) ? p.pod : null;
+  var podText = pod !== null ? 'POD ' + pod : '';
+  var sub     = [surgery, age ? 'גיל ' + age : ''].filter(Boolean).join(' · ') || p.Phone || '';
+  var status  = patientStatus(p);
+
+  var urgencyBadge = '';
+  if (p.UrgencyStatus === 'urgent') urgencyBadge = '<span class="pod-badge pod-urgent">🚨 דחוף</span>';
+  else if (p.UrgencyStatus === 'watch') urgencyBadge = '<span class="pod-badge" style="background:var(--amber-bg);color:var(--amber-text)">👁 מעקב</span>';
+
+  var fuBadge = '';
+  if (p.FollowUpEnabled) {
+    var fuClass = p.NextFollowUpDate && isOverdue(p.NextFollowUpDate) ? 'fu-indicator overdue' : 'fu-indicator';
+    fuBadge = '<span class="' + fuClass + '">🔄 ' + (p.NextFollowUpDate ? formatDate(p.NextFollowUpDate) : 'מעקב') + '</span>';
+  }
+
+  // Meta row: nurse + next follow-up
+  var metaItems = [];
+  if (p.AssignedNurseName) metaItems.push('<span class="patient-card-meta-item">🧑‍⚕️ <strong>' + escHtml(p.AssignedNurseName.split(' ')[0]) + '</strong></span>');
+  if (p.ReferringPhysician || p.AssignedPhysicianName) metaItems.push('<span class="patient-card-meta-item">👨‍⚕️ <strong>' + escHtml((p.ReferringPhysician || p.AssignedPhysicianName || '').split(' ').slice(0,2).join(' ')) + '</strong></span>');
+  if (p.NextFollowUpDate) {
+    var fuClass2 = isOverdue(p.NextFollowUpDate) ? 'patient-card-meta-item overdue' : 'patient-card-meta-item';
+    var fuLabel  = isOverdue(p.NextFollowUpDate) ? '⚠ FU ' + formatDate(p.NextFollowUpDate) : 'FU ' + formatDate(p.NextFollowUpDate);
+    metaItems.push('<span class="' + fuClass2 + '">' + escHtml(fuLabel) + '</span>');
+  }
+  var metaRow = metaItems.length ? '<div class="patient-card-meta-row">' + metaItems.join('') + '</div>' : '';
+
+  var actionBtns =
+    '<button class="btn-action primary" data-action="open-patient" data-patient-id="' + escHtml(p.RecordId) + '" onclick="event.stopPropagation()">פתיחה</button>' +
+    (App.canCreateVisits()
+      ? '<button class="btn-action" data-action="start-visit" data-patient-id="' + escHtml(p.RecordId) + '" data-patient-name="' + escHtml(name) + '" onclick="event.stopPropagation()">📋 ביקור</button>'
+      : '') +
+    (App.canExportData()
+      ? '<button class="btn-action" data-action="quick-pdf" data-patient-id="' + escHtml(p.RecordId) + '" onclick="event.stopPropagation()">📄 PDF</button>'
+      : '');
+
+  return '<div class="patient-card status-' + escHtml(status) + '" data-action="open-patient" data-patient-id="' + escHtml(p.RecordId) + '">' +
+    '<div class="patient-card-top">' +
+      '<div class="patient-avatar" style="background:' + color + '">' + escHtml(initials(name)) + '</div>' +
+      '<div class="patient-card-info">' +
+        '<div class="patient-card-name">' + escHtml(name) + '</div>' +
+        '<div class="patient-card-sub">' + escHtml(sub) + '</div>' +
+        metaRow +
+        '<div class="patient-card-tags">' +
+          (podText ? '<span class="' + podBadgeClass(pod) + '">' + escHtml(podText) + '</span>' : '') +
+          urgencyBadge + fuBadge +
+        '</div>' +
+      '</div>' +
+      '<div class="patient-card-status">' + patientStatusPill(p) + '</div>' +
+    '</div>' +
+    '<div class="patient-card-actions">' + actionBtns + '</div>' +
+  '</div>';
+}
+
+// ============================================================================
+// VIEW: PATIENTS LIST
+// ============================================================================
+function renderPatients() {
+  setAppHTML(
+    sidebarNav('patients') +
+    '<div class="screen">' +
+    tabHeader('מטופלים', App.canCreatePatients() ? '<button class="btn-icon" data-action="go" data-view="add-patient" aria-label="הוסף">+</button>' : '') +
+    '<div class="search-bar">' +
+      '<div class="search-wrap"><span class="search-icon">🔍</span>' +
+        '<input class="search-input" id="patient-search" type="search" placeholder="שם · טלפון · ת.ז · ניתוח…" autocomplete="off" inputmode="search">' +
+      '</div>' +
+    '</div>' +
+    '<div class="filter-chips">' +
+      filterChip('all',     'הכל',       true) +
+      filterChip('urgent',  '🚨 דחוף',   false) +
+      filterChip('today',   '📅 היום',   false) +
+      filterChip('overdue', '⏳ באיחור', false) +
+      filterChip('mine',    '🧑‍⚕️ שלי',  false) +
+      filterChip('done',    '✅ ביקרו',  false) +
+    '</div>' +
+    '<div id="patients-list" class="screen-body" style="gap:10px">' + skeletons(4) + '</div>' +
+    bottomNav('patients') + '</div>'
+  );
+
+  var cached = App.getCache('patientList');
+  if (cached) {
+    window._patientListCache = cached;
+    window._patientFilter = App._pendingFilter || 'all';
+    App._pendingFilter = null;
+    applyPatientFilter();
+  }
+
+  api('api_getMyPatients')
+    .then(function(patients) {
+      var list = patients || [];
+      App.setCache('patientList', list, 120);
+      window._patientListCache = list;
+      if (!cached) {
+        window._patientFilter = App._pendingFilter || 'all';
+        App._pendingFilter = null;
+      } else if (App._pendingFilter) {
+        window._patientFilter = App._pendingFilter;
+        App._pendingFilter = null;
+      }
+      applyPatientFilter();
+    })
+    .catch(function(err) {
+      if (!cached) {
+        var el = document.getElementById('patients-list');
+        if (el) el.innerHTML = '<div class="error-card">' + friendlyError(err.message) + '</div>';
+      }
+    });
+}
+
+function filterChip(key, label, active) {
+  return '<button class="filter-chip' + (active ? ' active' : '') + '" data-patient-filter="' + escHtml(key) + '">' + escHtml(label) + '</button>';
+}
+
+function applyPatientFilter() {
+  var f = window._patientFilter || 'all';
+  var q = ((document.getElementById('patient-search') || {}).value || '').toLowerCase().trim();
+  var all = window._patientListCache || [];
+  var filtered = all.slice();
+
+  // Update chip UI
+  document.querySelectorAll('.filter-chip').forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-patient-filter') === f);
+  });
+
+  if (f === 'urgent')  filtered = filtered.filter(function(p){ return p.UrgencyStatus === 'urgent'; });
+  else if (f === 'today')   filtered = filtered.filter(function(p){ return p.NextFollowUpDate && daysUntil(p.NextFollowUpDate) === 0; });
+  else if (f === 'overdue') filtered = filtered.filter(function(p){ return p.NextFollowUpDate && isOverdue(p.NextFollowUpDate) && !p.visitedToday; });
+  else if (f === 'mine')    filtered = filtered.filter(function(p){ return p.AssignedNurseId && App.user && p.AssignedNurseId === App.user.recordId; });
+  else if (f === 'done')    filtered = filtered.filter(function(p){ return p.visitedToday || p.FollowUpStatus === 'completed'; });
+
+  if (q) {
+    filtered = filtered.filter(function(p) {
+      return [p.FullName, p.Phone, p.NationalId, p.SurgeryType, p.ReferringPhysician, p.AssignedNurseName].join(' ').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  renderPatientListItems(filtered, f);
+}
+
+function renderPatientListItems(patients, filter) {
+  var el = document.getElementById('patients-list'); if (!el) return;
+  if (!patients.length) {
+    var emptyMsg = filter === 'urgent' ? 'אין מקרים דחופים כרגע 👍'
+      : filter === 'overdue' ? 'אין מעקבים באיחור כרגע 👍'
+      : filter === 'today'   ? 'אין מעקבים מתוכננים להיום'
+      : filter === 'mine'    ? 'לא שויכו מטופלים לחשבון זה'
+      : 'לא נמצאו מטופלים';
+    el.innerHTML = emptyState('👥', emptyMsg, 'נסה/י פילטר אחר', App.canCreatePatients() && filter === 'all' ? 'add-patient' : '');
+    return;
+  }
+  var page = App._PAGE_SIZE;
+  var visible = patients.slice(0, page);
+  var rest    = patients.slice(page);
+  el.innerHTML = visible.map(function(p){ return renderPatientCard(p); }).join('') +
+    (rest.length
+      ? '<button class="btn-outline" id="load-more-patients" style="margin:8px 0 16px">' +
+          'הצג עוד (' + rest.length + ' נוספים)' +
+        '</button>'
+      : '');
+  if (rest.length) {
+    var btn = document.getElementById('load-more-patients');
+    if (btn) btn.addEventListener('click', function() {
+      btn.remove();
+      var frag = document.createDocumentFragment();
+      rest.forEach(function(p) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = renderPatientCard(p);
+        frag.appendChild(tmp.firstChild);
+      });
+      el.appendChild(frag);
+    });
+  }
+}
+
+// ============================================================================
+// VIEW: PATIENT DETAIL  — tabbed
+// ============================================================================
+function renderPatientDetail(params) {
+  var pid = params.patientId;
+  setAppHTML(sidebarNav('patients') + '<div class="screen no-nav">' + backHeader('טוען…') + '<div class="screen-body">' + skeletons(4) + '</div></div>');
+
+  api('api_getPatient', pid)
+    .then(function(data) {
+      var p  = data.patient;
+      var vs = data.visits   || [];
+      var tl = data.timeline || [];
+      App._cache['patient_' + pid] = data;
+
+      var age   = getAge(p.DateOfBirth);
+      var color = avatarColor(p.FullName);
+      var pod   = (p.pod !== null && p.pod !== undefined) ? 'יום ' + p.pod : '';
+
+      var editBtn = App.canEditPatients()
+        ? '<button class="btn-icon" data-action="go" data-view="edit-patient" data-patient-id="' + escHtml(p.RecordId) + '" aria-label="ערוך">✎</button>'
+        : '<div style="width:40px"></div>';
+
+      var html =
+        sidebarNav('patients') +
+        '<div class="screen no-nav">' +
+        '<header class="screen-header">' +
+          '<button class="btn-back" data-action="back">‹</button>' +
+          '<span class="header-title">' + escHtml(p.FullName||'מטופל') + '</span>' +
+          editBtn +
+        '</header>' +
+
+        // Hero
+        '<div class="profile-hero">' +
+          '<div class="profile-hero-row">' +
+            '<div class="profile-avatar" style="background:rgba(255,255,255,0.22)">' + escHtml(initials(p.FullName)) + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div class="profile-name">' + escHtml(p.FullName) + '</div>' +
+              '<div class="profile-meta">' +
+                (age ? 'גיל ' + age : '') +
+                (p.Sex ? (age ? ' · ' : '') + escHtml(p.Sex) : '') +
+                (p.BloodType ? ' · ' + escHtml(p.BloodType) : '') +
+              '</div>' +
+              '<div class="profile-pills">' +
+                (pod ? '<span class="profile-pill">' + escHtml(pod) + '</span>' : '') +
+                (p.SurgeryType ? '<span class="profile-pill">' + escHtml(p.SurgeryType) + '</span>' : '') +
+                (p.UrgencyStatus === 'urgent' ? '<span class="profile-pill urgent">🚨 דחוף</span>' : '') +
+                (p.UrgencyStatus === 'watch'  ? '<span class="profile-pill watch">👁 מעקב</span>' : '') +
+                (p.Allergies ? '<span class="profile-pill" style="background:rgba(255,80,80,0.25)">⚠ ' + escHtml(p.Allergies.split(',')[0].trim()) + '</span>' : '') +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="profile-stats-strip">' +
+            (pod ? '<div class="profile-stat-item"><div class="profile-stat-label">POD</div><div class="profile-stat-value">' + pod + '</div></div>' : '') +
+            (p.AssignedNurseName ? '<div class="profile-stat-item"><div class="profile-stat-label">אחות</div><div class="profile-stat-value" style="font-size:12px">' + escHtml(p.AssignedNurseName.split(' ')[0]) + '</div></div>' : '') +
+            (p.ReferringPhysician ? '<div class="profile-stat-item"><div class="profile-stat-label">רופא</div><div class="profile-stat-value" style="font-size:11px">' + escHtml(p.ReferringPhysician.split(' ').slice(0,2).join(' ')) + '</div></div>' : '') +
+            (p.NextFollowUpDate ? '<div class="profile-stat-item"><div class="profile-stat-label">FU הבא</div><div class="profile-stat-value' + (isOverdue(p.NextFollowUpDate) ? ' overdue' : '') + '" style="font-size:12px">' + escHtml(formatDate(p.NextFollowUpDate)) + '</div></div>' : '') +
+          '</div>' +
+          '<div class="profile-cta">' +
+            (App.canCreateVisits()
+              ? '<button class="profile-cta-btn profile-cta-primary" data-action="start-visit" data-patient-id="' + escHtml(p.RecordId) + '" data-patient-name="' + escHtml(p.FullName) + '">📋 ביקור חדש</button>'
+              : '<div></div>') +
+            (App.canExportData()
+              ? '<button class="profile-cta-btn profile-cta-secondary" data-action="quick-pdf" data-patient-id="' + escHtml(p.RecordId) + '">📄 ייצוא PDF</button>'
+              : (p.Phone ? '<a class="profile-cta-btn profile-cta-secondary" href="tel:' + escHtml(p.Phone) + '">📞 ' + escHtml(p.Phone) + '</a>' : '<div></div>')) +
+          '</div>' +
+        '</div>' +
+
+        // Tab bar
+        '<div class="tab-bar" id="pd-tabs">' +
+          tabBtn('overview','פרטים',true) +
+          tabBtn('visits','ביקורים (' + vs.length + ')') +
+          tabBtn('images','תמונות') +
+          tabBtn('pdf','דוחות PDF') +
+          tabBtn('notes','הערות') +
+          tabBtn('timeline','ציר זמן') +
+          (App.isAdmin() || App.user && App.user.role === ROLE_SECRETARY ? tabBtn('followup-journey','מסע מעקב') : '') +
+          (App.isAdmin() || App.isPhysician() ? tabBtn('admin-actions','פעולות') : '') +
+        '</div>' +
+
+        '<div id="tab-body" style="max-width:var(--max-w);margin:0 auto;width:100%"></div>' +
+        '</div>';
+
+      setAppHTML(html);
+      renderPatientTab('overview', p, vs, tl, pid);
+    })
+    .catch(function(err) {
+      setAppHTML(sidebarNav('patients') + '<div class="screen no-nav">' + backHeader('שגיאה') +
+        '<div class="screen-body"><div class="error-card">' + friendlyError(err.message) + '</div></div></div>');
+    });
+}
+
+function tabBtn(id, label, active) {
+  return '<button class="tab-btn' + (active?' active':'') + '" data-action="switch-tab" data-tab="' + id + '">' + escHtml(label) + '</button>';
+}
+
+function renderPatientTab(tab, p, vs, tl, pid) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+  var body = document.getElementById('tab-body'); if (!body) return;
+  switch(tab) {
+    case 'overview':     body.innerHTML = tabOverview(p, vs); break;
+    case 'visits':       body.innerHTML = tabVisits(vs, p, pid); break;
+    case 'images':       body.innerHTML = '<div class="tab-content" id="images-tab-body">' + skeletons(2,80) + '</div>'; loadPatientImages(pid); break;
+    case 'pdf':          body.innerHTML = tabPdf(vs, p, pid); break;
+    case 'notes':        body.innerHTML = tabNotes(p, vs); break;
+    case 'timeline':     body.innerHTML = tabTimeline(tl); break;
+    case 'followup-journey': body.innerHTML = tabFollowUpJourney(p, pid); break;
+    case 'admin-actions':body.innerHTML = tabAdminActions(p, pid); break;
+    default: body.innerHTML = '';
+  }
+}
+
+// ---- TAB: Overview ----
+function tabOverview(p, vs) {
+  var last = vs && vs[0];
+  var html = '<div class="tab-content">';
+
+  // AI Insights placeholder — premium future feature preview
+  var riskLevel = p.UrgencyStatus === 'urgent' ? 'גבוה' : p.UrgencyStatus === 'watch' ? 'בינוני' : 'נמוך';
+  var riskClass = p.UrgencyStatus === 'urgent' ? 'ai-risk-high' : p.UrgencyStatus === 'watch' ? 'ai-risk-mid' : 'ai-risk-low';
+  html += '<div class="ai-insight-card">' +
+    '<div class="ai-insight-header">' +
+      '<div class="ai-insight-icon">✦</div>' +
+      '<span class="ai-insight-title">MedFlow AI Insights</span>' +
+      '<span class="ai-badge-soon">בקרוב</span>' +
+    '</div>' +
+    '<div class="ai-insight-body">' +
+      '<div class="ai-insight-row">' +
+        '<span class="ai-insight-label">רמת סיכון</span>' +
+        '<span class="ai-risk-pill ' + riskClass + '">' + riskLevel + '</span>' +
+      '</div>' +
+      '<div class="ai-insight-row">' +
+        '<span class="ai-insight-label">המלצת מעקב</span>' +
+        '<span class="ai-insight-val ai-skeleton-text"></span>' +
+      '</div>' +
+      '<div class="ai-insight-row">' +
+        '<span class="ai-insight-label">סיכום AI</span>' +
+        '<span class="ai-insight-val ai-skeleton-text ai-skeleton-long"></span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ai-insight-footer">ניתוח AI אוטומטי — בקרוב ב-MedFlow Pro</div>' +
+  '</div>';
+
+  if (last && (last.Bp || last.Hr || last.Temp || last.Spo2 || last.Weight)) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">⚡ מדדים — ' + formatDate(last.VisitDate) + '</span></div>' +
+      '<div class="card-body"><div class="vitals-display">' +
+      vitalBox('לחץ דם', last.Bp, 'mmHg') +
+      vitalBox('דופק', last.Hr, 'bpm') +
+      vitalBox('חום', last.Temp, '°C') +
+      vitalBox('SpO₂', last.Spo2, '%') +
+      vitalBox('משקל', last.Weight, 'kg') +
+      vitalBox('BMI', last.Bmi, '') +
+      '</div></div></div>';
+  }
+
+  html += '<div class="card"><div class="card-header"><span class="card-title">👤 פרטים אישיים</span></div><div style="padding:0 16px">' +
+    infoRow('ת.ז', p.NationalId) +
+    infoRow('תאריך לידה', formatDate(p.DateOfBirth)) +
+    infoRow('מין', p.Sex) +
+    infoRow('טלפון', p.Phone) +
+    infoRow('כתובת', p.Address) +
+    infoRow('סוג דם', p.BloodType) +
+    infoRow('אלרגיות', p.Allergies) +
+    infoRow('ביטוח', p.InsuranceProvider ? p.InsuranceProvider + (p.InsuranceNumber ? ' · ' + p.InsuranceNumber : '') : '') +
+    infoRow('איש קשר', p.EmergencyContactName ? p.EmergencyContactName + (p.EmergencyContactPhone ? ' — ' + p.EmergencyContactPhone : '') : '') +
+  '</div></div>';
+
+  if (p.SurgeryType || p.PrimaryDiagnosis || p.ReferringPhysician) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">🏥 פרטים רפואיים</span></div><div style="padding:0 16px">' +
+      infoRow('אבחנה', p.PrimaryDiagnosis) +
+      infoRow('סוג ניתוח', p.SurgeryType) +
+      infoRow('תאריך ניתוח', formatDate(p.SurgeryDate)) +
+      infoRow('מחלות כרוניות', p.ChronicConditions) +
+      infoRow('הפנה ע"י', p.ReferringPhysician) +
+      infoRow('אחות אחראית', p.AssignedNurseName) +
+      infoRow('מעקב FU הבא', p.NextFollowUpDate ? formatDate(p.NextFollowUpDate) : '') +
+      infoRow('הערות', p.Notes) +
+    '</div></div>';
+  }
+
+  // Post-op findings from last visit
+  if (last && (last.Edema || last.Drainage || last.Bruising || last.Mobility || last.UrgentConcern)) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">🔬 ממצאים פוסט-אופ — ' + formatDate(last.VisitDate) + '</span></div><div style="padding:0 16px">' +
+      infoRow('בצקת',          last.Edema) +
+      infoRow('ניקוז',          last.Drainage) +
+      infoRow('חבורות',         last.Bruising) +
+      infoRow('ניידות',         last.Mobility) +
+      infoRow('הנחיות רחצה',    last.ShowingGuidance) +
+      (last.UrgentConcern && last.UrgentConcern !== 'none'
+        ? '<div class="info-row"><span class="info-label">⚠ חשש דחוף</span><span class="info-value" style="color:var(--red-text);font-weight:700">' + escHtml(last.UrgentConcern) + '</span></div>'
+        : '') +
+    '</div></div>';
+  }
+
+  return html + '</div>';
+}
+
+function vitalBox(label, value, unit) {
+  if (!value) return '';
+  return '<div class="vital-item"><div class="vital-label">' + escHtml(label) + '</div>' +
+    '<div class="vital-value">' + escHtml(String(value)) + '<span class="vital-unit"> ' + escHtml(unit) + '</span></div></div>';
+}
+
+// ---- TAB: Visits ----
+function tabVisits(vs, p, pid) {
+  var html = '<div class="tab-content">';
+  if (App.canCreateVisits()) {
+    html += '<button class="btn-primary" data-action="start-visit" data-patient-id="' + escHtml(pid) + '" data-patient-name="' + escHtml(p.FullName) + '">📋 ביקור חדש</button>';
+  }
+  if (!vs.length) {
+    html += emptyState('📋', 'אין ביקורים עדיין', 'כשיתבצע ביקור הוא יופיע כאן', '');
+  } else {
+    html += '<div class="card">' + vs.map(function(v){ return renderVisitRow(v, p); }).join('') + '</div>';
+  }
+  return html + '</div>';
+}
+
+function renderVisitRow(v, p) {
+  var isDraft = v.Status === 'draft';
+  return '<div class="visit-row">' +
+    '<div class="visit-dot' + (isDraft?' draft':'') + '"></div>' +
+    '<div class="visit-row-info">' +
+      '<div class="visit-row-date">' + formatDate(v.VisitDate) +
+        (v.VisitTime ? '<span style="font-size:12px;color:var(--text-3);margin-right:6px">' + escHtml(v.VisitTime) + '</span>' : '') +
+      '</div>' +
+      '<div class="visit-row-type">' + escHtml(v.VisitType||'ביקור') + (v.PainScore ? ' · כאב ' + v.PainScore + '/10' : '') + (v.Diagnosis ? ' · ' + escHtml(v.Diagnosis) : '') + '</div>' +
+      (v.PhysicianNotes ? '<div class="visit-row-physician-notes">💬 ' + escHtml(v.PhysicianNotes) + '</div>' : '') +
+    '</div>' +
+    '<div class="visit-row-right">' +
+      visitStatusPill(v.Status) +
+      (App.canExportData() && !isDraft ? '<button class="btn-text" style="font-size:12px" data-action="generate-pdf" data-visit-id="' + escHtml(v.RecordId) + '">📄 PDF</button>' : '') +
+      (App.canEditVisits() && !isDraft ? '<button class="btn-text" style="font-size:12px;color:var(--text-3)" data-action="add-physician-notes" data-visit-id="' + escHtml(v.RecordId) + '" data-patient-id="' + escHtml(p&&p.RecordId) + '">+ הערות</button>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+// ---- TAB: Images ----
+function loadPatientImages(pid) {
+  var el = document.getElementById('images-tab-body'); if (!el) return;
+  api('api_getFiles', pid, '')
+    .then(function(files) {
+      files = (files || []).filter(function(f){ return String(f.MimeType||'').indexOf('image/') === 0; });
+      var uploadHtml = '<div class="upload-btns">' +
+        '<label class="btn-upload">📷 צלם<input id="CamInput" type="file" accept="image/*" capture="environment" multiple hidden></label>' +
+        '<label class="btn-upload">🖼️ גלריה<input id="GalInput" type="file" accept="image/*" multiple hidden></label>' +
+        '</div><div id="img-upload-status" style="font-size:13px;color:var(--text-2);min-height:20px;margin-top:4px"></div>';
+      if (!files.length) {
+        el.innerHTML = uploadHtml + emptyState('📷', 'אין תמונות עדיין', 'העלה תמונה דרך המצלמה או הגלריה', '');
+      } else {
+        el.innerHTML = uploadHtml + '<div class="gallery-grid">' + files.map(function(f){
+          var url = f.DriveUrl || f.DownloadUrl || '#';
+          return '<div class="gallery-item" data-action="open-file" data-url="' + escHtml(url) + '">' +
+            '<img src="' + escHtml(f.ThumbnailUrl || f.DownloadUrl || f.DriveUrl) + '" loading="lazy" alt="">' +
+            '<div class="gallery-item-name">' + escHtml(f.FileName||'תמונה') + '</div>' +
+            (App.canEditPatients() ? '<button class="gallery-item-del" data-action="delete-file" data-file-id="' + escHtml(f.RecordId) + '" data-patient-id="' + escHtml(pid) + '" onclick="event.stopPropagation()">✕</button>' : '') +
+          '</div>';
+        }).join('') + '</div>';
+      }
+      setTimeout(function(){
+        ['CamInput','GalInput'].forEach(function(id){
+          var inp = document.getElementById(id);
+          if (inp) inp.addEventListener('change', function(e){ handleDetailFileInput(e.target, pid); });
+        });
+      }, 100);
+    })
+    .catch(function(err){ if(el) el.innerHTML = '<div class="error-card">' + friendlyError(err.message) + '</div>'; });
+}
+
+function handleDetailFileInput(input, pid) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  var status = document.getElementById('img-upload-status');
+  if (status) status.textContent = 'מעלה ' + files.length + ' קובץ/ים…';
+  Promise.all(files.map(fileToPayload))
+    .then(function(payloads){
+      return payloads.reduce(function(chain, pl){
+        return chain.then(function(){
+          return api('api_uploadFile', pid, '', { base64: pl.base64, fileName: pl.fileName, mimeType: pl.mimeType, sizeBytes: pl.sizeBytes });
+        });
+      }, Promise.resolve());
+    })
+    .then(function(){
+      if(status) status.textContent = '';
+      Toast.show('תמונות הועלו ✓', 'success');
+      loadPatientImages(pid);
+      input.value = '';
+    })
+    .catch(function(err){
+      if(status) status.textContent = '';
+      Toast.show('שגיאה: ' + friendlyError(err.message));
+      input.value = '';
+    });
+}
+
+// ---- TAB: PDF Reports ----
+function tabPdf(vs, p, pid) {
+  if (!App.canExportData()) {
+    return '<div class="tab-content">' + emptyState('🔒', 'אין הרשאת ייצוא', 'פנה למנהל המערכת לקבלת הרשאת ייצוא נתונים', '') + '</div>';
+  }
+  var finalized = vs.filter(function(v){ return v.Status === 'finalized'; });
+  var noVisit = !finalized.length;
+
+  var html = '<div class="tab-content">';
+
+  // Quick export bar (latest visit)
+  html += '<div class="pdf-export-bar' + (noVisit ? ' pdf-export-bar-disabled' : '') + '">' +
+    '<div class="pdf-export-icon">📄</div>' +
+    '<div class="pdf-export-info">' +
+      '<div class="pdf-export-title">ייצוא PDF — ביקור אחרון</div>' +
+      '<div class="pdf-export-sub">' +
+        (noVisit ? 'לא ניתן לייצא PDF לפני סיום ביקור ראשון' : 'דוח ביקור מעקב — ' + escHtml(p.FullName || '')) +
+      '</div>' +
+    '</div>' +
+    (noVisit
+      ? '<button class="pdf-export-btn" disabled style="opacity:0.4;cursor:not-allowed">ייצא</button>'
+      : '<button class="pdf-export-btn" data-action="quick-pdf" data-patient-id="' + escHtml(pid) + '">ייצא PDF</button>') +
+  '</div>';
+
+  // Per-visit export list
+  if (!noVisit) {
+    html += '<p class="section-label">ביקורים מאושרים — בחר לייצוא</p>' +
+      '<div class="card">' + finalized.map(function(v){
+        return '<div class="visit-row">' +
+          '<div class="visit-dot"></div>' +
+          '<div class="visit-row-info">' +
+            '<div class="visit-row-date">' + formatDate(v.VisitDate) + '</div>' +
+            '<div class="visit-row-type">' + escHtml(v.VisitType||'ביקור מעקב') + (v.Diagnosis ? ' · ' + escHtml(v.Diagnosis) : '') + '</div>' +
+          '</div>' +
+          '<button class="btn-action primary" data-action="generate-pdf" data-visit-id="' + escHtml(v.RecordId) + '" data-patient-id="' + escHtml(pid) + '">📄 ייצא</button>' +
+        '</div>';
+      }).join('') + '</div>';
+  } else {
+    html += emptyState('📋', 'אין ביקורים מאושרים', 'PDF נוצר לאחר סיום ביקור ראשון. לחץ "ביקור חדש" כדי להתחיל.', '');
+  }
+
+  // Previously generated PDFs list (loaded async)
+  html += '<p class="section-label">דוחות PDF שנוצרו</p>' +
+    '<div id="pdf-files-list" class="card"><div style="padding:16px;color:var(--text-3);font-size:13px">טוען…</div></div>';
+
+  html += '</div>';
+
+  // Load PDF files async after render
+  setTimeout(function() {
+    api('api_getFiles', pid, '')
+      .then(function(files) {
+        var el = document.getElementById('pdf-files-list'); if (!el) return;
+        var pdfs = (files || []).filter(function(f){ return String(f.MimeType||'').indexOf('pdf') !== -1 || String(f.FileType||'').toLowerCase() === 'pdf'; });
+        if (!pdfs.length) {
+          el.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px;text-align:center">אין דוחות PDF עדיין</div>';
+          return;
+        }
+        el.innerHTML = pdfs.map(function(f) {
+          var name = escHtml(f.FileName || 'דוח PDF');
+          var date = formatDate(f.CreatedAt || f.UpdatedAt || '');
+          var url  = escHtml(f.DriveUrl || f.DownloadUrl || '#');
+          var dl   = escHtml(f.DownloadUrl || f.DriveUrl || '#');
+          return '<div class="pdf-list-item">' +
+            '<div class="pdf-list-icon">📄</div>' +
+            '<div class="pdf-list-info">' +
+              '<div class="pdf-list-name">' + name + '</div>' +
+              '<div class="pdf-list-date">' + date + '</div>' +
+            '</div>' +
+            '<div class="pdf-list-btns">' +
+              '<button onclick="window.open(\'' + url + '\',\'_blank\')">פתח</button>' +
+              '<button onclick="copyToClipboard(\'' + url + '\')">העתק קישור</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      })
+      .catch(function() {
+        var el = document.getElementById('pdf-files-list');
+        if (el) el.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px;text-align:center">לא ניתן לטעון דוחות</div>';
+      });
+  }, 200);
+
+  return html;
+}
+
+// ---- TAB: Notes ----
+function tabNotes(p, vs) {
+  var nurseNotes = vs.filter(function(v){ return v.ComplicationsObserved || v.NurseNotes; });
+  var drNotes    = vs.filter(function(v){ return v.PhysicianNotes; });
+  var html = '<div class="tab-content">';
+
+  if (nurseNotes.length) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">🩺 הערות אחות</span></div>' +
+      nurseNotes.map(function(v){
+        return '<div class="med-row">' +
+          '<div class="med-name">' + formatDate(v.VisitDate) + '</div>' +
+          '<div class="med-dose">' + escHtml(v.ComplicationsObserved || v.NurseNotes || '') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+  }
+
+  if (drNotes.length) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">👨‍⚕️ הערות רופא</span></div>' +
+      drNotes.map(function(v){
+        return '<div class="med-row">' +
+          '<div class="med-name">' + formatDate(v.VisitDate) + '</div>' +
+          '<div class="med-dose">' + escHtml(v.PhysicianNotes || '') + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+  }
+
+  if (!nurseNotes.length && !drNotes.length) {
+    html += emptyState('📝', 'אין הערות עדיין', 'הערות נוספות במהלך ביקורים', '');
+  }
+  return html + '</div>';
+}
+
+// ---- TAB: Timeline ----
+function tabTimeline(tl) {
+  if (!tl || !tl.length) return '<div class="tab-content">' + emptyState('📅', 'ציר הזמן ריק', 'אירועים יופיעו כאן לאחר ביקורים ועדכונים', '') + '</div>';
+  var icons = {
+    visit_completed:'✅', patient_created:'👤', patient_updated:'✏️',
+    file_uploaded:'📎', pdf_generated:'📄', medication_added:'💊',
+    follow_up_created:'📋', follow_up_completed:'✔', physician_comment:'💬'
+  };
+  return '<div class="tab-content"><div class="card" style="overflow:visible"><div class="timeline">' +
+    tl.slice(0, 40).map(function(ev){
+      return '<div class="tl-item">' +
+        '<div class="tl-dot">' + (icons[ev.EventType]||'•') + '</div>' +
+        '<div class="tl-body">' +
+          '<div class="tl-text">' + escHtml(ev.SummaryText||'') + '</div>' +
+          '<div class="tl-date">' + formatDateTime(ev.EventTimestamp) + '</div>' +
+        '</div></div>';
+    }).join('') + '</div></div></div>';
+}
+
+// ---- TAB: Follow-Up Journey ----
+function tabFollowUpJourney(p, pid) {
+  var fuEnabled = p.FollowUpEnabled === true || p.FollowUpEnabled === 'TRUE' || p.FollowUpEnabled === '1';
+  var urgency   = p.UrgencyStatus || 'normal';
+  var fuStatus  = p.FollowUpStatus || (fuEnabled ? 'active' : '');
+  var journeyBorderClass = urgency === 'urgent' ? ' journey-urgent' : urgency === 'watch' ? ' journey-watch' : fuEnabled ? ' journey-enabled' : '';
+
+  var fuStatusLabels = { active:'פעיל', paused:'מושהה', completed:'הושלם', cancelled:'בוטל' };
+
+  var html = '<div class="tab-content">';
+
+  // POD Milestone Track
+  var pod = p.pod !== null && p.pod !== undefined ? parseInt(p.pod, 10) : null;
+  var milestones = [
+    { pod: 1,  label: 'POD 1' },
+    { pod: 3,  label: 'POD 3' },
+    { pod: 7,  label: 'שבוע' },
+    { pod: 14, label: '2 שבוע' },
+    { pod: 30, label: 'חודש' },
+    { pod: 60, label: '2 חודש' }
+  ];
+  if (pod !== null) {
+    var nextMilestone = milestones.find(function(m){ return m.pod > pod; });
+    var msHtml = milestones.map(function(m) {
+      var isPast    = pod > m.pod;
+      var isNext    = nextMilestone && m.pod === nextMilestone.pod;
+      var cls = 'pod-milestone ' + (isPast ? 'past' : isNext ? 'next' : 'future');
+      var icon = isPast ? '✓' : m.pod;
+      return '<div class="' + cls + '">' +
+        '<div class="pod-milestone-dot">' + icon + '</div>' +
+        '<div class="pod-milestone-label">' + escHtml(m.label) + '</div>' +
+      '</div>';
+    }).join('');
+
+    html += '<div class="pod-track">' +
+      '<div class="pod-track-title">ציר שיקום — מסלול POD</div>' +
+      '<div class="pod-milestones">' + msHtml + '</div>' +
+      '<div class="pod-current-callout">יום <strong>' + pod + '</strong> לאחר הניתוח' +
+        (nextMilestone ? ' · ציון דרך הבא: ' + nextMilestone.label + ' (' + (nextMilestone.pod - pod) + ' ימים)' : ' · מעל חודשיים מהניתוח') +
+      '</div>' +
+    '</div>';
+  }
+
+  // Summary card
+  html += '<div class="journey-card' + journeyBorderClass + '">' +
+    '<div class="journey-title">🔄 מסע מעקב פוסט-אופרטיבי</div>' +
+    '<div class="journey-rows">' +
+      infoRow('מעקב פעיל',    fuEnabled ? '✅ כן' : '❌ לא') +
+      infoRow('סטטוס מסע',    fuStatusLabels[fuStatus] || fuStatus) +
+      (p.AssignedNurseName ? infoRow('אחות אחראית', p.AssignedNurseName) : '') +
+      (p.NextFollowUpDate ? '<div class="info-row"><span class="info-label">FU הבא</span>' +
+        '<span class="info-value' + (isOverdue(p.NextFollowUpDate) ? ' overdue-text' : '') + '">' +
+        escHtml(formatDate(p.NextFollowUpDate)) + (isOverdue(p.NextFollowUpDate) ? ' ⚠ באיחור' : '') +
+        '</span></div>' : '') +
+      infoRow('דחיפות',
+        urgency === 'urgent' ? '🚨 דחוף' : urgency === 'watch' ? '👁 מחייב מעקב' : '✓ תקין') +
+      (p.FollowUpStartDate ? infoRow('התחלת מעקב', formatDate(p.FollowUpStartDate)) : '') +
+      (p.FollowUpEndDate   ? infoRow('סיום מעקב',  formatDate(p.FollowUpEndDate))   : '') +
+      (p.FollowUpPrivateNotes ? infoRow('הערות פנימיות', p.FollowUpPrivateNotes) : '') +
+    '</div>' +
+  '</div>';
+
+  // Edit form
+  html += '<div class="card" style="margin-top:12px">' +
+    '<div class="card-header"><span class="card-title">⚙️ עדכון מסע מעקב</span></div>' +
+    '<div class="card-body" style="display:flex;flex-direction:column;gap:14px">' +
+
+    '<div class="form-group"><label class="form-label">מעקב פעיל</label>' +
+    '<label class="permission-toggle" style="background:var(--teal-light);border-color:rgba(15,163,127,0.3)">' +
+      '<input type="checkbox" id="fu-enabled-toggle"' + (fuEnabled ? ' checked' : '') + '>' +
+      '<span style="font-weight:700;color:var(--teal-dark)">מעקב פוסט-אופרטיבי פעיל</span>' +
+    '</label></div>' +
+
+    '<div class="form-group"><label class="form-label">סטטוס מסע</label>' +
+    '<select class="form-input" id="fu-status-select">' +
+    '<option value="active"'  + (fuStatus==='active'   ?' selected':'') + '>פעיל</option>' +
+    '<option value="paused"'  + (fuStatus==='paused'   ?' selected':'') + '>מושהה</option>' +
+    '<option value="completed"'+(fuStatus==='completed'?' selected':'') + '>הושלם</option>' +
+    '<option value="cancelled"'+(fuStatus==='cancelled'?' selected':'') + '>בוטל</option>' +
+    '</select></div>' +
+
+    '<div class="form-group"><label class="form-label">סטטוס דחיפות</label>' +
+    '<div class="urgency-options">' +
+    '<button type="button" class="urgency-btn' + (urgency==='normal' ?' selected-normal' :'') + '" data-action="set-urgency" data-urgency="normal"  data-patient-id="' + escHtml(pid) + '">✓ תקין</button>' +
+    '<button type="button" class="urgency-btn' + (urgency==='watch'  ?' selected-watch'  :'') + '" data-action="set-urgency" data-urgency="watch"   data-patient-id="' + escHtml(pid) + '">👁 מעקב</button>' +
+    '<button type="button" class="urgency-btn' + (urgency==='urgent' ?' selected-urgent' :'') + '" data-action="set-urgency" data-urgency="urgent"  data-patient-id="' + escHtml(pid) + '">🚨 דחוף</button>' +
+    '</div></div>' +
+
+    '<div class="form-group"><label class="form-label">אחות אחראית</label>' +
+    '<select class="form-input" id="fu-nurse-select"><option value="">טוען…</option></select></div>' +
+
+    '<div class="vitals-grid">' +
+    '<div class="form-group"><label class="form-label">FU הבא</label>' +
+    '<input type="date" class="form-input" id="fu-next-date" value="' + escHtml(String(p.NextFollowUpDate||'').substring(0,10)) + '"></div>' +
+    '<div class="form-group"><label class="form-label">תחילת מעקב</label>' +
+    '<input type="date" class="form-input" id="fu-start-date" value="' + escHtml(String(p.FollowUpStartDate||'').substring(0,10)) + '"></div>' +
+    '</div>' +
+
+    '<div class="form-group"><label class="form-label">הערות פנימיות לצוות</label>' +
+    '<textarea class="form-input" id="fu-private-note" rows="3" placeholder="תצפיות, הנחיות פנימיות, מידע רגיש…">' + escHtml(p.FollowUpPrivateNotes||p.PrivateFollowUp||'') + '</textarea></div>' +
+
+    '<button type="button" class="btn-primary" data-action="save-followup-journey" data-patient-id="' + escHtml(pid) + '">💾 שמור עדכון מעקב</button>' +
+    '</div></div>';
+
+  html += '</div>';
+
+  // Load nurses into dropdown
+  setTimeout(function(){
+    api('api_getNurses')
+      .then(function(nurses){
+        var sel = document.getElementById('fu-nurse-select'); if (!sel) return;
+        sel.innerHTML = '<option value="">ללא אחות</option>' +
+          (nurses||[]).map(function(n){
+            var selected = (n.RecordId === p.AssignedNurseId) ? ' selected' : '';
+            return '<option value="' + escHtml(n.RecordId) + '"' + selected + '>' + escHtml(n.FullName||n.Email) + '</option>';
+          }).join('');
+      }).catch(function(){});
+  }, 50);
+
+  return html;
+}
+
+// ---- TAB: Admin Actions ----
+function tabAdminActions(p, pid) {
+  return '<div class="tab-content">' +
+    '<div class="card card-body" style="display:flex;flex-direction:column;gap:10px">' +
+      (App.canDeletePatients() && p.Status !== 'archived'
+        ? '<button class="btn-secondary" data-action="archive-patient" data-patient-id="' + escHtml(pid) + '">📦 ארכב מטופל</button>' : '') +
+      (App.canDeletePatients() && p.Status === 'archived'
+        ? '<button class="btn-secondary" data-action="restore-patient" data-patient-id="' + escHtml(pid) + '">♻️ שחזר מטופל</button>' : '') +
+      (App.canDeletePatients()
+        ? '<button class="btn-danger" data-action="delete-patient" data-patient-id="' + escHtml(pid) + '">🗑 מחק מטופל</button>' : '') +
+    '</div></div>';
+}
+
+// ============================================================================
+// VIEW: ADD PATIENT
+// ============================================================================
+function renderAddPatient() {
+  setAppHTML(
+    sidebarNav('patients') +
+    '<div class="screen no-nav">' + backHeader('מטופלת חדשה') +
+    '<div class="screen-body">' +
+    '<form id="add-patient-form" data-action="submit-add-patient" novalidate>' +
+
+    '<div class="form-section"><div class="form-section-title">👤 פרטים אישיים</div>' +
+    formGroup('FullName','שם מלא','text','','ג\'ון דו', true) +
+    formGroup('NationalId','מספר ת.ז','text','','') +
+    formGroup('DateOfBirth','תאריך לידה','date','','') +
+    '<div class="form-group"><label class="form-label">מין</label><select class="form-input" name="Sex"><option value="">בחר…</option><option>זכר</option><option>נקבה</option><option>אחר</option></select></div>' +
+    formGroup('Phone','טלפון','tel','','050-0000000') +
+    formGroup('Address','כתובת','text','','') +
+    formGroup('BloodType','סוג דם','text','','A+') +
+    formGroup('Allergies','אלרגיות','text','','') +
+    formGroup('ChronicConditions','מחלות כרוניות','text','','סוכרת, יתר לחץ דם…') +
+    '</div>' +
+
+    '<div class="form-section"><div class="form-section-title">🏥 פרטים רפואיים</div>' +
+    formGroup('SurgeryType','סוג ניתוח','text','','') +
+    formGroup('SurgeryDate','תאריך ניתוח','date','','') +
+    formGroup('PrimaryDiagnosis','אבחנה','text','','') +
+    formGroup('ReferringPhysician','הפנה ע"י','text','','ד"ר כהן') +
+    '</div>' +
+
+    '<div class="form-section"><div class="form-section-title">🆘 איש קשר לחירום</div>' +
+    formGroup('EmergencyContactName','שם','text','','') +
+    formGroup('EmergencyContactPhone','טלפון','tel','','') +
+    '</div>' +
+
+    '<div class="form-section"><div class="form-section-title">🔄 מעקב פוסט-אופרטיבי</div>' +
+    '<div class="form-group"><label class="permission-toggle" style="background:var(--teal-light);border-color:rgba(15,163,127,0.3)">' +
+      '<input type="checkbox" id="FollowUpEnabled" name="FollowUpEnabled" data-action="toggle-followup">' +
+      '<span style="font-weight:700;color:var(--teal-dark)">הפעל מעקב פוסט-אופרטיבי עבור מטופל זה</span></label></div>' +
+    '<div id="followup-fields" style="display:none;flex-direction:column;gap:10px">' +
+      '<div class="form-group"><label class="form-label">אחות/אח אחראי/ת <span class="required">*</span></label><select class="form-input" id="AssignedNurseId" name="AssignedNurseId"><option value="">טוען…</option></select></div>' +
+      '<div class="form-group"><label class="form-label">תאריך FU ראשון</label><input class="form-input" type="date" id="NextFollowUpDate" name="NextFollowUpDate"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">רופא/ה מטפל/ת</label><select class="form-input" id="AssignedPhysicianId" name="AssignedPhysicianId"><option value="">ללא</option></select></div>' +
+    formGroup('Notes','הערות','textarea','','רקע רלוונטי, הוראות מיוחדות…') +
+    '</div>' +
+
+    '<button type="submit" class="btn-primary" id="add-patient-submit">💾 שמור מטופלת</button>' +
+    '</form></div></div>'
+  );
+
+  Promise.all([api('api_getUsers', ROLE_NURSE), api('api_getUsers', ROLE_PHYSICIAN)])
+    .then(function(r){
+      populateUserDropdown('AssignedNurseId',    r[0]||[], App.user && App.user.recordId, 'בחר/י אחות/אח…');
+      populateUserDropdown('AssignedPhysicianId', r[1]||[], '', 'ללא רופא/ה');
+    })
+    .catch(function(){
+      populateUserDropdown('AssignedNurseId', [], App.user && App.user.recordId, 'בחר/י…');
+    });
+}
+
+// ============================================================================
+// VIEW: EDIT PATIENT
+// ============================================================================
+function renderEditPatient(params) {
+  var pid = params.patientId;
+  setAppHTML(sidebarNav('patients') + '<div class="screen no-nav">' + backHeader('עריכת מטופלת') + '<div class="screen-body">' + skeletons(4) + '</div></div>');
+
+  var cached = App._cache['patient_' + pid];
+  var load = cached ? Promise.resolve(cached) : api('api_getPatient', pid);
+
+  load.then(function(data){
+    var p = data.patient;
+    setAppHTML(
+      sidebarNav('patients') +
+      '<div class="screen no-nav">' + backHeader('עריכת מטופלת') +
+      '<div class="screen-body">' +
+      '<form id="edit-patient-form" data-patient-id="' + escHtml(p.RecordId) + '" data-action="submit-edit-patient" novalidate>' +
+
+      '<div class="form-section"><div class="form-section-title">👤 פרטים אישיים</div>' +
+      formGroup('FullName','שם מלא','text',p.FullName||'','',true) +
+      formGroup('NationalId','ת.ז','text',p.NationalId||'','') +
+      formGroup('DateOfBirth','תאריך לידה','date',String(p.DateOfBirth||'').substring(0,10),'') +
+      '<div class="form-group"><label class="form-label">מין</label><select class="form-input" name="Sex"><option value="">בחר…</option>' +
+      ['זכר','נקבה','אחר'].map(function(s){ return '<option'+(p.Sex===s?' selected':'')+'>'+s+'</option>'; }).join('') +
+      '</select></div>' +
+      formGroup('Phone','טלפון','tel',p.Phone||'','') +
+      formGroup('Address','כתובת','text',p.Address||'','') +
+      formGroup('BloodType','סוג דם','text',p.BloodType||'','') +
+      formGroup('Allergies','אלרגיות','text',p.Allergies||'','') +
+      formGroup('ChronicConditions','מחלות כרוניות','text',p.ChronicConditions||'','') +
+      '</div>' +
+
+      '<div class="form-section"><div class="form-section-title">🏥 פרטים רפואיים</div>' +
+      formGroup('SurgeryType','סוג ניתוח','text',p.SurgeryType||'','') +
+      formGroup('SurgeryDate','תאריך ניתוח','date',String(p.SurgeryDate||'').substring(0,10),'') +
+      formGroup('PrimaryDiagnosis','אבחנה','text',p.PrimaryDiagnosis||'','') +
+      formGroup('ReferringPhysician','הפנה ע"י','text',p.ReferringPhysician||'','') +
+      '</div>' +
+
+      '<div class="form-section"><div class="form-section-title">🔄 מעקב פוסט-אופרטיבי</div>' +
+      (function(){
+        var fuOn = p.FollowUpEnabled === true || p.FollowUpEnabled === 'TRUE' || p.FollowUpEnabled === '1';
+        return '<div class="form-group"><label class="permission-toggle" style="background:var(--teal-light);border-color:rgba(15,163,127,0.3)">' +
+          '<input type="checkbox" id="FollowUpEnabled" name="FollowUpEnabled" data-action="toggle-followup"' + (fuOn?' checked':'') + '>' +
+          '<span style="font-weight:700;color:var(--teal-dark)">מעקב פוסט-אופרטיבי פעיל</span></label></div>' +
+          '<div id="followup-fields" style="display:' + (fuOn?'flex':'none') + ';flex-direction:column;gap:10px">' +
+            '<div class="form-group"><label class="form-label">אחות/אח אחראי/ת</label><select class="form-input" id="AssignedNurseId" name="AssignedNurseId"><option>טוען…</option></select></div>' +
+            '<div class="form-group"><label class="form-label">תאריך FU הבא</label><input class="form-input" type="date" id="NextFollowUpDate" name="NextFollowUpDate" value="' + escHtml(String(p.NextFollowUpDate||'').substring(0,10)) + '"></div>' +
+          '</div>';
+      })() +
+      '<div class="form-group"><label class="form-label">רופא/ה</label><select class="form-input" id="AssignedPhysicianId" name="AssignedPhysicianId"><option>טוען…</option></select></div>' +
+      formGroup('Notes','הערות','textarea',p.Notes||'','') +
+      '</div>' +
+
+      '<button type="submit" class="btn-primary" id="edit-patient-submit">💾 שמור שינויים</button>' +
+      '</form></div></div>'
+    );
+
+    Promise.all([api('api_getUsers', ROLE_NURSE), api('api_getUsers', ROLE_PHYSICIAN)])
+      .then(function(r){
+        populateUserDropdown('AssignedNurseId',    r[0]||[], p.AssignedNurseId||'',    'ללא');
+        populateUserDropdown('AssignedPhysicianId', r[1]||[], p.AssignedPhysicianId||'', 'ללא רופא/ה');
+      });
+  }).catch(function(err){
+    setAppHTML(sidebarNav('patients') + '<div class="screen no-nav">' + backHeader('עריכה') +
+      '<div class="screen-body"><div class="error-card">' + friendlyError(err.message) + '</div></div></div>');
+  });
+}
+
+// ============================================================================
+// VIEW: NEW VISIT  — grouped clinical form
+// ============================================================================
+var VisitForm = { pain: null, wound: null, patientId: null, patientName: null, files: [], chips: {} };
+
+function renderNewVisit(params) {
+  VisitForm.pain = null; VisitForm.wound = null; VisitForm.files = []; VisitForm.chips = {};
+  VisitForm.patientId   = params.patientId;
+  VisitForm.patientName = params.patientName || 'מטופל';
+
+  setAppHTML(
+    sidebarNav('patients') +
+    '<div class="screen no-nav">' +
+    backHeader('ביקור — ' + escHtml(VisitForm.patientName)) +
+    // Step progress bar
+    '<div class="visit-step-bar">' +
+      visitStep(1, 'מדדים', 'active') +
+      '<div class="visit-step-line"></div>' +
+      visitStep(2, 'כאב & פצע', '') +
+      '<div class="visit-step-line"></div>' +
+      visitStep(3, 'ממצאים', '') +
+      '<div class="visit-step-line"></div>' +
+      visitStep(4, 'הערכה', '') +
+      '<div class="visit-step-line"></div>' +
+      visitStep(5, 'מסמכים', '') +
+    '</div>' +
+    '<div class="screen-body">' +
+    '<form id="visit-form" data-action="submit-visit" novalidate>' +
+
+    // Section 1: מצב כללי
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">📊</span>מצב כללי ומדדים</div>' +
+    '<div class="vitals-grid">' +
+    vInput('Bp','לחץ דם','text','120/80') +
+    vInput('Hr','דופק (bpm)','number','72') +
+    vInput('Temp','חום (°C)','number','36.6') +
+    vInput('Spo2','SpO₂ (%)','number','98') +
+    vInput('Weight','משקל (kg)','number','') +
+    vInput('Height','גובה (cm)','number','') +
+    '</div>' +
+    '<div id="bmi-display" style="font-size:13px;color:var(--primary);font-weight:700;min-height:16px"></div>' +
+    '</div>' +
+
+    // Section 2: כאב
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">😣</span>רמת כאב (0–10)</div>' +
+    '<div class="pain-grid" id="pain-grid">' +
+    [0,1,2,3,4,5,6,7,8,9,10].map(function(n){
+      return '<button type="button" class="pain-btn" data-action="select-pain" data-value="' + n + '">' + n + '</button>';
+    }).join('') + '</div>' +
+    '<div id="pain-hint" style="font-size:13px;color:var(--text-2);min-height:18px;margin-top:6px;font-weight:600"></div>' +
+    '</div>' +
+
+    // Section 3: הערכת פצע
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">🩹</span>הערכת פצע / מצב</div>' +
+    '<div class="wound-options">' +
+    woundBtn('clean','wound-clean','✔  תקין — מחלים כמצופה') +
+    woundBtn('concerning','wound-concerning','⚠  מחשיד — נדרש מעקב') +
+    woundBtn('escalation_required','wound-escalation','🚨  דחוף — נדרשת הסלמה') +
+    '</div></div>' +
+
+    // Section 3b: ממצאים פוסט-אופרטיביים
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">🔬</span>ממצאים פוסט-אופרטיביים</div>' +
+    '<div class="form-group"><label class="form-label">בצקת (Edema)</label>' +
+    '<div class="chip-group" id="edema-group">' +
+    postOpChip('edema','none','אין') + postOpChip('edema','mild','קלה') + postOpChip('edema','moderate','בינונית') + postOpChip('edema','severe','חמורה') +
+    '</div></div>' +
+    '<div class="form-group"><label class="form-label">ניקוז (Drainage)</label>' +
+    '<div class="chip-group" id="drainage-group">' +
+    postOpChip('drainage','none','אין') + postOpChip('drainage','serous','סרוסי') + postOpChip('drainage','sanguineous','דמי') + postOpChip('drainage','purulent','מוגלתי') +
+    '</div></div>' +
+    '<div class="form-group"><label class="form-label">חבורות (Bruising)</label>' +
+    '<div class="chip-group" id="bruising-group">' +
+    postOpChip('bruising','none','אין') + postOpChip('bruising','mild','קלות') + postOpChip('bruising','moderate','בינוניות') + postOpChip('bruising','severe','חמורות') +
+    '</div></div>' +
+    '<div class="form-group"><label class="form-label">ניידות (Mobility)</label>' +
+    '<div class="chip-group" id="mobility-group">' +
+    postOpChip('mobility','full','מלאה') + postOpChip('mobility','limited','מוגבלת') + postOpChip('mobility','assisted','בעזרה') + postOpChip('mobility','bedrest','מנוחת מיטה') +
+    '</div></div>' +
+    '<div class="form-group"><label class="form-label">רחצה / מקלחת</label>' +
+    '<div class="chip-group" id="showering-group">' +
+    postOpChip('showering','allowed','מותרת') + postOpChip('showering','sponge_only','ספוג בלבד') + postOpChip('showering','not_allowed','אסורה') +
+    '</div></div>' +
+    '<div class="form-group"><label class="form-label" style="color:var(--red-text);font-weight:800">⚠️ חשש דחוף</label>' +
+    '<div class="chip-group" id="urgent-concern-group">' +
+    postOpChip('urgent_concern','none','אין') + postOpChip('urgent_concern','fever','חום > 38.5') + postOpChip('urgent_concern','infection','סימני זיהום') + postOpChip('urgent_concern','dehiscence','פתיחת פצע') + postOpChip('urgent_concern','hematoma','המטומה') +
+    '</div></div>' +
+    '</div>' +
+
+    // Section 4: תיעוד קליני
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">📝</span>תיעוד קליני</div>' +
+    miniTA('ChiefComplaint','תלונה עיקרית','כאבים, נפיחות, חום, אי נוחות…') +
+    miniTA('HistoryOfPresentIllness','היסטוריה','תאריך התחלה, מהלך, גורמים…') +
+    miniTA('PhysicalExamination','בדיקה גופנית','ממצאים, צבע, חום, דגישות…') +
+    miniTA('Diagnosis','אבחנה','אבחנה עיקרית ומשנית') +
+    miniTA('Treatment','טיפול שניתן','מה בוצע בביקור') +
+    miniTA('Instructions','הנחיות למטופל','המשך טיפול, מתי לפנות…') +
+    '</div>' +
+
+    // Section 5: תרופות ומעקב
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">💊</span>תרופות ומעקב</div>' +
+    '<div class="form-group"><label class="form-label">תרופות שניתנו</label>' +
+    '<input class="form-input" type="text" id="Medications" name="Medications" placeholder="פרצטמול 500מ&quot;ג, אנטיביוטיקה 500מ&quot;ג…"></div>' +
+    miniTA('ReferralTo','הפניה','גורם מופנה / סיבה') +
+    '<div class="vitals-grid">' +
+    vInput('FollowUpDate','תאריך מעקב','date','') +
+    vInput('NextVisitRecommended','ביקור הבא','date','') +
+    '</div>' +
+    miniTA('FollowUpNotes','הערות מעקב','בדיקות נדרשות, חיסון, מעבדה…') +
+    '</div>' +
+
+    // Section 6: תמונות
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">📷</span>תמונות ומסמכים</div>' +
+    '<p style="font-size:13px;color:var(--text-3);margin-bottom:4px">הקבצים נשמרים ב-Google Drive ומקושרים לביקור</p>' +
+    '<div class="upload-btns">' +
+    '<label class="btn-upload">📷 מצלמה<input id="PhotoInput" type="file" accept="image/*" capture="environment" multiple hidden></label>' +
+    '<label class="btn-upload">🖼️ גלריה<input id="GalleryInput" type="file" accept="image/*" multiple hidden></label>' +
+    '<label class="btn-upload">📎 מסמך<input id="DocInput" type="file" accept="image/*,application/pdf" multiple hidden></label>' +
+    '</div>' +
+    '<div id="file-preview-grid" class="file-preview-grid" style="margin-top:10px"></div>' +
+    '</div>' +
+
+    // Section 7: הערות וחתימה
+    '<div class="visit-section">' +
+    '<div class="visit-section-title"><span class="visit-section-title-icon">🖊️</span>הערות וחתימה</div>' +
+    miniTA('NurseNotes','הערות אחות','תצפיות, תלונות, עדכונים…') +
+    miniTA('DoctorNotes','הערות רופא','סקירה, המלטות, המלצות…') +
+    '<div class="form-group"><label class="form-label">חתימה דיגיטלית</label>' +
+    '<textarea class="signature-pad" id="DigitalSignature" name="DigitalSignature" placeholder="שם מלא / חתימה"></textarea></div>' +
+    '</div>' +
+
+    '<div class="sticky-actions">' +
+    '<button type="button" class="btn-secondary" data-action="save-draft">שמור טיוטה</button>' +
+    '<button type="submit" class="btn-primary" id="visit-submit-btn">✓ שמור וסגור</button>' +
+    '</div>' +
+    '</form></div></div>'
+  );
+
+  // BMI live
+  setTimeout(function(){
+    var wt = document.getElementById('Weight'), ht = document.getElementById('Height'), bd = document.getElementById('bmi-display');
+    function upd(){ if(bd) bd.textContent = calcBmi(wt&&wt.value, ht&&ht.value) ? 'BMI: ' + calcBmi(wt.value, ht.value) : ''; }
+    if(wt) wt.addEventListener('input', upd);
+    if(ht) ht.addEventListener('input', upd);
+  }, 200);
+}
+
+function visitStep(num, label, state) {
+  return '<div class="visit-step ' + (state || '') + '">' +
+    '<div class="visit-step-dot">' + (state === 'done' ? '✓' : num) + '</div>' +
+    '<span>' + label + '</span>' +
+  '</div>';
+}
+
+function vInput(name, label, type, ph) {
+  return '<div class="form-group"><label class="form-label">' + escHtml(label) + '</label>' +
+    '<input class="form-input" type="' + escHtml(type) + '" id="' + escHtml(name) + '" name="' + escHtml(name) + '" placeholder="' + escHtml(ph||'') + '" inputmode="' + (type==='number'?'decimal':'text') + '"></div>';
+}
+
+function miniTA(name, label, ph) {
+  return '<div class="form-group"><label class="form-label">' + escHtml(label) + '</label>' +
+    '<textarea class="form-input" id="' + escHtml(name) + '" name="' + escHtml(name) + '" rows="2" placeholder="' + escHtml(ph||'') + '"></textarea></div>';
+}
+
+function woundBtn(value, cls, label) {
+  return '<button type="button" class="wound-btn ' + cls + '" data-action="select-wound" data-value="' + value + '">' + escHtml(label) + '</button>';
+}
+
+function postOpChip(group, value, label) {
+  return '<button type="button" class="chip" data-action="select-postop-chip" data-group="' + escHtml(group) + '" data-value="' + escHtml(value) + '">' + escHtml(label) + '</button>';
+}
+
+function collectVisitFields() {
+  var g = function(id){ return (document.getElementById(id)||{}).value || ''; };
+  return {
+    PatientId: VisitForm.patientId,
+    PainScore: VisitForm.pain !== null ? String(VisitForm.pain) : '',
+    Bp: g('Bp'), Hr: g('Hr'), Temp: g('Temp'), Spo2: g('Spo2'),
+    Weight: g('Weight'), Height: g('Height'),
+    Bmi: calcBmi(g('Weight'), g('Height')),
+    WoundAssessment: VisitForm.wound || '',
+    ChiefComplaint: g('ChiefComplaint'),
+    HistoryOfPresentIllness: g('HistoryOfPresentIllness'),
+    PhysicalExamination: g('PhysicalExamination'),
+    Assessment: g('Diagnosis'), Diagnosis: g('Diagnosis'),
+    Treatment: g('Treatment'), Instructions: g('Instructions'),
+    ReferralTo: g('ReferralTo'),
+    FollowUpDate: g('FollowUpDate'), FollowUpNotes: g('FollowUpNotes'),
+    NextVisitRecommended: g('NextVisitRecommended'),
+    ComplicationsObserved: g('NurseNotes'),
+    PhysicianNotes: g('DoctorNotes'),
+    NurseSignatureRef: g('DigitalSignature'),
+    MedicationsAdministered: g('Medications'),
+    VisitDate: todayISO(),
+    Edema:          VisitForm.chips['edema']          || '',
+    Drainage:       VisitForm.chips['drainage']       || '',
+    Bruising:       VisitForm.chips['bruising']       || '',
+    Mobility:       VisitForm.chips['mobility']       || '',
+    ShowingGuidance:VisitForm.chips['showering']      || '',
+    UrgentConcern:  VisitForm.chips['urgent_concern'] || ''
+  };
+}
+
+// ============================================================================
+// FILE UTILITIES
+// ============================================================================
+function readFileAsDataUrl(file) {
+  return new Promise(function(resolve, reject){
+    var r = new FileReader();
+    r.onload = function(){ resolve(String(r.result||'')); };
+    r.onerror = function(){ reject(new Error('לא ניתן לקרוא קובץ')); };
+    r.readAsDataURL(file);
+  });
+}
+
+function compressImage(file) {
+  return readFileAsDataUrl(file).then(function(dataUrl){
+    return new Promise(function(resolve){
+      var img = new Image();
+      img.onload = function(){
+        var max = 1600, ratio = Math.min(1, max / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width  = Math.max(1, Math.round(img.width  * ratio));
+        c.height = Math.max(1, Math.round(img.height * ratio));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = function(){ resolve(dataUrl); };
+      img.src = dataUrl;
+    });
+  });
+}
+
+function fileToPayload(file) {
+  return new Promise(function(resolve, reject){
+    if (!file) { reject(new Error('No file')); return; }
+    if (file.size > 14 * 1024 * 1024) { reject(new Error('הקובץ גדול מדי (מקס׳ 14MB)')); return; }
+    var isImg = String(file.type||'').indexOf('image/') === 0;
+    (isImg ? compressImage(file) : readFileAsDataUrl(file)).then(function(dataUrl){
+      var base64 = dataUrl.indexOf(',') >= 0 ? dataUrl.split(',')[1] : dataUrl;
+      resolve({
+        localId: Date.now() + '_' + Math.random().toString(36).slice(2),
+        fileName: isImg
+          ? (file.name||'photo').replace(/\.[^.]+$/, '') + '.jpg'
+          : (file.name||('doc_' + Date.now())),
+        mimeType: isImg ? 'image/jpeg' : (file.type||'application/octet-stream'),
+        sizeBytes: Math.round(base64.length * 0.75),
+        base64: base64,
+        previewUrl: dataUrl
+      });
+    }).catch(reject);
+  });
+}
+
+function renderFilePreviews() {
+  var el = document.getElementById('file-preview-grid'); if (!el) return;
+  if (!VisitForm.files.length) { el.innerHTML = ''; return; }
+  el.innerHTML = VisitForm.files.map(function(f){
+    var isImg = String(f.mimeType||'').indexOf('image/') === 0;
+    return '<div class="file-preview-card">' +
+      (isImg ? '<img src="' + f.previewUrl + '" alt="" loading="lazy">' : '<div class="file-doc-icon">' + fileIcon(f.mimeType) + '</div>') +
+      '<div class="file-preview-name">' + escHtml(f.fileName) + '</div>' +
+      '<button type="button" class="file-remove" data-action="remove-file" data-local-id="' + escHtml(f.localId) + '">×</button>' +
+    '</div>';
+  }).join('');
+}
+
+function handleFileInput(input) {
+  var files = Array.prototype.slice.call(input.files||[]);
+  if (!files.length) return;
+  Promise.all(files.map(fileToPayload))
+    .then(function(payloads){
+      VisitForm.files = VisitForm.files.concat(payloads);
+      renderFilePreviews();
+      input.value = '';
+    })
+    .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); input.value=''; });
+}
+
+function uploadVisitFiles(patientId, visitId) {
+  if (!VisitForm.files.length) return Promise.resolve([]);
+  var q = VisitForm.files.slice(), uploaded = [];
+  function next() {
+    if (!q.length) return Promise.resolve(uploaded);
+    var f = q.shift();
+    return api('api_uploadFile', patientId, visitId, { base64:f.base64, fileName:f.fileName, mimeType:f.mimeType, sizeBytes:f.sizeBytes })
+      .then(function(r){ uploaded.push(r); return next(); });
+  }
+  return next();
+}
+
+// ============================================================================
+// VIEW: USERS
+// ============================================================================
+function renderUsers() {
+  if (!App.canManageUsers()) {
+    setAppHTML(sidebarNav('users') + '<div class="screen">' + tabHeader('צוות') + '<div class="screen-body"><div class="error-card">גישה מוגבלת.</div></div>' + bottomNav('users') + '</div>');
+    return;
+  }
+  setAppHTML(
+    sidebarNav('users') +
+    '<div class="screen">' +
+    tabHeader('ניהול צוות', '<button class="btn-icon" data-action="go" data-view="add-user" aria-label="הוסף">+</button>') +
+    '<div id="users-list" class="screen-body" style="gap:10px">' + skeletons(3) + '</div>' +
+    bottomNav('users') + '</div>'
+  );
+
+  api('api_getUsers')
+    .then(function(users){
+      var el = document.getElementById('users-list'); if (!el) return;
+      if (!users || !users.length) { el.innerHTML = emptyState('👤','אין משתמשים','הוסף/י משתמש ראשון','add-user'); return; }
+      el.innerHTML = users.map(function(u){ return renderUserCard(u); }).join('');
+    })
+    .catch(function(err){ var el=document.getElementById('users-list'); if(el) el.innerHTML='<div class="error-card">'+friendlyError(err.message)+'</div>'; });
+}
+
+function renderUserCard(u) {
+  var roleColor = u.Role===ROLE_ADMIN ? 'pill-blue' : u.Role===ROLE_PHYSICIAN||u.Role===ROLE_DOCTOR ? 'pill-teal' : 'pill-gray';
+  var statusPill = u.Status !== 'active' ? '<span class="pill pill-amber">מושבת</span>' : '';
+  var cardId = 'ucard-' + escHtml(u.RecordId);
+
+  return '<div class="user-card" id="' + cardId + '">' +
+    '<div class="user-card-header" data-action="toggle-user-card" data-card-id="' + cardId + '">' +
+      '<div class="patient-avatar" style="width:44px;height:44px;font-size:15px;background:' + avatarColor(u.FullName||u.Email) + '">' + escHtml(initials(u.FullName||u.Email)) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px">' + escHtml(u.FullName||u.Email) + statusPill + '</div>' +
+        '<div style="font-size:12.5px;color:var(--text-3)">' + escHtml(u.Email) + '</div>' +
+      '</div>' +
+      '<span class="pill ' + roleColor + '">' + escHtml(u.Role) + '</span>' +
+      '<span style="font-size:18px;color:var(--text-3);margin-inline-start:4px">›</span>' +
+    '</div>' +
+    '<div class="user-card-body" style="display:none">' +
+      '<form data-action="submit-edit-user" data-user-id="' + escHtml(u.RecordId) + '" novalidate>' +
+        '<input type="hidden" name="Email" value="' + escHtml(u.Email||'') + '">' +
+        '<div class="user-edit-fields">' +
+          '<div class="mini-field form-group"><span>שם מלא</span><input class="form-input" name="FullName" value="' + escHtml(u.FullName||'') + '"></div>' +
+          '<div class="mini-field form-group"><span>תפקיד</span><select class="form-input" name="Role" data-apply-permission-defaults="1">' +
+            roleOption(ROLE_NURSE, u.Role, 'אחות/אח') +
+            roleOption(ROLE_PHYSICIAN, u.Role, 'רופא/ה') +
+            roleOption(ROLE_DOCTOR, u.Role, 'רופא/ה (Doctor)') +
+            roleOption(ROLE_SECRETARY, u.Role, 'מזכיר/ה') +
+            roleOption(ROLE_ADMIN, u.Role, 'מנהל/ת') +
+          '</select></div>' +
+          '<div class="mini-field form-group"><span>סטטוס</span><select class="form-input" name="Status">' +
+            '<option value="active"'+(u.Status==='active'?' selected':'')+'>פעיל</option>' +
+            '<option value="archived"'+(u.Status!=='active'?' selected':'')+'>מושבת</option>' +
+          '</select></div>' +
+        '</div>' +
+        '<div class="permission-section-title">הרשאות</div>' +
+        renderPermissionToggles(u, 'u-' + u.RecordId) +
+        '<div style="display:flex;gap:8px;margin-top:14px">' +
+          '<button class="btn-primary" type="submit" style="min-height:44px;font-size:14px">💾 שמור</button>' +
+          (u.Status==='active'
+            ? '<button type="button" class="btn-secondary" style="min-height:44px;font-size:14px;color:var(--red-text)" data-action="deactivate-user" data-user-id="' + escHtml(u.RecordId) + '">השבת</button>'
+            : '<button type="button" class="btn-secondary" style="min-height:44px;font-size:14px" data-action="activate-user" data-user-id="' + escHtml(u.RecordId) + '">הפעל</button>') +
+          (App.isAdmin() && u.Email !== (App.user && App.user.email)
+            ? '<button type="button" class="btn-danger" style="min-height:44px;font-size:13px;width:auto;padding:0 14px" data-action="delete-user" data-user-id="' + escHtml(u.RecordId) + '" data-user-name="' + escHtml(u.FullName||u.Email) + '" data-user-email="' + escHtml(u.Email||'') + '">🗑 מחק</button>'
+            : '') +
+        '</div>' +
+      '</form>' +
+    '</div>' +
+  '</div>';
+}
+
+// ============================================================================
+// VIEW: ADD USER
+// ============================================================================
+function renderAddUser() {
+  setAppHTML(
+    sidebarNav('users') +
+    '<div class="screen no-nav">' + backHeader('הוסף משתמש') +
+    '<div class="screen-body">' +
+    '<form id="add-user-form" data-action="submit-add-user" novalidate>' +
+    '<div class="form-section"><div class="form-section-title">👤 פרטי משתמש</div>' +
+    formGroup('Email','אימייל','email','','nurse@hospital.com',true) +
+    formGroup('FullName','שם מלא','text','','ישראל ישראלי') +
+    '<div class="form-group"><label class="form-label">תפקיד <span class="required">*</span></label>' +
+    '<select class="form-input" id="Role" name="Role" data-apply-permission-defaults="1">' +
+    '<option value="">בחר תפקיד…</option>' +
+    '<option value="Nurse">אחות/אח</option>' +
+    '<option value="Physician">רופא/ה</option>' +
+    '<option value="Doctor">רופא/ה (Doctor)</option>' +
+    '<option value="Secretary">מזכיר/ה</option>' +
+    '<option value="Admin">מנהל/ת</option>' +
+    '</select></div></div>' +
+    '<div class="permission-section-title">הרשאות</div>' +
+    renderPermissionToggles({Role: ROLE_NURSE}, 'new-user') +
+    '<button type="submit" class="btn-primary" id="add-user-submit">+ הוסף משתמש</button>' +
+    '</form></div></div>'
+  );
+}
+
+// ============================================================================
+// VIEW: AUDIT LOG
+// ============================================================================
+function renderAuditLog() {
+  if (!App.canManageUsers()) {
+    setAppHTML(sidebarNav('audit-log') + '<div class="screen">' + tabHeader('לוג') + '<div class="screen-body"><div class="error-card">גישה מוגבלת.</div></div>' + bottomNav('audit-log') + '</div>');
+    return;
+  }
+  setAppHTML(
+    sidebarNav('audit-log') +
+    '<div class="screen">' + tabHeader('לוג פעולות') +
+    '<div id="audit-list" class="screen-body">' + skeletons(4) + '</div>' +
+    bottomNav('audit-log') + '</div>'
+  );
+  api('api_getAuditLog')
+    .then(function(logs){
+      var el = document.getElementById('audit-list'); if (!el) return;
+      if (!logs||!logs.length) { el.innerHTML = emptyState('📋','הלוג ריק','פעולות יופיעו כאן',''); return; }
+      el.innerHTML = '<div class="card">' + logs.slice(0,200).map(function(log){
+        return '<div class="audit-row">' +
+          '<div class="audit-action">' + escHtml(log.Action||'') + (log.TargetType?' · '+escHtml(log.TargetType):'') + '</div>' +
+          '<div class="audit-meta">' + escHtml(log.ActorEmail||'') + ' · ' + formatDateTime(log.Timestamp) + '</div>' +
+          (log.Details ? '<div class="audit-detail">' + escHtml(log.Details) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+    })
+    .catch(function(err){ var el=document.getElementById('audit-list'); if(el) el.innerHTML='<div class="error-card">'+friendlyError(err.message)+'</div>'; });
+}
+
+// ============================================================================
+// VIEW: MY PROFILE
+// ============================================================================
+function renderMyProfile() {
+  var u = App.user || {};
+  var roleLabels = { Admin:'מנהל/ת', Nurse:'אחות/אח', Physician:'רופא/ה', Doctor:'רופא/ה', Secretary:'מזכיר/ה' };
+  setAppHTML(
+    sidebarNav('my-profile') +
+    '<div class="screen">' + tabHeader('הפרופיל שלי') +
+    '<div class="screen-body">' +
+    '<div class="profile-hero">' +
+      '<div class="profile-hero-row">' +
+        '<div class="profile-avatar">' + escHtml(initials(u.fullName||u.email)) + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="profile-name">' + escHtml(u.fullName||u.email||'') + '</div>' +
+          '<div class="profile-meta">' + escHtml(u.email||'') + '</div>' +
+          '<div class="profile-pills"><span class="profile-pill">' + escHtml(roleLabels[u.role]||u.role||'') + '</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><div style="padding:0 16px">' +
+      infoRow('אימייל', u.email) +
+      infoRow('תפקיד', roleLabels[u.role]||u.role) +
+      infoRow('Clinic ID', App.clinicId) +
+    '</div></div>' +
+    '</div>' +
+    bottomNav('my-profile') + '</div>'
+  );
+}
+
+// ============================================================================
+// EVENT DELEGATION
+// ============================================================================
+document.addEventListener('click', function(e) {
+  // Filter chip click
+  var chipTarget = e.target.closest('[data-patient-filter]');
+  if (chipTarget) {
+    window._patientFilter = chipTarget.getAttribute('data-patient-filter');
+    applyPatientFilter();
+    return;
+  }
+
+  var el = e.target;
+  while (el && el !== document) { if (el.dataset && el.dataset.action) break; el = el.parentElement; }
+  if (!el || !el.dataset || !el.dataset.action) return;
+  var action = el.dataset.action, d = el.dataset;
+
+  switch(action) {
+    case 'tab':
+      if (d.filterOnArrive) App._pendingFilter = d.filterOnArrive;
+      App.tab(d.view);
+      break;
+    case 'back': App.back(); break;
+    case 'go':   App.go(d.view, { patientId: d.patientId, patientName: d.patientName }); break;
+
+    case 'open-patient':
+      e.stopPropagation();
+      App.go('patient-detail', { patientId: d.patientId });
+      break;
+
+    case 'start-visit':
+      e.stopPropagation();
+      App.go('new-visit', { patientId: d.patientId, patientName: d.patientName });
+      break;
+
+    case 'switch-tab':
+      var cdata = App._cache['patient_' + (App._current && App._current.params.patientId)];
+      if (cdata) renderPatientTab(d.tab, cdata.patient, cdata.visits, cdata.timeline, App._current.params.patientId);
+      break;
+
+    case 'toggle-user-card':
+      var body = document.querySelector('#' + d.cardId + ' .user-card-body');
+      if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+      break;
+
+    case 'select-pain':
+      VisitForm.pain = parseInt(d.value, 10);
+      document.querySelectorAll('.pain-btn').forEach(function(b){ b.classList.toggle('selected', b.dataset.value === d.value); });
+      var hints = ['ללא כאב','קל מאוד','קל','אי נוחות קלה','מתון','מתון-חזק','חזק','חזק מאוד','עז מאוד','קיצוני','לא נסבל'];
+      var hel = document.getElementById('pain-hint');
+      if(hel) hel.textContent = hints[VisitForm.pain] || '';
+      break;
+
+    case 'select-wound':
+      VisitForm.wound = d.value;
+      document.querySelectorAll('.wound-btn').forEach(function(b){ b.classList.toggle('selected', b.dataset.value === d.value); });
+      break;
+
+    case 'toggle-followup':
+      (function(){
+        var ff = document.getElementById('followup-fields');
+        var cb = document.getElementById('FollowUpEnabled');
+        if (ff) ff.style.display = (cb && cb.checked) ? 'flex' : 'none';
+      })();
+      break;
+
+    case 'select-postop-chip':
+      VisitForm.chips[d.group] = d.value;
+      document.querySelectorAll('[data-action="select-postop-chip"][data-group="' + d.group + '"]').forEach(function(b){
+        b.className = b.dataset.value === d.value ? 'chip selected' : 'chip';
+      });
+      break;
+
+    case 'save-draft':
+      var df = document.getElementById('visit-form');
+      if(df) submitVisit(df, true);
+      break;
+
+    case 'remove-file':
+      VisitForm.files = VisitForm.files.filter(function(f){ return f.localId !== d.localId; });
+      renderFilePreviews();
+      break;
+
+    case 'generate-pdf':
+      e.stopPropagation();
+      (function() {
+        var btn = el.closest('button') || el;
+        var orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ יוצר…';
+        api('api_generateVisitPdf', d.visitId)
+          .then(function(pdf){
+            btn.disabled = false; btn.textContent = orig;
+            if (pdf && pdf.noVisit) {
+              Toast.show(pdf.message || 'לא ניתן לייצא PDF לפני סיום ביקור', 'warn', 5000);
+            } else if (pdf) {
+              showPdfModal(pdf, d.patientId);
+            }
+          })
+          .catch(function(err){ btn.disabled = false; btn.textContent = orig; Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      })();
+      break;
+
+    case 'quick-pdf':
+      e.stopPropagation();
+      (function() {
+        var btn = el.closest('button') || el;
+        var orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ יוצר…';
+        api('api_generatePatientPdf', d.patientId)
+          .then(function(pdf){
+            btn.disabled = false; btn.textContent = orig;
+            if (pdf && pdf.noVisit) {
+              Toast.show(pdf.message || 'לא ניתן לייצא PDF לפני סיום ביקור ראשון', 'warn', 5000);
+            } else if (pdf) {
+              showPdfModal(pdf, d.patientId);
+            }
+          })
+          .catch(function(err){ btn.disabled = false; btn.textContent = orig; Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      })();
+      break;
+
+    case 'export-pdf-list':
+      Toast.show('ייצוא מתבצע… בדוק Google Drive בעוד רגע', 'success', 4000);
+      break;
+
+    case 'add-physician-notes':
+      promptPhysicianNotes(d.visitId, d.patientId);
+      break;
+
+    case 'open-file':
+      window.open(d.url, '_blank');
+      break;
+
+    case 'delete-file':
+      e.preventDefault(); e.stopPropagation();
+      if (confirm('למחוק קובץ זה לצמיתות?')) {
+        api('api_deleteFile', d.fileId)
+          .then(function(){ Toast.show('הקובץ נמחק', 'success'); loadPatientImages(d.patientId); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      }
+      break;
+
+    case 'archive-patient':
+      if (confirm('לארכב את המטופל?')) {
+        api('api_archivePatient', d.patientId)
+          .then(function(){ App.invalidatePatientCache(d.patientId); Toast.show('המטופל אורכב ✓', 'success'); App.go('patient-detail', {patientId: d.patientId}); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      }
+      break;
+
+    case 'restore-patient':
+      api('api_restorePatient', d.patientId)
+        .then(function(){ App.invalidatePatientCache(d.patientId); Toast.show('המטופל שוחזר ✓', 'success'); App.go('patient-detail', {patientId: d.patientId}); })
+        .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      break;
+
+    case 'delete-patient':
+      if (confirm('מחיקה מסתירה את המטופל מהמערכת. להמשיך?')) {
+        api('api_deletePatient', d.patientId)
+          .then(function(){ App.invalidatePatientCache(d.patientId); Toast.show('המטופל נמחק ✓', 'success'); App.tab('patients'); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      }
+      break;
+
+    case 'deactivate-user':
+      if (confirm('להשבית משתמש זה?')) {
+        api('api_updateUser', d.userId, {Status:'archived'})
+          .then(function(){ Toast.show('משתמש הושבת ✓', 'success'); App.tab('users'); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      }
+      break;
+
+    case 'activate-user':
+      api('api_updateUser', d.userId, {Status:'active'})
+        .then(function(){ Toast.show('משתמש הופעל ✓', 'success'); App.tab('users'); })
+        .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      break;
+
+    case 'delete-user':
+      if (!App.isAdmin()) { Toast.show('אין הרשאה למחוק משתמשים'); break; }
+      if (d.userEmail && App.user && d.userEmail === App.user.email) { Toast.show('לא ניתן למחוק את עצמך'); break; }
+      if (confirm('האם אתה בטוח שברצונך למחוק לצמיתות את המשתמש:\n\n' + (d.userName || d.userEmail || '') + '\n\nפעולה זו אינה ניתנת לביטול.')) {
+        api('api_deleteUser', d.userId)
+          .then(function(){ Toast.show('משתמש נמחק לצמיתות ✓', 'success'); App.tab('users'); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      }
+      break;
+
+    case 'set-urgency':
+      (function(){
+        var pid = d.patientId, urg = d.urgency;
+        document.querySelectorAll('.urgency-btn').forEach(function(b){ b.className = 'urgency-btn'; });
+        el.className = 'urgency-btn selected-' + urg;
+        api('api_updateFollowUpJourney', pid, { UrgencyStatus: urg })
+          .then(function(){ App.invalidatePatientCache(pid); Toast.show('סטטוס עודכן ✓', 'success'); })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      })();
+      break;
+
+    case 'save-followup-journey':
+      (function(){
+        var pid = d.patientId;
+        var fuCb = document.getElementById('fu-enabled-toggle');
+        var fields = {
+          FollowUpEnabled:     !!(fuCb && fuCb.checked),
+          FollowUpStatus:      (document.getElementById('fu-status-select')||{}).value  || 'active',
+          NextFollowUpDate:    (document.getElementById('fu-next-date')||{}).value      || '',
+          FollowUpStartDate:   (document.getElementById('fu-start-date')||{}).value     || '',
+          FollowUpPrivateNotes:(document.getElementById('fu-private-note')||{}).value   || '',
+          AssignedNurseId:     (document.getElementById('fu-nurse-select')||{}).value   || ''
+        };
+        Toast.show('שומר…');
+        api('api_updateFollowUpJourney', pid, fields)
+          .then(function(){
+            App.invalidatePatientCache(pid);
+            Toast.show('מסע מעקב עודכן ✓', 'success');
+            App.go('patient-detail', {patientId: pid});
+          })
+          .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+      })();
+      break;
+  }
+}, true);
+
+document.addEventListener('submit', function(e) {
+  var form = e.target;
+  if (!form || !form.dataset || !form.dataset.action) return;
+  e.preventDefault();
+  switch(form.dataset.action) {
+    case 'submit-add-patient':  submitAddPatient(form);  break;
+    case 'submit-edit-patient': submitEditPatient(form); break;
+    case 'submit-visit':        submitVisit(form, false); break;
+    case 'submit-add-user':     submitAddUser(form);    break;
+    case 'submit-edit-user':    submitEditUser(form);   break;
+  }
+}, true);
+
+document.addEventListener('change', function(e) {
+  var t = e.target;
+  if (t && (t.id==='PhotoInput'||t.id==='GalleryInput'||t.id==='DocInput')) handleFileInput(t);
+  if (t && t.getAttribute('data-apply-permission-defaults')==='1') applyRoleDefaults(t.form, t.value);
+}, true);
+
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'patient-search') {
+    applyPatientFilter();
+  }
+}, true);
+
+// ============================================================================
+// FORM SUBMIT HANDLERS
+// ============================================================================
+function getVal(form, name) { return ((form.querySelector('[name=' + name + ']'))||{}).value || ''; }
+
+function submitAddPatient(form) {
+  var btn = document.getElementById('add-patient-submit');
+  if (btn) { btn.disabled=true; btn.textContent='שומר…'; }
+  var fields = {
+    FullName: getVal(form,'FullName'), NationalId: getVal(form,'NationalId'),
+    DateOfBirth: getVal(form,'DateOfBirth'), Sex: getVal(form,'Sex'),
+    Phone: getVal(form,'Phone'), Address: getVal(form,'Address'),
+    BloodType: getVal(form,'BloodType'), Allergies: getVal(form,'Allergies'),
+    ChronicConditions: getVal(form,'ChronicConditions'),
+    SurgeryType: getVal(form,'SurgeryType'), SurgeryDate: getVal(form,'SurgeryDate'),
+    PrimaryDiagnosis: getVal(form,'PrimaryDiagnosis'), ReferringPhysician: getVal(form,'ReferringPhysician'),
+    EmergencyContactName: getVal(form,'EmergencyContactName'), EmergencyContactPhone: getVal(form,'EmergencyContactPhone'),
+    AssignedNurseId: getVal(form,'AssignedNurseId'), AssignedPhysicianId: getVal(form,'AssignedPhysicianId'),
+    Notes: getVal(form,'Notes'), Status: 'active',
+    FollowUpEnabled: !!(form.querySelector('#FollowUpEnabled') && form.querySelector('#FollowUpEnabled').checked),
+    NextFollowUpDate: getVal(form,'NextFollowUpDate')
+  };
+  if (!fields.FullName.trim()) { showFormError(form,'שם מלא הוא שדה חובה.'); if(btn){btn.disabled=false;btn.textContent='💾 שמור מטופלת';} return; }
+  if (fields.FollowUpEnabled && !fields.AssignedNurseId) { showFormError(form,'יש לבחור אחות/אח כשמעקב פעיל.'); if(btn){btn.disabled=false;btn.textContent='💾 שמור מטופלת';} return; }
+  api('api_createPatient', fields)
+    .then(function(patient){ App.invalidatePatientCache(patient && patient.RecordId); Toast.show('מטופלת נשמרה ✓', 'success'); if(patient&&patient.RecordId) App.go('patient-detail',{patientId:patient.RecordId}); else App.tab('patients'); })
+    .catch(function(err){ showFormError(form, friendlyError(err.message)); if(btn){btn.disabled=false;btn.textContent='💾 שמור מטופלת';} });
+}
+
+function submitEditPatient(form) {
+  var btn = document.getElementById('edit-patient-submit');
+  if (btn) { btn.disabled=true; btn.textContent='שומר…'; }
+  var pid = form.getAttribute('data-patient-id');
+  var fields = {
+    FullName: getVal(form,'FullName'), NationalId: getVal(form,'NationalId'),
+    DateOfBirth: getVal(form,'DateOfBirth'), Sex: getVal(form,'Sex'),
+    Phone: getVal(form,'Phone'), Address: getVal(form,'Address'),
+    BloodType: getVal(form,'BloodType'), Allergies: getVal(form,'Allergies'),
+    ChronicConditions: getVal(form,'ChronicConditions'),
+    SurgeryType: getVal(form,'SurgeryType'), SurgeryDate: getVal(form,'SurgeryDate'),
+    PrimaryDiagnosis: getVal(form,'PrimaryDiagnosis'), ReferringPhysician: getVal(form,'ReferringPhysician'),
+    AssignedNurseId: getVal(form,'AssignedNurseId'), AssignedPhysicianId: getVal(form,'AssignedPhysicianId'),
+    Notes: getVal(form,'Notes'),
+    FollowUpEnabled: !!(form.querySelector('#FollowUpEnabled') && form.querySelector('#FollowUpEnabled').checked),
+    NextFollowUpDate: getVal(form,'NextFollowUpDate')
+  };
+  if (!fields.FullName.trim()) { showFormError(form,'שם מלא הוא שדה חובה.'); if(btn){btn.disabled=false;btn.textContent='💾 שמור שינויים';} return; }
+  api('api_updatePatient', pid, fields)
+    .then(function(){ App.invalidatePatientCache(pid); Toast.show('פרטים עודכנו ✓', 'success'); App.back(); })
+    .catch(function(err){ showFormError(form, friendlyError(err.message)); if(btn){btn.disabled=false;btn.textContent='💾 שמור שינויים';} });
+}
+
+function submitVisit(form, draftOnly) {
+  var btn = document.getElementById('visit-submit-btn');
+  if (btn && !draftOnly) { btn.disabled=true; btn.textContent='שומר…'; }
+  var fields = collectVisitFields();
+  if (!fields.PatientId) { Toast.show('שגיאה: מטופל לא נבחר.'); if(btn){btn.disabled=false;btn.textContent='✓ שמור וסגור';} return; }
+  api('api_createVisit', fields)
+    .then(function(visit){ return uploadVisitFiles(fields.PatientId, visit.RecordId).then(function(){ return visit; }); })
+    .then(function(visit){
+      if (draftOnly) { Toast.show('טיוטה נשמרה ✓', 'success'); App.back(); return; }
+      return api('api_finalizeVisit', visit.RecordId).then(function(){
+        App.invalidatePatientCache(fields.PatientId);
+        Toast.show('ביקור נשמר ✓' + (VisitForm.files.length ? ' + ' + VisitForm.files.length + ' קבצים' : ''), 'success');
+        App.back();
+      });
+    })
+    .catch(function(err){
+      if ((err.message||'').toLowerCase().indexOf('network') !== -1 || (err.message||'').indexOf('שגיאת רשת') !== -1) {
+        OfflineQueue.enqueue(fields);
+        Toast.show('אין חיבור — הביקור נשמר מקומית ויסתנכרן בהמשך', 'warn', 4000);
+        App.back();
+      } else {
+        if(btn){btn.disabled=false;btn.textContent='✓ שמור וסגור';}
+        Toast.show('שגיאה: ' + friendlyError(err.message));
+      }
+    });
+}
+
+function submitAddUser(form) {
+  var btn = document.getElementById('add-user-submit');
+  if (btn) { btn.disabled=true; btn.textContent='מוסיף…'; }
+  var fields = {
+    Email: getVal(form,'Email'), FullName: getVal(form,'FullName'),
+    Role:  getVal(form,'Role'),  Permissions: collectPermissions(form)
+  };
+  if (!fields.Email.trim()) { showFormError(form,'אימייל חובה.'); if(btn){btn.disabled=false;btn.textContent='+ הוסף';} return; }
+  if (!fields.Role)          { showFormError(form,'יש לבחור תפקיד.'); if(btn){btn.disabled=false;btn.textContent='+ הוסף';} return; }
+  api('api_createUser', fields)
+    .then(function(){ Toast.show('משתמש נוסף ✓', 'success'); App.tab('users'); })
+    .catch(function(err){ showFormError(form, friendlyError(err.message)); if(btn){btn.disabled=false;btn.textContent='+ הוסף';} });
+}
+
+function submitEditUser(form) {
+  var uid = form.dataset.userId || '';
+  var btn = form.querySelector('button[type=submit]');
+  if (btn) { btn.disabled=true; btn.textContent='שומר…'; }
+  var fields = {
+    FullName: getVal(form,'FullName'), Role: getVal(form,'Role'),
+    Status:   getVal(form,'Status'),   Permissions: collectPermissions(form)
+  };
+  if (!uid||!fields.Role) { if(btn){btn.disabled=false;btn.textContent='💾 שמור';} return; }
+  api('api_updateUser', uid, fields)
+    .then(function(){ Toast.show('משתמש עודכן ✓', 'success'); App.tab('users'); })
+    .catch(function(err){ showFormError(form, friendlyError(err.message)); if(btn){btn.disabled=false;btn.textContent='💾 שמור';} });
+}
+
+function applyRoleDefaults(form, role) {
+  if (!form) return;
+  var def = defaultPermissionsForRole(role);
+  Array.prototype.slice.call(form.querySelectorAll('[data-permission-key]')).forEach(function(inp){
+    inp.checked = !!def[inp.getAttribute('data-permission-key')];
+  });
+}
+
+function promptPhysicianNotes(visitId, patientId) {
+  var notes = prompt('הוסף הערות רופא:');
+  if (notes === null) return;
+  api('api_addPhysicianNotes', visitId, notes)
+    .then(function(){ Toast.show('הערות נשמרו ✓', 'success'); delete App._cache['patient_'+patientId]; App.go('patient-detail',{patientId:patientId}); })
+    .catch(function(err){ Toast.show('שגיאה: ' + friendlyError(err.message)); });
+}
+
+// ============================================================================
+// PDF SUCCESS MODAL
+// ============================================================================
+function showPdfModal(pdf, patientId) {
+  var existing = document.getElementById('pdf-modal-overlay');
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var fileName   = pdf.fileName   || pdf.driveFileId || 'דוח PDF';
+  var folderName = pdf.folderName || '';
+  var driveUrl   = pdf.driveUrl   || '';
+  var folderId   = pdf.folderId   || '';
+  var folderUrl  = folderId ? 'https://drive.google.com/drive/folders/' + folderId : '';
+  var copyUrl    = driveUrl;
+  var today      = new Date();
+  var dateStr    = String(today.getDate()).padStart(2,'0') + '/' +
+                   String(today.getMonth()+1).padStart(2,'0') + '/' +
+                   today.getFullYear();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'pdf-modal-overlay';
+  overlay.className = 'pdf-modal-overlay';
+  overlay.innerHTML =
+    '<div class="pdf-modal-box" role="dialog" aria-modal="true">' +
+      '<div class="pdf-modal-icon">📄</div>' +
+      '<div class="pdf-modal-title">PDF נוצר בהצלחה</div>' +
+      '<div class="pdf-modal-meta"><strong>' + escHtml(fileName) + '</strong></div>' +
+      (folderName ? '<div class="pdf-modal-meta">תיקייה: ' + escHtml(folderName) + '</div>' : '') +
+      '<div class="pdf-modal-meta" style="color:var(--text-3);font-size:12px">נוצר: ' + dateStr + '</div>' +
+      '<div class="pdf-modal-divider"></div>' +
+      '<div class="pdf-modal-actions">' +
+        (driveUrl
+          ? '<button class="pdf-modal-btn-primary" onclick="window.open(\'' + escHtml(driveUrl) + '\',\'_blank\');closePdfModal()">📄 פתח PDF</button>'
+          : '') +
+        (folderUrl
+          ? '<button class="pdf-modal-btn-secondary" onclick="window.open(\'' + escHtml(folderUrl) + '\',\'_blank\')">📁 פתח תיקייה ב-Drive</button>'
+          : '') +
+        (copyUrl
+          ? '<button class="pdf-modal-btn-secondary" onclick="copyToClipboard(\'' + escHtml(copyUrl) + '\')">🔗 העתק קישור</button>'
+          : '') +
+        '<button class="pdf-modal-btn-ghost" onclick="closePdfModal()">סגור</button>' +
+      '</div>' +
+    '</div>';
+
+  overlay.addEventListener('click', function(ev) {
+    if (ev.target === overlay) closePdfModal();
+  });
+
+  document.body.appendChild(overlay);
+
+  // Refresh PDF list in patient profile if it's visible
+  if (patientId) {
+    var listEl = document.getElementById('pdf-files-list');
+    if (listEl) {
+      listEl.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px">מרענן…</div>';
+      api('api_getFiles', patientId, '')
+        .then(function(files) {
+          if (!listEl.isConnected) return;
+          var pdfs = (files || []).filter(function(f){ return String(f.MimeType||'').indexOf('pdf') !== -1 || String(f.FileType||'').toLowerCase() === 'pdf'; });
+          if (!pdfs.length) { listEl.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px;text-align:center">אין דוחות PDF עדיין</div>'; return; }
+          listEl.innerHTML = pdfs.map(function(f) {
+            var u = escHtml(f.DriveUrl || f.DownloadUrl || '#');
+            return '<div class="pdf-list-item">' +
+              '<div class="pdf-list-icon">📄</div>' +
+              '<div class="pdf-list-info">' +
+                '<div class="pdf-list-name">' + escHtml(f.FileName||'דוח PDF') + '</div>' +
+                '<div class="pdf-list-date">' + formatDate(f.CreatedAt||f.UpdatedAt||'') + '</div>' +
+              '</div>' +
+              '<div class="pdf-list-btns">' +
+                '<button onclick="window.open(\'' + u + '\',\'_blank\')">פתח</button>' +
+                '<button onclick="copyToClipboard(\'' + u + '\')">העתק</button>' +
+              '</div>' +
+            '</div>';
+          }).join('');
+        }).catch(function(){});
+    }
+  }
+}
+
+function closePdfModal() {
+  var el = document.getElementById('pdf-modal-overlay');
+  if (el) el.parentNode.removeChild(el);
+}
+
+function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){ Toast.show('הקישור הועתק ✓', 'success'); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      Toast.show('הקישור הועתק ✓', 'success');
+    }
+  } catch(e) { Toast.show('לא ניתן להעתיק — העתק ידנית: ' + text); }
+}
+
+// ============================================================================
+// VIEW: CLINIC SETTINGS
+// ============================================================================
+function renderClinicSettings() {
+  if (!App.canManageUsers()) {
+    setAppHTML(sidebarNav('clinic-settings') + '<div class="screen">' + tabHeader('הגדרות מרפאה') + '<div class="screen-body"><div class="error-card">גישה מוגבלת למנהלים בלבד.</div></div>' + bottomNav('clinic-settings') + '</div>');
+    return;
+  }
+  setAppHTML(
+    sidebarNav('clinic-settings') +
+    '<div class="screen">' + tabHeader('הגדרות מרפאה') +
+    '<div id="clinic-settings-body" class="screen-body">' + skeletons(4) + '</div>' +
+    bottomNav('clinic-settings') + '</div>'
+  );
+  api('api_getClinicSettings')
+    .then(function(s) {
+      var el = document.getElementById('clinic-settings-body'); if (!el) return;
+      var logoUrl = s.ClinicLogoUrl || '';
+      el.innerHTML =
+        '<form id="clinic-settings-form">' +
+
+        '<div class="settings-group-label">זהות מרפאה</div>' +
+        '<div class="card"><div style="padding:0 4px">' +
+          '<label class="form-label">שם מרפאה / רופא</label>' +
+          '<input class="form-input" name="ClinicName" value="' + escHtml(s.ClinicName||'') + '" placeholder="ד״ר תמיר גיל">' +
+          '<label class="form-label">שם רופא מנתח</label>' +
+          '<input class="form-input" name="DoctorName" value="' + escHtml(s.DoctorName||'') + '" placeholder="ד״ר תמיר גיל">' +
+          '<label class="form-label">טלפון מרפאה</label>' +
+          '<input class="form-input" name="ClinicPhone" type="tel" value="' + escHtml(s.ClinicPhone||s.clinic_phone||'') + '" placeholder="03-1234567">' +
+          '<label class="form-label">כתובת מרפאה</label>' +
+          '<input class="form-input" name="ClinicAddress" value="' + escHtml(s.ClinicAddress||s.clinic_address||'') + '" placeholder="רחוב הרצל 1, תל אביב">' +
+          '<label class="form-label">אימייל מרפאה</label>' +
+          '<input class="form-input" name="ClinicEmail" type="email" value="' + escHtml(s.ClinicEmail||'') + '" placeholder="clinic@example.com">' +
+        '</div></div>' +
+
+        '<div class="settings-group-label">לוגו מרפאה</div>' +
+        '<div class="card"><div style="padding:0 4px">' +
+          '<div class="settings-logo-wrap">' +
+            (logoUrl
+              ? '<img class="settings-logo-preview" id="logo-preview-img" src="' + escHtml(logoUrl) + '" alt="לוגו">'
+              : '<div class="settings-logo-placeholder" id="logo-preview-img">🏥</div>') +
+            '<div>' +
+              '<label class="settings-logo-upload-label">📁 העלה לוגו<input type="file" id="logo-file-input" accept="image/png,image/jpeg,image/svg+xml" hidden></label>' +
+              '<div id="logo-upload-status" style="font-size:12px;color:var(--text-3);margin-top:6px"></div>' +
+              (s.ClinicLogoFileId ? '<div style="font-size:11px;color:var(--text-3);margin-top:4px">File ID: ' + escHtml(s.ClinicLogoFileId) + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--text-3);margin-top:8px">הלוגו יופיע בכותרת דוחות ה-PDF שנוצרים במרפאה.</div>' +
+        '</div></div>' +
+
+        '<div class="form-actions">' +
+          '<button type="submit" class="btn-primary" id="save-settings-btn">💾 שמור הגדרות</button>' +
+        '</div>' +
+        '</form>';
+
+      // Logo upload handler
+      var logoInput = document.getElementById('logo-file-input');
+      if (logoInput) {
+        logoInput.addEventListener('change', function() {
+          var file = this.files && this.files[0]; if (!file) return;
+          var statusEl = document.getElementById('logo-upload-status');
+          if (statusEl) statusEl.textContent = 'מעלה לוגו…';
+          fileToPayload(file).then(function(pl) {
+            return api('api_uploadClinicLogo', { base64: pl.base64, fileName: pl.fileName, mimeType: pl.mimeType });
+          }).then(function(res) {
+            if (statusEl) statusEl.textContent = 'הלוגו הועלה ✓';
+            var prev = document.getElementById('logo-preview-img');
+            if (prev && res && res.url) {
+              var img = document.createElement('img');
+              img.className = 'settings-logo-preview';
+              img.id = 'logo-preview-img';
+              img.src = res.url;
+              img.alt = 'לוגו';
+              prev.parentNode.replaceChild(img, prev);
+            }
+            Toast.show('הלוגו הועלה בהצלחה ✓', 'success');
+          }).catch(function(err) {
+            if (statusEl) statusEl.textContent = '';
+            Toast.show('שגיאה בהעלאת לוגו: ' + friendlyError(err.message));
+          });
+        });
+      }
+
+      // Settings form submit
+      var form = document.getElementById('clinic-settings-form');
+      if (form) {
+        form.addEventListener('submit', function(ev) {
+          ev.preventDefault();
+          var btn = document.getElementById('save-settings-btn');
+          if (btn) { btn.disabled = true; btn.textContent = 'שומר…'; }
+          var fields = {};
+          ['ClinicName','DoctorName','ClinicPhone','ClinicAddress','ClinicEmail'].forEach(function(k) {
+            var inp = form.elements[k]; if (inp) fields[k] = inp.value;
+          });
+          api('api_updateClinicSettings', fields)
+            .then(function() {
+              Toast.show('ההגדרות נשמרו ✓', 'success');
+              if (btn) { btn.disabled = false; btn.textContent = '💾 שמור הגדרות'; }
+            })
+            .catch(function(err) {
+              Toast.show('שגיאה: ' + friendlyError(err.message));
+              if (btn) { btn.disabled = false; btn.textContent = '💾 שמור הגדרות'; }
+            });
+        });
+      }
+    })
+    .catch(function(err) {
+      var el = document.getElementById('clinic-settings-body');
+      if (el) el.innerHTML = '<div class="error-card">' + friendlyError(err.message) + '</div>';
+    });
+}
+
+// ============================================================================
+// BOOT
+// ============================================================================
+App.init();
+</script>
