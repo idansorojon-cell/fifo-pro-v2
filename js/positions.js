@@ -191,11 +191,11 @@ const Positions = (() => {
       const firstErr = errors[0] || '';
       let errMsg;
       if (firstErr.includes('401') || firstErr.includes('Unauthorized') || firstErr.includes('API key'))
-        errMsg = '❌ Polygon 401 — בדוק POLYGON_API_KEY ב-Script Properties';
+        errMsg = '❌ Finnhub 401 — בדוק FINNHUB_API_KEY ב-Script Properties';
       else if (firstErr.includes('429') || firstErr.includes('Rate Limit'))
-        errMsg = '⚠️ Polygon 429 — חרגת ממכסת הקריאות';
-      else if (firstErr.includes('POLYGON_API_KEY חסר'))
-        errMsg = '❌ הגדר POLYGON_API_KEY ב-Script Properties של Apps Script';
+        errMsg = '⚠️ Finnhub 429 — חרגת ממכסת הקריאות';
+      else if (firstErr.includes('FINNHUB_API_KEY חסר'))
+        errMsg = '❌ הגדר FINNHUB_API_KEY ב-Script Properties של Apps Script';
       else if (firstErr.includes('network') || firstErr.includes('רשת'))
         errMsg = '❌ שגיאת רשת — בדוק חיבור לאינטרנט';
       else if (firstErr)

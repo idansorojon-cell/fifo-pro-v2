@@ -1691,29 +1691,28 @@ function testAuth_() {
   }
   Logger.log('FIFO_SESSIONS total: ' + sessionCount + ', active (not expired): ' + activeSessions);
 
-  const rawPolygonKey = props.getProperty('POLYGON_API_KEY');
-  const polygonKey     = rawPolygonKey ? rawPolygonKey.trim() : '';
-  Logger.log('POLYGON_API_KEY set: ' + !!rawPolygonKey);
-  if (rawPolygonKey) {
-    Logger.log('POLYGON_API_KEY length: ' + rawPolygonKey.length + ' (trimmed: ' + polygonKey.length + ')');
-    Logger.log('POLYGON_API_KEY has leading/trailing whitespace: ' + (rawPolygonKey !== polygonKey));
-    Logger.log('POLYGON_API_KEY first 4 chars: ' + polygonKey.slice(0, 4));
+  const rawFinnhubKey = props.getProperty('FINNHUB_API_KEY');
+  const finnhubKey    = rawFinnhubKey ? rawFinnhubKey.trim() : '';
+  Logger.log('FINNHUB_API_KEY set: ' + !!rawFinnhubKey);
+  if (rawFinnhubKey) {
+    Logger.log('FINNHUB_API_KEY length: ' + rawFinnhubKey.length + ' (trimmed: ' + finnhubKey.length + ')');
+    Logger.log('FINNHUB_API_KEY has leading/trailing whitespace: ' + (rawFinnhubKey !== finnhubKey));
+    Logger.log('FINNHUB_API_KEY first 4 chars: ' + finnhubKey.slice(0, 4));
   }
 
-  Logger.log('FINNHUB_API_KEY set: ' + !!props.getProperty('FINNHUB_API_KEY'));
   Logger.log('=== End Diagnostics ===');
 }
 
 /**
- * Run this from the Apps Script editor (▶ Run → testPolygon_) to call Polygon
+ * Run this from the Apps Script editor (▶ Run → testFinnhub_) to call Finnhub
  * directly and see the exact response, without going through doGet/doPost.
  * Check View → Logs for the full result.
  */
-function testPolygon_() {
-  Logger.log('=== Polygon Direct Test ===');
-  const result = fetchPolygonPrices_(['ONDL', 'QBTX']);
+function testFinnhub_() {
+  Logger.log('=== Finnhub Direct Test ===');
+  const result = fetchFinnhubPrices_(['ONDL', 'QBTX']);
   Logger.log(JSON.stringify(result));
-  Logger.log('=== End Polygon Test ===');
+  Logger.log('=== End Finnhub Test ===');
 }
 
 // ── Password helpers ──────────────────────────────────────
@@ -1942,69 +1941,34 @@ function handleSetGoal_(goal) {
 }
 
 // ════════════════════════════════════════════════════════════
-// LIVE PRICES (Polygon.io primary — Yahoo emergency fallback disabled by default)
+// LIVE PRICES (Finnhub primary — Polygon/Yahoo disabled)
 // ════════════════════════════════════════════════════════════
 // Script Properties required:
-//   POLYGON_API_KEY      — Polygon.io API key (primary provider)
-//   YAHOO_FALLBACK_ENABLED — set to 'true' to enable Yahoo as emergency fallback
-//   FINNHUB_API_KEY      — Finnhub fallback (last resort, free tier 60 req/min)
+//   FINNHUB_API_KEY — Finnhub.io API key (primary and only provider)
+//
+// Polygon (fetchPolygonPrices_) and Yahoo (fetchYahooBatch_) remain in this
+// file but are NOT called from handleGetPrices_ — disabled, not deleted, so
+// either can be re-enabled later without rewriting the logic.
 
 const SUSPICIOUS_DAY_CHANGE_RATIO = 0.35;
 
-// ── Main price handler: Polygon primary, Yahoo optional fallback, Finnhub last resort ────
+// ── Main price handler: Finnhub only ──────────────────────────────
 function handleGetPrices_(symbolsCsv) {
   const symbols = String(symbolsCsv || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   if (!symbols.length) return jsonOut_({ ok: true, prices: {}, _debug: 'no symbols' });
 
-  const prices = {};
-  let primaryError = null;
-
-  // Step 1: Polygon.io (primary — requires POLYGON_API_KEY in Script Properties)
-  const polygonResult = fetchPolygonPrices_(symbols);
-  if (polygonResult._error) {
-    primaryError = polygonResult._error;
-    Logger.log('Polygon failed: ' + primaryError);
-    symbols.forEach(sym => { prices[sym] = { ok: false, error: primaryError, source: 'polygon' }; });
-  } else {
-    symbols.forEach(sym => {
-      prices[sym] = polygonResult[sym] || { ok: false, error: 'Polygon: symbol not found', source: 'polygon' };
-    });
-  }
-
-  // Step 2: Yahoo Finance fallback (only when YAHOO_FALLBACK_ENABLED = 'true' in Script Properties)
-  const yahooEnabled = PropertiesService.getScriptProperties().getProperty('YAHOO_FALLBACK_ENABLED') === 'true';
-  if (yahooEnabled) {
-    const yahooFailed = symbols.filter(sym => !prices[sym] || !prices[sym].ok);
-    if (yahooFailed.length) {
-      Logger.log('Yahoo fallback for: ' + yahooFailed.join(','));
-      try {
-        const yahooResults = fetchYahooBatch_(yahooFailed);
-        yahooFailed.forEach((sym, i) => {
-          const p = parseYahooResult_(yahooResults[i]);
-          if (p) prices[sym] = p;
-        });
-      } catch(e) {
-        Logger.log('Yahoo fallback failed: ' + e.message);
-      }
-    }
-  }
-
-  // Step 3: Finnhub fallback (last resort — requires FINNHUB_API_KEY in Script Properties)
-  const finnhubFailed = symbols.filter(sym => !prices[sym] || !prices[sym].ok);
-  if (finnhubFailed.length) {
-    Logger.log('Finnhub fallback for: ' + finnhubFailed.join(','));
-    const fb = fetchFinnhubPrices_(finnhubFailed);
-    finnhubFailed.forEach(sym => { if (fb[sym]) prices[sym] = fb[sym]; });
-  }
+  const prices = fetchFinnhubPrices_(symbols);
+  symbols.forEach(sym => {
+    if (!prices[sym]) prices[sym] = { ok: false, error: prices._error || 'Finnhub: no data for ' + sym, source: 'Finnhub' };
+  });
+  delete prices._error;
 
   const okCount = symbols.filter(s => prices[s] && prices[s].ok).length;
   const _debug = {
-    requested:    symbols.length,
-    ok:           okCount,
-    failed:       symbols.length - okCount,
-    sources:      symbols.reduce((acc, s) => { acc[s] = (prices[s] && prices[s].source) || 'none'; return acc; }, {}),
-    primaryError: primaryError || null,
-    yahooFallback: yahooEnabled
+    requested: symbols.length,
+    ok:        okCount,
+    failed:    symbols.length - okCount,
+    sources:   symbols.reduce((acc, s) => { acc[s] = (prices[s] && prices[s].source) || 'none'; return acc; }, {})
   };
   Logger.log('getPrices: ' + JSON.stringify(_debug));
 
@@ -2149,12 +2113,17 @@ function parseYahooResult_(data) {
   };
 }
 
-// ── Finnhub quote fallback ────────────────────────────────────────
-// Uses the same FINNHUB_API_KEY already configured for News.
+// ── Finnhub quote (primary price provider) ─────────────────────────
+// https://finnhub.io/api/v1/quote?symbol=SYMBOL&token=KEY
+// Response: { c:current, d:change, dp:changePct%, h, l, o, pc:prevClose, t:timestamp }
 // Free tier: 60 req/min — sufficient for price polling.
 function fetchFinnhubPrices_(symbols) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('FINNHUB_API_KEY');
-  if (!apiKey) { Logger.log('FINNHUB_API_KEY not set — skipping Finnhub fallback'); return {}; }
+  const rawKey = PropertiesService.getScriptProperties().getProperty('FINNHUB_API_KEY');
+  const apiKey = rawKey ? rawKey.trim() : '';
+  if (!apiKey) {
+    Logger.log('FINNHUB_API_KEY not set — Finnhub unavailable');
+    return { _error: 'FINNHUB_API_KEY חסר ב-Script Properties' };
+  }
 
   const results  = {};
   const requests = symbols.map(sym => ({
@@ -2164,29 +2133,52 @@ function fetchFinnhubPrices_(symbols) {
 
   let responses;
   try { responses = UrlFetchApp.fetchAll(requests); }
-  catch(e) { Logger.log('Finnhub fetchAll error: ' + e.message); return {}; }
+  catch(e) {
+    Logger.log('Finnhub fetchAll error: ' + e.message);
+    return { _error: 'Finnhub network error: ' + e.message };
+  }
 
   responses.forEach((res, i) => {
-    const sym = symbols[i];
+    const sym  = symbols[i];
+    const code = res.getResponseCode();
+    Logger.log('Finnhub ' + sym + ' HTTP ' + code);
+
+    if (code === 401 || code === 403) {
+      Logger.log('Finnhub ' + code + ' full response body: ' + res.getContentText());
+      results[sym] = { ok: false, error: 'Finnhub ' + code + ' Unauthorized — בדוק FINNHUB_API_KEY', source: 'Finnhub' };
+      return;
+    }
+    if (code !== 200) {
+      Logger.log('Finnhub ' + sym + ' non-200 body: ' + res.getContentText());
+      results[sym] = { ok: false, error: 'Finnhub HTTP ' + code, source: 'Finnhub' };
+      return;
+    }
+
     try {
-      if (res.getResponseCode() !== 200) return;
       const q = JSON.parse(res.getContentText());
-      // Finnhub: { c:current, d:change, dp:changePct%, h, l, o, pc:prevClose, t:timestamp }
-      if (!q || !q.c || q.c === 0) { Logger.log('Finnhub empty for ' + sym); return; }
+      // Finnhub returns c:0 for unknown/delisted symbols — not an HTTP error.
+      if (!q || !q.c || q.c === 0) {
+        Logger.log('Finnhub empty quote for ' + sym + ': ' + res.getContentText());
+        results[sym] = { ok: false, error: 'Finnhub: no data for ' + sym, source: 'Finnhub' };
+        return;
+      }
       const changePctValid = q.pc > 0 && Math.abs((q.c - q.pc) / q.pc) <= SUSPICIOUS_DAY_CHANGE_RATIO;
       results[sym] = {
         ok: true,
         price:         q.c,
-        prevClose:     q.pc   || null,
-        change:        q.d    || null,
-        changePct:     q.dp   || null,
+        prevClose:     q.pc != null ? q.pc : null,
+        change:        q.d  != null ? q.d  : null,
+        changePct:     q.dp != null ? q.dp : null,
         changePctValid,
         dayChangeStatus: changePctValid ? 'ok' : 'invalid_prevclose',
         preMarket: null, postMarket: null, volume: 0,
         updated: new Date().toLocaleTimeString('he-IL'),
-        source: 'finnhub',
+        source: 'Finnhub',
       };
-    } catch(e) { Logger.log('Finnhub parse error ' + sym + ': ' + e.message); }
+    } catch(e) {
+      Logger.log('Finnhub parse error ' + sym + ': ' + e.message);
+      results[sym] = { ok: false, error: 'Finnhub parse error: ' + e.message, source: 'Finnhub' };
+    }
   });
   return results;
 }
