@@ -30,8 +30,15 @@ const Trades = (() => {
   }
 
   // ── Render table ─────────────────────────────────────────
+  // Shows only the latest PAGE_SIZE rows by default (table was rendering
+  // hundreds of rows at once, making the screen feel cluttered). "טען עוד"
+  // reveals more without changing filters/sort.
 
-  function render() {
+  const PAGE_SIZE = 20;
+  let visibleCount = PAGE_SIZE;
+
+  function render(keepPage) {
+    if (!keepPage) visibleCount = PAGE_SIZE;
     const tbody = document.getElementById('trades-tbody');
     if (!tbody) return;
 
@@ -58,7 +65,10 @@ const Trades = (() => {
       return av > bv ? APP.sortDir : av < bv ? -APP.sortDir : 0;
     });
 
-    tbody.innerHTML = rows.map(t => {
+    const total = rows.length;
+    const shown = rows.slice(0, visibleCount);
+
+    tbody.innerHTML = shown.map(t => {
       const netIls = Math.round(usdToIls(t.net, t.month));
       return `<tr>
         <td style="font-weight:700">${t.symbol}</td>
@@ -81,13 +91,20 @@ const Trades = (() => {
       </tr>`;
     }).join('');
 
-    document.getElementById('trades-count').textContent = `${rows.length} עסקאות`;
+    document.getElementById('trades-count').textContent = `מציג ${shown.length} מתוך ${total} עסקאות`;
+    const moreBtn = document.getElementById('trades-load-more');
+    if (moreBtn) moreBtn.style.display = visibleCount < total ? 'inline-block' : 'none';
 
     // Sort indicators
     ['symbol','sell_date','qty','net','pct'].forEach(c => {
       const el = document.getElementById('s-'+c);
       if (el) el.textContent = APP.sortCol===c ? (APP.sortDir===1?'↑':'↓') : '';
     });
+  }
+
+  function loadMore() {
+    visibleCount += PAGE_SIZE;
+    render(true);
   }
 
   function setSort(col) {
@@ -228,7 +245,7 @@ const Trades = (() => {
   const renderDebounced = Utils.debounce(render, 200);
 
   return {
-    render, renderDebounced, updateFilters, setSort,
+    render, renderDebounced, updateFilters, setSort, loadMore,
     openAddForm, openEdit, closeForm, calcPreview, submit, remove
   };
 })();

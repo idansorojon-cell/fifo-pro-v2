@@ -28,15 +28,8 @@
   <!-- ── Sync Status Bar ─────────────────────────────── -->
   <div id="sync-bar" class="sync-bar" style="display:none"></div>
 
-  <!-- ── Alert Banner ────────────────────────────────── -->
+  <!-- ── Alert Toast (auto-hides; same alert only toasts once/day) ── -->
   <div id="alert-banner" class="alert-banner"></div>
-
-  <!-- ── Coach Alert (proactive warnings) ──────────── -->
-  <div id="coach-alert" class="coach-alert" style="display:none">
-    <button class="coach-alert-close" onclick="document.getElementById('coach-alert').style.display='none'">×</button>
-    <div class="coach-alert-title">⚡ AI Coach — התראה</div>
-    <div id="coach-alert-items" class="coach-alert-items"></div>
-  </div>
 
   <!-- ── Header ──────────────────────────────────────── -->
   <div class="header">
@@ -52,6 +45,10 @@
       <div class="ws-indicator">
         <span id="ws-dot"></span>
         <span id="ws-label">—</span>
+      </div>
+      <div class="alert-badge-wrap">
+        <button id="alert-badge" class="alert-badge" style="display:none" onclick="Positions.toggleAlertList()"></button>
+        <div id="alert-list-dropdown" class="alert-list-dropdown" style="display:none"></div>
       </div>
       <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">☀️ Light</button>
       <button id="add-btn" class="btn btn-primary btn-sm" onclick="Trades.openAddForm()">+ עסקה</button>
@@ -103,15 +100,19 @@
        HUB PANELS — Section landing pages
   ═══════════════════════════════════════════════════ -->
 
-  <!-- HUB: דשבורד -->
+  <!-- HUB: דשבורד — Mission Control -->
   <div id="tab-hub-dashboard" class="panel hub-panel">
     <div class="hub-header">
-      <div class="hub-icon">📊</div>
+      <div class="hub-icon">🎯</div>
       <div>
-        <div class="hub-title">דשבורד</div>
-        <div class="hub-sub">סקירה כוללת של הפעילות שלך</div>
+        <div class="hub-title">Mission Control</div>
+        <div class="hub-sub">התמונה המלאה במבט אחד</div>
       </div>
     </div>
+
+    <!-- ── Mission Control — live summary, no full dashboard/tables ── -->
+    <div id="mission-control"></div>
+
     <div class="hub-grid">
       <button class="hub-card" onclick="switchTab('dashboard')">
         <span class="hub-card-icon">📊</span>
@@ -424,7 +425,10 @@
           <tbody id="trades-tbody"></tbody>
         </table>
       </div>
-      <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border)" id="trades-count"></div>
+      <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span id="trades-count"></span>
+        <button id="trades-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Trades.loadMore()">טען עוד ⌄</button>
+      </div>
     </div>
   </div>
 
@@ -449,6 +453,9 @@
           </tr></thead>
           <tbody id="journal-tbody"></tbody>
         </table>
+      </div>
+      <div style="padding:10px 16px;text-align:center;border-top:1px solid var(--border)">
+        <button id="journal-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Journal.loadMore()">טען עוד ⌄</button>
       </div>
     </div>
   </div>

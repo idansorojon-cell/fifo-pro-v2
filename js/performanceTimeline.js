@@ -7,6 +7,9 @@
 const PerformanceTimeline = (() => {
   const { f$, monthLabel, currentMonthKey } = Utils;
 
+  const COLLAPSE_COUNT = 3;
+  let expanded = false; // collapsed by default every time this screen is entered
+
   // ── Compute monthly insight ─────────────────────────────
   function computeMonthInsight(month, trades, grade) {
     if (!trades.length) return null;
@@ -46,7 +49,12 @@ const PerformanceTimeline = (() => {
   }
 
   // ── Render ──────────────────────────────────────────────
-  function render() {
+  // resetExpand=true (the default, used when navigating into this screen)
+  // collapses the timeline back to the first COLLAPSE_COUNT months.
+  // toggleExpand() re-renders with resetExpand=false to preserve the
+  // just-toggled state instead of immediately re-collapsing it.
+  function render(resetExpand = true) {
+    if (resetExpand) expanded = false;
     const el = document.getElementById('tab-ptimeline');
     if (!el) return;
 
@@ -74,6 +82,7 @@ const PerformanceTimeline = (() => {
     const bestMonth = insights.reduce((a,b) => b.net > a.net ? b : a);
     const worstMonth = insights.reduce((a,b) => b.net < a.net ? b : a);
     const avgWinRate = Math.round(insights.reduce((s,i) => s+i.winRate, 0) / insights.length);
+    const monthCards = insights.slice().reverse();
 
     el.innerHTML = `
       <div class="ptimeline-page">
@@ -106,12 +115,22 @@ const PerformanceTimeline = (() => {
           </div>
         </div>
 
-        <!-- Timeline -->
+        <!-- Timeline (collapsed by default — long history shouldn't dump onto the screen at once) -->
         <div class="ptl-timeline">
-          ${insights.slice().reverse().map(i => _renderMonthCard(i)).join('')}
+          ${(expanded ? monthCards : monthCards.slice(0, COLLAPSE_COUNT)).map(i => _renderMonthCard(i)).join('')}
         </div>
+        ${monthCards.length > COLLAPSE_COUNT ? `
+          <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px" onclick="PerformanceTimeline.toggleExpand()">
+            ${expanded ? 'הצג פחות ⌃' : `הצג עוד ${monthCards.length - COLLAPSE_COUNT} חודשים ⌄`}
+          </button>
+        ` : ''}
       </div>
     `;
+  }
+
+  function toggleExpand() {
+    expanded = !expanded;
+    render(false);
   }
 
   function _renderMonthCard(insight) {
@@ -171,5 +190,5 @@ const PerformanceTimeline = (() => {
     return map[g] || map.E;
   }
 
-  return { render };
+  return { render, toggleExpand };
 })();

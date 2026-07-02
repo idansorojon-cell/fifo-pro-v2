@@ -54,6 +54,12 @@
   /* Pos grid */
   .pos-grid { grid-template-columns: 1fr; }
 
+  /* Mission Control */
+  .mc-grid   { grid-template-columns: 1fr 1fr; }
+  .mc-grid-2 { grid-template-columns: 1fr; }
+  .mc-value  { font-size: 24px; }
+  .alert-list-dropdown { left: auto; right: 0; max-width: calc(100vw - 32px); }
+
   /* Insight grid */
   .insight-grid { grid-template-columns: 1fr 1fr; }
 

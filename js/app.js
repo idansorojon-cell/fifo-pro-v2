@@ -256,7 +256,11 @@ function renderAll() {
   Trades.updateFilters();
   Journal.render();
   Positions.render();
-  AICoach.render();
+  // AICoach.render() is intentionally NOT called here — it's a heavy
+  // behavioral analysis over the full trade history that's only useful
+  // once the user actually opens the AI Coach screen (see switchTab's
+  // 'coach' case). Mission Control shows a single short insight instead.
+  renderMissionControl();
 }
 
 // ── Category tracking ───────────────────────────────────────
@@ -700,51 +704,118 @@ function renderPortfolioHeatmap() {
   `;
 }
 
-// ── Proactive AI Coach Warnings ──────────────────────────────
-function checkProactiveCoach() {
-  const alerts = [];
+// ── Mission Control — the home screen ─────────────────────────
+// One concise summary instead of the full dashboard/tables/AI-coach
+// dumped onto the screen at once. Real numbers, not just nav shortcuts.
+// Re-run after every price poll (see positions.js refreshPrices) so
+// Open P&L / biggest-risk stay current without re-rendering anything else.
+
+function _shortCoachInsight(st) {
   const { trades } = APP;
-  if (trades.length < 3) return;
+  if (trades.length < 3) return 'הוסף עוד עסקאות כדי לקבל תובנת AI Coach.';
 
-  // Check last 10 trades for patterns
-  const recent = trades.slice(-10);
-  const recentLosses = recent.filter(t => t.net < 0);
-
-  // Consecutive losses
+  // Consecutive losses — most urgent signal
   let streak = 0;
   for (let i = trades.length - 1; i >= 0; i--) {
-    if (trades[i].net < 0) streak++;
-    else break;
+    if (trades[i].net < 0) streak++; else break;
   }
-  if (streak >= 3) alerts.push(`⛔ ${streak} הפסדים רצופים — שקול להפסיק לסחור היום`);
+  if (streak >= 3) return `⛔ ${streak} הפסדים רצופים — שקול להפסיק לסחור היום.`;
 
-  // No stops in recent trades
+  const recent = trades.slice(-10);
   const noStops = recent.filter(t => t.respected_stop === 'לא').length;
-  if (noStops >= 2) alerts.push(`⚠️ ${noStops} עסקאות אחרונות ללא כיבוד סטופ`);
+  if (noStops >= 2) return `⚠️ ${noStops} מתוך 10 העסקאות האחרונות ללא כיבוד סטופ.`;
 
-  // High loss rate recently
-  if (recent.length >= 5 && recentLosses.length / recent.length > 0.7)
-    alerts.push(`📉 70%+ הפסדים ב-${recent.length} עסקאות אחרונות`);
+  if (st.winRate >= 65 && st.totalNet > 0) return '✅ ביצועים מצוינים — שמור על המשמעת והמשך לפי התוכנית.';
+  if (st.winRate < 50) return '📉 Win Rate מתחת ל-50% — שקול לצמצם גודל פוזיציות.';
+  return '💡 בקצב טוב. עקביות עדיפה על ניסיון לתפוס עסקה גדולה.';
+}
 
-  // Open positions near stop loss
+function _biggestRiskPosition() {
+  let worst = null, worstScore = -Infinity;
   APP.positions.forEach(p => {
     const live = APP.liveData[p.symbol];
-    if (live && p.stop_loss && live.price) {
-      const distPct = ((live.price - p.stop_loss) / p.stop_loss) * 100;
-      if (distPct < 3 && distPct >= 0)
-        alerts.push(`🔴 ${p.symbol}: ${distPct.toFixed(1)}% מהסטופ — היה ערוך`);
-    }
+    if (!live?.price) return;
+    const pnlPct = (live.price - p.avg_price) / p.avg_price * 100;
+    const score  = -pnlPct; // higher score = bigger loss = bigger risk
+    if (score > worstScore) { worstScore = score; worst = { p, live, pnlPct }; }
+  });
+  return worst;
+}
+
+function renderMissionControl() {
+  const el = document.getElementById('mission-control');
+  if (!el) return;
+
+  const st = getStats();
+
+  // Open P&L across all live positions
+  let openPnl = 0, openCost = 0, liveCount = 0;
+  APP.positions.forEach(p => {
+    const live = APP.liveData[p.symbol];
+    openCost += p.avg_price * p.qty;
+    if (live?.price) { openPnl += (live.price - p.avg_price) * p.qty; liveCount++; }
   });
 
-  const alertEl  = document.getElementById('coach-alert');
-  const itemsEl  = document.getElementById('coach-alert-items');
-  if (!alertEl || !itemsEl) return;
-  if (alerts.length) {
-    itemsEl.innerHTML = alerts.map(a => `<div class="coach-alert-item">${a}</div>`).join('');
-    alertEl.style.display = 'block';
-  } else {
-    alertEl.style.display = 'none';
-  }
+  // Today / Week / Month P&L from closed trades
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart  = new Date(todayStart.getTime() - 6 * 86400000);
+  const curMonth   = Utils.currentMonthKey();
+
+  let todayNet = 0, weekNet = 0, monthNet = 0;
+  APP.trades.forEach(t => {
+    const d = Utils.parseDD(t.sell_date);
+    if (d >= todayStart) todayNet += t.net;
+    if (d >= weekStart)  weekNet  += t.net;
+    if (t.month === curMonth) monthNet += t.net;
+  });
+
+  const risk = _biggestRiskPosition();
+  const insight = _shortCoachInsight(st);
+
+  el.innerHTML = `
+    <div class="mc-grid">
+      <div class="mc-card mc-card-hero">
+        <div class="mc-label">Open P&L</div>
+        <div class="mc-value ${openPnl>=0?'green':'red'}">${Utils.f$(Math.round(openPnl))}</div>
+        <div class="mc-sub">${liveCount}/${APP.positions.length} פוזיציות live${openCost?' · '+Utils.fpct(openPnl/openCost*100):''}</div>
+      </div>
+      <div class="mc-card">
+        <div class="mc-label">היום</div>
+        <div class="mc-value-sm ${todayNet>=0?'green':'red'}">${Utils.f$(Math.round(todayNet))}</div>
+      </div>
+      <div class="mc-card">
+        <div class="mc-label">השבוע</div>
+        <div class="mc-value-sm ${weekNet>=0?'green':'red'}">${Utils.f$(Math.round(weekNet))}</div>
+      </div>
+      <div class="mc-card">
+        <div class="mc-label">החודש</div>
+        <div class="mc-value-sm ${monthNet>=0?'green':'red'}">${Utils.f$(Math.round(monthNet))}</div>
+      </div>
+    </div>
+
+    <div class="mc-grid mc-grid-2">
+      <div class="mc-card">
+        <div class="mc-label">📈 פוזיציות פתוחות</div>
+        ${APP.positions.length
+          ? `<div class="mc-value-sm">${APP.positions.length}</div><div class="mc-sub">${APP.positions.map(p=>p.symbol).join(', ')}</div>`
+          : `<div class="mc-sub">אין פוזיציות פתוחות</div>`}
+      </div>
+      <div class="mc-card">
+        <div class="mc-label">⚠️ הסיכון הגדול ביותר</div>
+        ${risk
+          ? `<div class="mc-value-sm ${risk.pnlPct>=0?'green':'red'}">${risk.p.symbol} ${Utils.fpct(risk.pnlPct)}</div>
+             <div class="mc-sub">${Positions.riskStatus(risk.p, risk.live).label}</div>`
+          : `<div class="mc-sub">אין נתוני סיכון עדיין</div>`}
+      </div>
+    </div>
+
+    <div class="mc-card mc-coach">
+      <div class="mc-label">🤖 AI Coach</div>
+      <div class="mc-coach-msg">${insight}</div>
+      <button class="btn btn-ghost btn-sm" onclick="switchCategory('ai', document.querySelector('.nav-cat[data-cat=\\'ai\\']')); switchTab('coach')">פתח AI Coach מלא ←</button>
+    </div>
+  `;
 }
 
 // ── Seed banner — hide when trades exist ─────────────────────
@@ -778,7 +849,6 @@ async function _initApp() {
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();
 
-  setTimeout(checkProactiveCoach, 1500);
   Auth.saveLastVisit();
 
   if ('serviceWorker' in navigator) {

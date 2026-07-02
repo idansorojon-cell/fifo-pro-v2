@@ -8,6 +8,9 @@ const Positions = (() => {
   const { f$, fILS, fpct, fnum, fprice, usdToIls, currentMonthKey,
           isoToDD, ddToISO, LS } = Utils;
 
+  const ALERT_SHOWN_KEY  = 'fifo_alerts_shown_v1';
+  const WARN_THRESHOLD_PCT = -5;
+
   // ── Render ──────────────────────────────────────────────
 
   function render() {
@@ -55,6 +58,20 @@ const Positions = (() => {
     el.innerHTML = APP.positions.map(p => posCard(p)).join('');
   }
 
+  // Risk status used by both the position card and Mission Control's
+  // "biggest risk" widget — kept in one place so they never disagree.
+  function riskStatus(p, live) {
+    const price = live?.price;
+    if (!price) return { level: 'none', label: '—', color: 'var(--text-3)' };
+    const pnlPct  = (price - p.avg_price) / p.avg_price * 100;
+    const stopPct = p.stop_loss ? (price - p.stop_loss) / price * 100 : null;
+    if ((p.stop_loss && price <= p.stop_loss) || pnlPct <= -10)
+      return { level: 'high', label: '🔴 סיכון גבוה', color: 'var(--red)' };
+    if (pnlPct <= WARN_THRESHOLD_PCT || (stopPct !== null && stopPct < 5))
+      return { level: 'warn', label: '🟠 אזהרה', color: 'var(--gold)' };
+    return { level: 'ok', label: '🟢 תקין', color: 'var(--green)' };
+  }
+
   function posCard(p) {
     const live      = APP.liveData[p.symbol];
     const price     = live?.price;
@@ -75,26 +92,28 @@ const Positions = (() => {
     const dayChg      = dayChgValid ? live.changePct : null;
     const targetPct = p.target && price ? (p.target - price) / price * 100 : null;
     const stopPct   = p.stop_loss && price ? (price - p.stop_loss) / price * 100 : null;
+    const risk      = riskStatus(p, live);
 
     return `
-      <div class="pos-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="pos-card pos-card--${risk.level}">
+        <div class="pos-card-top">
           <div class="pos-card-sym">
             ${p.symbol}
             ${live ? '<span class="live-dot"></span>' : ''}
           </div>
-          <div style="font-size:11px;color:var(--text-3)">${live?.updated || '—'}</div>
+          <span class="risk-pill" style="color:${risk.color};border-color:${risk.color}">${risk.label}</span>
         </div>
 
-        <div class="pos-card-price ${pnl===null?'':(pnl>=0?'green':'red')}">
-          ${price ? fprice(price) : '—'}
+        <div class="pos-card-price-row">
+          <div class="pos-card-price ${pnl===null?'':(pnl>=0?'green':'red')}">
+            ${price ? fprice(price) : '—'}
+          </div>
+          ${live ? (
+            dayChgValid
+              ? `<div class="pos-card-daychg ${dayChg>=0?'green':'red'}">יומי: ${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</div>`
+              : `<div class="pos-card-daychg" style="color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי: N/A</div>`
+          ) : ''}
         </div>
-
-        ${live ? (
-          dayChgValid
-            ? `<div style="font-size:12px;color:${dayChg>=0?'var(--green)':'var(--red)'}">יומי: ${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</div>`
-            : `<div style="font-size:12px;color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי: N/A</div>`
-        ) : ''}
 
         ${live?.preMarket ? `
           <div style="font-size:11px;padding:2px 8px;background:var(--gold-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--gold)">
@@ -107,27 +126,24 @@ const Positions = (() => {
             🌙 AH: <b>${fprice(live.postMarket)}</b>
           </div>` : ''}
 
-        <div class="pos-card-meta">
-          <span>כמות: ${fnum(p.qty)}</span>
-          <span>כניסה: ${fprice(p.avg_price)}</span>
+        <div class="pos-card-stats">
+          <div class="pos-card-stat"><span class="pos-card-stat-label">כמות</span><span class="pos-card-stat-val">${fnum(p.qty)}</span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">כניסה</span><span class="pos-card-stat-val">${fprice(p.avg_price)}</span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">שווי נוכחי</span><span class="pos-card-stat-val">${f$(Math.round(val))}</span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">P&L %</span><span class="pos-card-stat-val ${pnlPct===null?'':(pnlPct>=0?'green':'red')}">${pnlPct!==null?fpct(pnlPct):'—'}</span></div>
         </div>
 
-        ${p.added_date ? `<div style="font-size:11px;color:var(--text-3)">${p.added_date}</div>` : ''}
+        ${p.added_date ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px">${p.added_date}</div>` : ''}
 
-        <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700">
-          <span class="${pnl===null?'':(pnl>=0?'green':'red')}">
-            P&L: ${pnl!==null ? f$(Math.round(pnl)) + ' (' + fpct(pnlPct) + ')' : '—'}
+        <div class="pos-card-pnl-row">
+          <span class="pos-card-pnl ${pnl===null?'':(pnl>=0?'green':'red')}">
+            P&L: ${pnl!==null ? f$(Math.round(pnl)) : '—'}
           </span>
-          <span style="color:var(--text-3);font-weight:400">${f$(Math.round(val))}</span>
+          ${pnl !== null ? `<span style="font-size:11px;color:var(--text-3)">₪ ${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}</span>` : ''}
         </div>
-
-        ${pnl !== null ? `
-          <div style="font-size:11px;color:var(--text-3);margin-top:2px">
-            ₪ ${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}
-          </div>` : ''}
 
         ${p.target ? `
-          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px">
             <span style="color:var(--blue)">🎯 יעד: ${fprice(p.target)}${targetPct!==null?' ('+fpct(targetPct)+' נותר)':''}</span>
             ${p.stop_loss ? `<span style="color:var(--red)">🛑 סטופ: ${fprice(p.stop_loss)}${stopPct!==null?' ('+fpct(-stopPct)+')':''}</span>` : ''}
           </div>` : ''}
@@ -183,6 +199,11 @@ const Positions = (() => {
     }
 
     render();
+    // Mission Control's Open P&L / biggest-risk widgets depend on live
+    // prices — keep them current every poll without re-rendering anything
+    // else. app.js loads after positions.js but this only ever runs at
+    // runtime (after boot), so the function is guaranteed to exist by then.
+    if (typeof renderMissionControl === 'function') renderMissionControl();
 
     if (loadedCount > 0) {
       API.setStatus('✓ ' + loadedCount + '/' + syms.length + ' מחירים עודכנו', 'ok');
@@ -219,33 +240,81 @@ const Positions = (() => {
   }
 
   // ── Alerts ──────────────────────────────────────────────
+  // Alerts are recomputed on every price poll (every ~15s), but the SAME
+  // alert (same symbol + type + threshold) must only ever pop as a toast
+  // once per day — otherwise every polling cycle re-triggers the same
+  // "down 5%" toast forever. Shown/dismissed alert IDs are tracked in
+  // localStorage so a "🔴 N alerts" badge (not a toast) is the steady
+  // state once the user has already seen them.
 
-  function checkAlerts() {
-    if (!APP.positions.length) return;
+  function _alertId(type, symbol, threshold) {
+    return symbol + '_' + type + '_' + threshold;
+  }
+
+  function _todayKey() {
+    return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  function _loadShownMap() { return LS.get(ALERT_SHOWN_KEY, {}); }
+  function _saveShownMap(map) { LS.set(ALERT_SHOWN_KEY, map); }
+
+  function _computeActiveAlerts() {
     const alerts = [];
     APP.positions.forEach(p => {
       const live = APP.liveData[p.symbol];
       if (!live?.price) return;
       const price = live.price;
       const pct   = (price - p.avg_price) / p.avg_price * 100;
-      if (p.target    && price >= p.target)    alerts.push({ type:'target', msg:`🎯 ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
-      if (p.stop_loss && price <= p.stop_loss) alerts.push({ type:'stop',   msg:`🛑 ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
-      if (pct <= -5 && (!p.stop_loss || price > p.stop_loss)) alerts.push({ type:'warn', msg:`⚠️ ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
+      if (p.target && price >= p.target) {
+        alerts.push({ id: _alertId('target', p.symbol, p.target), type: 'target', symbol: p.symbol,
+          msg: `🎯 ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
+      }
+      if (p.stop_loss && price <= p.stop_loss) {
+        alerts.push({ id: _alertId('stop', p.symbol, p.stop_loss), type: 'stop', symbol: p.symbol,
+          msg: `🛑 ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
+      }
+      if (pct <= WARN_THRESHOLD_PCT && (!p.stop_loss || price > p.stop_loss)) {
+        alerts.push({ id: _alertId('warn', p.symbol, WARN_THRESHOLD_PCT), type: 'warn', symbol: p.symbol,
+          msg: `⚠️ ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
+      }
     });
+    return alerts;
+  }
 
+  function checkAlerts() {
+    const badge = document.getElementById('alert-badge');
+    if (!APP.positions.length) {
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+
+    const alerts = _computeActiveAlerts();
+    _updateAlertBadge(alerts);
+    if (!alerts.length) return;
+
+    const shown = _loadShownMap();
+    const today = _todayKey();
+    const newAlerts = alerts.filter(a => shown[a.id] !== today);
+    if (!newAlerts.length) return; // every active alert was already toasted today
+
+    const priority = newAlerts.find(a=>a.type==='stop') || newAlerts.find(a=>a.type==='target') || newAlerts[0];
+    _showToast(priority, alerts.length - 1);
+
+    shown[priority.id] = today;
+    _saveShownMap(shown);
+  }
+
+  function _showToast(priority, extraCount) {
     const banner = document.getElementById('alert-banner');
     if (!banner) return;
-    if (!alerts.length) { banner.style.display = 'none'; return; }
-
-    const priority = alerts.find(a=>a.type==='stop') || alerts.find(a=>a.type==='target') || alerts[0];
-    if (banner._lastAlert === priority.msg) return;
-    banner._lastAlert = priority.msg;
+    clearTimeout(banner._hideTimer);
     banner.className = 'alert-banner ' + priority.type;
     banner.style.display = 'flex';
     banner.innerHTML = `
-      <span>${priority.msg}${alerts.length>1?` <span style="color:var(--text-3);font-size:11px">(+${alerts.length-1})</span>`:''}</span>
+      <span>${priority.msg}${extraCount>0?` <span style="color:var(--text-3);font-size:11px">(+${extraCount})</span>`:''}</span>
       <button onclick="Positions.dismissAlert()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-3);padding:0 4px">✕</button>
     `;
+    banner._hideTimer = setTimeout(() => { banner.style.display = 'none'; }, 6000);
     try {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
@@ -261,8 +330,39 @@ const Positions = (() => {
   function dismissAlert() {
     const banner = document.getElementById('alert-banner');
     if (!banner) return;
+    clearTimeout(banner._hideTimer);
     banner.style.display = 'none';
-    banner._lastAlert = (banner._lastAlert || '') + '_dismissed';
+  }
+
+  function _updateAlertBadge(alerts) {
+    const badge = document.getElementById('alert-badge');
+    if (!badge) return;
+    if (!alerts.length) { badge.style.display = 'none'; hideAlertList(); return; }
+    badge.style.display = 'inline-flex';
+    badge.textContent = '🔴 ' + alerts.length + ' התראות';
+    badge._alerts = alerts; // read by showAlertList()
+  }
+
+  function toggleAlertList() {
+    const dd = document.getElementById('alert-list-dropdown');
+    if (!dd) return;
+    dd.style.display === 'block' ? hideAlertList() : showAlertList();
+  }
+
+  function showAlertList() {
+    const dd    = document.getElementById('alert-list-dropdown');
+    const badge = document.getElementById('alert-badge');
+    if (!dd || !badge) return;
+    const alerts = badge._alerts || [];
+    dd.innerHTML = alerts.length
+      ? alerts.map(a => `<div class="alert-list-item alert-list-item--${a.type}">${a.msg}</div>`).join('')
+      : '<div class="alert-list-item">אין התראות פעילות</div>';
+    dd.style.display = 'block';
+  }
+
+  function hideAlertList() {
+    const dd = document.getElementById('alert-list-dropdown');
+    if (dd) dd.style.display = 'none';
   }
 
   // ── R:R Calculator ──────────────────────────────────────
@@ -389,7 +489,8 @@ const Positions = (() => {
 
   return {
     render, refreshPrices, connectWS,
-    checkAlerts, dismissAlert, calcRR,
+    checkAlerts, dismissAlert, toggleAlertList, showAlertList, hideAlertList,
+    riskStatus, calcRR,
     openForm, openEdit, closeForm, submit, remove,
   };
 })();

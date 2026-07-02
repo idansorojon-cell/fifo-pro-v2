@@ -8,8 +8,13 @@ const Journal = (() => {
   const { f$, fpct, parseDD } = Utils;
 
   // ── Render Journal Table ─────────────────────────────────
+  // Shows only the latest PAGE_SIZE rows by default; "טען עוד" reveals more.
 
-  function render() {
+  const PAGE_SIZE = 20;
+  let visibleCount = PAGE_SIZE;
+
+  function render(keepPage) {
+    if (!keepPage) visibleCount = PAGE_SIZE;
     const tbody = document.getElementById('journal-tbody');
     if (!tbody) return;
 
@@ -37,6 +42,12 @@ const Journal = (() => {
       (t.lesson||'').toLowerCase().includes(q) ||
       (t.emotion||'').toLowerCase().includes(q)
     );
+
+    const total = rows.length;
+    rows = rows.slice(0, visibleCount);
+
+    const moreBtn = document.getElementById('journal-load-more');
+    if (moreBtn) moreBtn.style.display = visibleCount < total ? 'inline-block' : 'none';
 
     tbody.innerHTML = rows.map(t => `
       <tr>
@@ -148,5 +159,10 @@ const Journal = (() => {
   // Debounced wrapper for the free-text search input.
   const renderDebounced = Utils.debounce(render, 200);
 
-  return { render, renderDebounced, openModal, closeModal, save, openNote, closeNote, saveNote };
+  function loadMore() {
+    visibleCount += PAGE_SIZE;
+    render(true);
+  }
+
+  return { render, renderDebounced, loadMore, openModal, closeModal, save, openNote, closeNote, saveNote };
 })();
