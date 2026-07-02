@@ -1690,9 +1690,30 @@ function testAuth_() {
     Logger.log('Server hash (sha256hex_ of storedPw): ' + sha256hex_(storedPw));
   }
   Logger.log('FIFO_SESSIONS total: ' + sessionCount + ', active (not expired): ' + activeSessions);
-  Logger.log('POLYGON_API_KEY set: ' + !!props.getProperty('POLYGON_API_KEY'));
+
+  const rawPolygonKey = props.getProperty('POLYGON_API_KEY');
+  const polygonKey     = rawPolygonKey ? rawPolygonKey.trim() : '';
+  Logger.log('POLYGON_API_KEY set: ' + !!rawPolygonKey);
+  if (rawPolygonKey) {
+    Logger.log('POLYGON_API_KEY length: ' + rawPolygonKey.length + ' (trimmed: ' + polygonKey.length + ')');
+    Logger.log('POLYGON_API_KEY has leading/trailing whitespace: ' + (rawPolygonKey !== polygonKey));
+    Logger.log('POLYGON_API_KEY first 4 chars: ' + polygonKey.slice(0, 4));
+  }
+
   Logger.log('FINNHUB_API_KEY set: ' + !!props.getProperty('FINNHUB_API_KEY'));
   Logger.log('=== End Diagnostics ===');
+}
+
+/**
+ * Run this from the Apps Script editor (▶ Run → testPolygon_) to call Polygon
+ * directly and see the exact response, without going through doGet/doPost.
+ * Check View → Logs for the full result.
+ */
+function testPolygon_() {
+  Logger.log('=== Polygon Direct Test ===');
+  const result = fetchPolygonPrices_(['ONDL', 'QBTX']);
+  Logger.log(JSON.stringify(result));
+  Logger.log('=== End Polygon Test ===');
 }
 
 // ── Password helpers ──────────────────────────────────────
@@ -1994,7 +2015,10 @@ function handleGetPrices_(symbolsCsv) {
 // Uses the v2 snapshot endpoint: returns current price, prev close, daily change %.
 // Batch up to ~50 symbols per call — no separate per-symbol requests needed.
 function fetchPolygonPrices_(symbols) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('POLYGON_API_KEY');
+  const rawKey = PropertiesService.getScriptProperties().getProperty('POLYGON_API_KEY');
+  // Trim — a trailing space/newline from copy-paste into Script Properties
+  // produces a key that LOOKS right but Polygon rejects with 401.
+  const apiKey = rawKey ? rawKey.trim() : '';
   if (!apiKey) {
     Logger.log('POLYGON_API_KEY not set — Polygon unavailable');
     return { _error: 'POLYGON_API_KEY חסר ב-Script Properties' };
@@ -2016,12 +2040,21 @@ function fetchPolygonPrices_(symbols) {
   Logger.log('Polygon snapshot HTTP ' + code + ' for ' + symbols.join(','));
 
   if (code === 401 || code === 403) {
-    return { _error: 'Polygon 401 Unauthorized — בדוק POLYGON_API_KEY' };
+    // Log the full response body — Polygon's error JSON usually says exactly
+    // what's wrong (invalid key, key not activated, wrong plan, etc.)
+    const body = res.getContentText();
+    Logger.log('Polygon ' + code + ' full response body: ' + body);
+    Logger.log('Polygon key length used: ' + apiKey.length + ', first 4 chars: ' + apiKey.slice(0, 4));
+    let bodyMsg = body;
+    try { const j = JSON.parse(body); bodyMsg = j.error || j.message || body; } catch(e) {}
+    return { _error: 'Polygon ' + code + ' Unauthorized — ' + bodyMsg };
   }
   if (code === 429) {
+    Logger.log('Polygon 429 full response body: ' + res.getContentText());
     return { _error: 'Polygon 429 Rate Limit — חרגת ממכסת הקריאות' };
   }
   if (code !== 200) {
+    Logger.log('Polygon ' + code + ' full response body: ' + res.getContentText());
     return { _error: 'Polygon HTTP ' + code };
   }
 

@@ -12,7 +12,6 @@ const Positions = (() => {
 
   function render() {
     renderGrid();
-    renderTable();
     renderSummary();
     checkAlerts();
   }
@@ -152,53 +151,6 @@ const Positions = (() => {
       case 'suspicious_prevclose':return 'מחיר סגירה קודם נראה לא סביר (שינוי חד מאוד) — מוצג N/A במקום ערך שגוי';
       default:                    return 'שינוי יומי לא זמין';
     }
-  }
-
-  function renderTable() {
-    const tbody = document.getElementById('pos-tbody');
-    if (!tbody) return;
-    if (!APP.positions.length) { tbody.innerHTML = ''; return; }
-    tbody.innerHTML = APP.positions.map(p => {
-      const live    = APP.liveData[p.symbol];
-      const price   = live?.price;
-      // P&L always vs entry price (p.avg_price) — never prevClose. Unchanged.
-      const pnl     = price ? (price - p.avg_price) * p.qty : null;
-      const pnlPct  = price ? (price - p.avg_price) / p.avg_price * 100 : null;
-
-      // BUG FIX: gate on the backend's validated changePctValid flag,
-      // never just `!= null` (prevClose/changePct can be present-but-
-      // flagged-suspicious). See posCard() above for the full explanation.
-      const dayChgValid = !!(live && live.changePctValid && live.changePct != null);
-      const dayChgCell = dayChgValid
-        ? `<div style="font-size:10px;color:${live.changePct>=0?'var(--green)':'var(--red)'}">${live.changePct>=0?'+':''}${live.changePct.toFixed(2)}%</div>`
-        : live ? `<div style="font-size:10px;color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">N/A</div>` : '';
-
-      const liveCell = price
-        ? `<div style="font-weight:700">${fprice(price)}</div>
-           ${dayChgCell}
-           ${live.preMarket?`<div style="font-size:10px;color:var(--gold)">Pre: ${fprice(live.preMarket)}</div>`:''}
-           ${live.postMarket?`<div style="font-size:10px;color:var(--purple)">AH: ${fprice(live.postMarket)}</div>`:''}`
-        : '<span style="color:var(--text-3)">—</span>';
-
-      return `<tr>
-        <td style="font-weight:700">${p.symbol}</td>
-        <td>${fnum(p.qty)}</td>
-        <td>${fprice(p.avg_price)}${p.added_date?`<div style="font-size:10px;color:var(--text-3)">${p.added_date}</div>`:''}</td>
-        <td>${liveCell}</td>
-        <td class="${pnl===null?'':(pnl>=0?'green':'red')}" style="font-weight:700">${pnl!==null?f$(Math.round(pnl)):'—'}</td>
-        <td class="${pnl===null?'':(pnl>=0?'green':'red')}" style="font-weight:700">${pnl!==null?fILS(Math.round(usdToIls(pnl,currentMonthKey()))):'—'}</td>
-        <td class="${pnlPct===null?'':(pnlPct>=0?'green':'red')}">${pnlPct!==null?fpct(pnlPct):'—'}</td>
-        <td>${price?f$(Math.round(price*p.qty)):f$(Math.round(p.avg_price*p.qty))}</td>
-        <td>${p.target?fprice(p.target):''}</td>
-        <td>${p.stop_loss?fprice(p.stop_loss):''}</td>
-        <td>
-          <div class="actions" style="display:flex;gap:5px">
-            <button class="btn-icon" onclick="Positions.openEdit(${p.id})">✏️</button>
-            <button class="btn-icon danger" onclick="Positions.remove(${p.id})">✕</button>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
   }
 
   // ── Live Prices ─────────────────────────────────────────
