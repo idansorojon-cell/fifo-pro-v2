@@ -5,8 +5,14 @@
 
 // Bumped v1 -> v2: STATIC_ASSETS changed (learningEngine.js added,
 // decisionEngine.js rewritten) — old caches are evicted in 'activate'.
-const CACHE_NAME   = 'fifopro-v3';
-const STATIC_CACHE = 'fifopro-static-v3';
+// Bumped v3 -> v4: app.js/index.html changed significantly this session
+// (auth removal, Polygon->Finnhub, Mission Control, lazy tab rendering)
+// without ever bumping the cache version — returning users were stuck
+// on a cache-first-served stale bundle indefinitely. Bump this version
+// any time index.html or any js/*.js file changes, or clients will keep
+// serving old code forever regardless of what's deployed.
+const CACHE_NAME   = 'fifopro-v4';
+const STATIC_CACHE = 'fifopro-static-v4';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

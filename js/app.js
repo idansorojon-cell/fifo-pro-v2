@@ -246,20 +246,17 @@ async function seedToSheets() {
 }
 
 // ── Render all tabs ─────────────────────────────────────────
+// Only Mission Control (the home screen) renders here. Every other
+// screen — dashboard charts, trades table, journal, positions grid,
+// AI Coach, etc. — is rendered lazily the first time its own tab is
+// opened (see switchTab's switch statement below). This is what keeps
+// the initial page load to "Mission Control + nav cards" only, instead
+// of quietly building out every table/chart into hidden DOM up front.
+// Called after every data mutation (add/edit/delete trade or position)
+// so Mission Control's live numbers stay accurate; whichever tab the
+// user is actually looking at already re-renders itself directly at
+// each mutation's call site (e.g. Trades.submit calls Trades.render()).
 function renderAll() {
-  const st = getStats();
-  Dashboard.render(st);
-  Charts.renderEquity(st);
-  Charts.renderMonthly(st);
-  Charts.renderDrawdown(st);
-  Trades.render();
-  Trades.updateFilters();
-  Journal.render();
-  Positions.render();
-  // AICoach.render() is intentionally NOT called here — it's a heavy
-  // behavioral analysis over the full trade history that's only useful
-  // once the user actually opens the AI Coach screen (see switchTab's
-  // 'coach' case). Mission Control shows a single short insight instead.
   renderMissionControl();
 }
 
@@ -335,7 +332,21 @@ function switchTab(name, btn) {
 
   const st = getStats();
   switch (name) {
+    case 'dashboard':
+      Dashboard.render(st);
+      Charts.renderEquity(st);
+      Charts.renderMonthly(st);
+      Charts.renderDrawdown(st);
+      break;
+    case 'trades':
+      Trades.render();
+      Trades.updateFilters();
+      break;
+    case 'journal':
+      Journal.render();
+      break;
     case 'positions':
+      Positions.render(); // show entry-price cards immediately; live prices fill in below
       if (APP.positions.length > 0 && Object.keys(APP.liveData).length === 0)
         Positions.refreshPrices();
       Positions.connectWS();
