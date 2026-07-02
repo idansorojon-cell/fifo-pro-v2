@@ -165,6 +165,7 @@ const Auth = (() => {
 
   // Called by api.js when the server returns code:401 (expired/invalid session)
   function handle401() {
+    if (AUTH_DISABLED) return; // bypass — don't show login screen in testing mode
     clearPrivateCache();
     showLoginScreen();
   }

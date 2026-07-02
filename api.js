@@ -5,6 +5,11 @@
 
 const API = (() => {
 
+  // ── Auth bypass flag (must match auth.js AUTH_DISABLED) ─────────
+  // true  → skip all token logic, ignore 401s, verifyLogin is a no-op (testing mode)
+  // false → full session auth enforced (production mode)
+  const AUTH_DISABLED = true;
+
   const API_URL = 'https://script.google.com/macros/s/AKfycbzbiOcOGu5Qh8Zte_eU04BIh-ufie_V87nq8otruMBgwuil3DYJR5qn0qgo4VFsY-R5sw/exec';
   // NOTE: the Polygon.io API key and the Anthropic API key must NEVER live
   // in client-side JS — anyone can read them from the browser. Both live
@@ -56,6 +61,7 @@ const API = (() => {
 
   // Called when any response comes back with code:401 (expired/invalid session)
   function handle401_() {
+    if (AUTH_DISABLED) return; // bypass — ignore 401s in testing mode
     localStorage.removeItem('fifo_session_v1');
     setStatus('Session פג תוקף — מתחבר מחדש...', 'warn');
     if (typeof Auth !== 'undefined' && Auth.handle401) {
@@ -65,6 +71,7 @@ const API = (() => {
 
   // Checks a parsed JSON response for 401 and handles it; returns true if intercepted
   function check401_(data) {
+    if (AUTH_DISABLED) return false; // bypass — never block on 401 in testing mode
     if (data && data.code === 401) { handle401_(); return true; }
     return false;
   }
@@ -280,6 +287,10 @@ const API = (() => {
   // ── Auth ──────────────────────────────────────────────────
 
   async function verifyLogin(passwordHash) {
+    if (AUTH_DISABLED) {
+      // No network call — return a valid auth-disabled response immediately
+      return { ok: true, token: 'auth-disabled', authDisabled: true };
+    }
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
