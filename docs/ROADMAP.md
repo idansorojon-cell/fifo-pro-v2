@@ -72,6 +72,18 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       also account for proximity to stop-loss (currently purely P&L%-based
       via `Positions.riskStatus()`, which does already factor in stop
       distance — verify this still matches user expectations in practice).
+- [ ] **Settings Functionality Audit (future phase, not started).** The
+      Settings screen (`js/settings.js`) has grown to include many controls
+      (currency, date format, timezone, broker, preferred trading hours,
+      refresh interval, AI model, session timeout, and more via `.s-input`)
+      whose actual effect on the rest of the app hasn't been systematically
+      verified — some may be fully wired, some display-only/decorative,
+      some partially implemented. When this phase starts: audit every
+      control to determine whether it (a) actually does something, (b)
+      persists correctly (Google Sheets vs. localStorage), (c) is read by
+      any other module, and then decide per-control whether to keep as-is,
+      finish wiring it up, hide it, or remove it. Explicitly not started —
+      documentation only, per trader's request.
 
 ## P3 — Nice to have / explicitly deferred
 
