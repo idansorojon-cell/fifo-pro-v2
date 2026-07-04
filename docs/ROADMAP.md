@@ -10,14 +10,31 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       git.** Backend deploys are manual; verify with `testAuth_()` and
       `testFinnhub_()` run directly in the Apps Script editor.
 - [x] **Position target/stop-loss/notes silent data-loss — fixed in code,
-      needs redeploy.** Confirmed live (via direct API calls) that the
+      redeployed.** Confirmed live (via direct API calls) that the
       primary data path was hardcoding these fields blank and the edit
       modal wrote them to a different sheet, with real id-collision risk
       and a frontend bug that reported success even on failure. Fixed via
       `mergePositionMeta_`/`handleUpsertPositionMeta_` (symbol-keyed, see
-      TECHNICAL_DEBT.md and ARCHITECTURE.md — "Data model"). **Action
-      needed: manually redeploy `AppScript_FULL.gs`** — the fix does
-      nothing in production until then.
+      TECHNICAL_DEBT.md and ARCHITECTURE.md — "Data model"). Manually
+      redeployed by the trader — treated as live, not independently
+      re-verified this session.
+- [x] **Tax calculation understated every losing trade by 25% — fixed in
+      code, needs redeploy.** Found via a full-history audit (`SEED` array
+      in `js/app.js` vs. live `getOperations` output, matched field-by-field
+      on symbol/dates/qty/prices — zero data/lot-matching discrepancies,
+      28 of 108 trades mismatched, 100% of them losses). `applyFIFO_`
+      clamped tax to 0 on losses instead of applying the same 25% rate
+      symmetrically (`CLAUDE.md`'s own documented formula has no sign
+      condition). Fixed by removing the clamp. Verified by simulation
+      against live pre-fix data: May 2026 moves from $27,979.99 to
+      $30,854.99 (matches the trader's manual spreadsheet exactly);
+      full-history total moves by +$9,585.77. See TECHNICAL_DEBT.md and
+      ARCHITECTURE.md — "Data model". **Action needed: manually redeploy
+      `AppScript_FULL.gs`** — retroactively corrects every past month's
+      total the instant it's redeployed, no migration needed.
+- [ ] **New positions vanish/get overwritten after refresh** — root cause
+      found (collision between FIFO-derived and manually-entered
+      positions), not yet fixed. See TECHNICAL_DEBT.md.
 - [ ] **Identify the source of the recurring GitHub web-UI stale uploads**
       (see CURRENT_STATUS.md). Fought against git pushes at least 3 times
       this session.

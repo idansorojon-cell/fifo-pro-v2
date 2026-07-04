@@ -2659,7 +2659,12 @@ function applyFIFO_(ops) {
         var sellCommPerUnit = op.qty   > 0 ? sellCommTotal  / op.qty   : 0;
 
         var gross    = matched * (sellPrice - lot.price);
-        var tax      = gross > 0 ? Math.round(gross * 0.25 * 100) / 100 : 0;
+        // tax = gross * 0.25 always (CLAUDE.md's documented formula, no sign
+        // condition) — losing trades get a negative tax (a 25% offset), same
+        // as the original historical data. Previously clamped to 0 on losses,
+        // which silently understated net on every losing trade — see
+        // docs/ARCHITECTURE.md "Data model" for the audit that found this.
+        var tax      = Math.round(gross * 0.25 * 100) / 100;
         var buyComm  = Math.round(buyCommPerUnit  * matched * 100) / 100;
         var sellComm = Math.round(sellCommPerUnit * matched * 100) / 100;
         var net      = Math.round((gross - tax - buyComm - sellComm) * 100) / 100;

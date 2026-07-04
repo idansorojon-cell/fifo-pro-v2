@@ -152,6 +152,19 @@ legacy `getTrades`+`getPositions` only if it fails:
   `AppScript_FULL.gs`). `applyFIFO_` itself still returns
   `target`/`stop_loss`/`notes` as `''` — it has no way to know about them,
   they aren't part of the raw transaction log.
+
+**Tax fix (this session): symmetric `tax = gross × 0.25`.** `applyFIFO_`
+previously clamped tax to `0` on losing trades (`gross > 0 ? tax : 0`),
+silently understating every loss's severity by 25% — found via a full-
+history audit comparing the hardcoded `SEED` array (`js/app.js`, the
+original historical data) against live output: 28 of 108 trades mismatched,
+100% of them losses, 0% of them differing in any identifying field or in
+`gross` itself. Fixed by removing the sign condition, matching `CLAUDE.md`'s
+documented formula exactly. See `docs/TECHNICAL_DEBT.md` for the full audit
+evidence and per-month impact. Since trades are derived fresh on every
+`getOperations` call (nothing stored), this fix is retroactive across all
+history the instant it's redeployed — no migration step exists or is
+needed.
 - **`getTrades`+`getPositions` (fallback path):** reads the legacy
   `Trades`/`Positions` sheets directly — rows are the real source of
   truth here, including whatever `target`/`stop_loss`/`notes` were saved.

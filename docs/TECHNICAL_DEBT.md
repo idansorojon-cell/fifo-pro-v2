@@ -1,5 +1,52 @@
 # FIFO PRO — Technical Debt & Known Limitations
 
+## Tax calculation — losing trades were not receiving their 25% tax offset (FIXED, pending backend redeploy)
+
+**Found via a full-history audit** (user noticed May 2026's net total didn't
+match their original manual spreadsheet by exactly $2,875.00). A programmatic,
+field-by-field comparison between the hardcoded `SEED` array in `js/app.js`
+(108 historical trades, a snapshot of the original data) and the live
+FIFO-derived trades confirmed **zero discrepancies in any identifying field**
+(symbol, buy/sell date, qty, buy/sell price) or in `gross` — ruling out FIFO
+lot-matching order, source data, and import-process explanations entirely.
+The only mismatches (28 of 108 trades, spanning 11 months and 10 symbols,
+totaling $9,585.78) were every single losing trade (`gross < 0`), where the
+live engine showed `tax: 0` instead of the negative (offsetting) tax the
+original data and `CLAUDE.md`'s own documented formula (`tax = gross × 0.25`,
+no sign condition) both call for.
+
+**Root cause:** `applyFIFO_()` in `AppScript_FULL.gs` computed
+`tax = gross > 0 ? round(gross * 0.25, 2) : 0` — clamping tax to zero on
+losses instead of applying the same 25% rate symmetrically. This meant every
+losing trade's `net` understated the loss's actual after-tax severity (i.e.
+the trade looked worse than it should) by exactly 25% of its loss magnitude,
+compounding across the entire trade history.
+
+**Fix implemented:** removed the `gross > 0 ?` condition —
+`tax = round(gross * 0.25, 2)` unconditionally, so a losing trade gets a
+negative tax (a 25% offset) and `net = gross - tax` moves back toward zero,
+matching both the documented formula and the original historical data
+exactly. `gross`, FIFO lot-matching, commission handling, and every other
+field are **unchanged** — this is a single-line, tax-sign-only fix.
+
+**Verified before redeploy** by simulating the corrected formula in the
+browser against the live (pre-fix) trade data (since `gross` is identical
+either way and commissions are confirmed zero throughout the dataset):
+May 2026's total moves from $27,979.99 to **$30,854.99** (exactly matching
+the user's manual spreadsheet), and the full-history total moves by
+**+$9,585.77** (matches the audit's independently-computed $9,585.78 to
+within a cent, the difference being rounding order — 28 trades rounded
+individually vs. 110 trades summed then rounded once).
+
+**Status:** frontend is unaffected (this is a pure backend/`AppScript_FULL.gs`
+change) — no `git push` deploys it. **Requires a manual Apps Script
+redeploy** (paste `AppScript_FULL.gs` into script.google.com, new deployment
+version) before the corrected tax/net values appear live. Since
+`getOperations` recomputes trades from the raw transaction log on every
+load (nothing is stored), the fix takes effect **retroactively across all
+history** the moment it's redeployed — every past month's displayed total
+will shift upward, with no data migration needed.
+
 ## Data integrity — position target/stop/notes silently dropped (FIXED, pending backend redeploy)
 
 **Confirmed live via direct API calls against production** (`curl`'ing
@@ -50,6 +97,45 @@ pre-redeploy.
 `getOperations` — that's a separate, pre-existing UX question (the
 position would likely just reappear on the next load since it's derived
 from the trade log), out of scope for this fix.
+
+## New positions vanish or get silently overwritten after refresh (FOUND, NOT YET FIXED)
+
+**Root cause confirmed** via full code trace (`Positions.submit()` →
+`upsertPositionMeta` → `handleUpsertPositionMeta_` for the write path;
+`loadAll()` → `getOperations` → `applyFIFO_` → `mergePositionMeta_` for the
+read path) plus a read-only live check (`getPositions`, which bypasses the
+FIFO derivation and reads the legacy `Positions` sheet directly — no data
+was written to verify this).
+
+The write always succeeds (`handleUpsertPositionMeta_` finds-or-creates the
+row by symbol in the legacy `Positions` sheet). The bug is entirely on the
+read side: the primary path's list of open positions is derived **only**
+from unconsumed BUY lots in the `"פעולות"` transaction log; `mergePositionMeta_`
+only overlays `target`/`stop_loss`/`notes` onto positions that already
+survived that derivation. It never adds a position for a symbol with no
+open FIFO lot. Two distinct symptoms result:
+
+- **Symbol with no open FIFO lot at all** (a purely manual holding never
+  logged as a real BUY/SELL): saved to the legacy sheet, shown immediately
+  via the frontend's optimistic client-side insert, then **entirely
+  invisible after refresh**.
+- **Symbol that already has an open FIFO-derived position**: still shows
+  after refresh, but the `qty`/`avg_price`/`added_date` typed into the
+  modal are silently discarded and replaced by the FIFO-derived numbers —
+  only `target`/`stop_loss`/`notes` survive.
+
+Confirmed live (read-only, `getPositions`): the legacy sheet currently has
+an orphaned `OKLL` row (qty 4400 @ $6.40, target $10, no matching FIFO
+position anywhere in the app) and an `ONDL` row (qty 3500 @ $7.00) that
+doesn't match the ONDL card actually displayed (qty 10500 @ $11.38, from
+the FIFO derivation) — both are live instances of the mechanism above, not
+reconstructed from code alone.
+
+**Not yet fixed — this needs a product decision, not just a code fix**:
+either restrict "New Position" to annotating symbols that already have a
+real FIFO-derived position, or extend the read path to union in legacy-only
+positions with a defined reconciliation rule for what happens once a real
+BUY is later logged for that symbol. See ROADMAP.md P0.
 
 ## Security
 

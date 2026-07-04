@@ -151,7 +151,11 @@ If improvements are made:
 
 Key formulas:
 - gross = qty × (sell_price - buy_price)
-- tax = gross × 0.25  (Israeli capital gains)
+- tax = gross × 0.25  (Israeli capital gains) — **applies to both signs, no
+  floor at zero.** A losing trade (gross < 0) gets a negative tax, i.e. a
+  25% offset, same rate as a winning trade's charge. Do not clamp tax to 0
+  on losses — that was a real bug (found and fixed via a full-history audit,
+  see docs/TECHNICAL_DEBT.md) that silently understated every loss by 25%.
 - net = gross - tax
 - pct = (sell_price - buy_price) / buy_price × 100
 - hold_days = sell_date - buy_date in calendar days
