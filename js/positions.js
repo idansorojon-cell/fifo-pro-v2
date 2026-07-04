@@ -66,10 +66,10 @@ const Positions = (() => {
     const pnlPct  = (price - p.avg_price) / p.avg_price * 100;
     const stopPct = p.stop_loss ? (price - p.stop_loss) / price * 100 : null;
     if ((p.stop_loss && price <= p.stop_loss) || pnlPct <= -10)
-      return { level: 'high', label: '🔴 סיכון גבוה', color: 'var(--red)' };
+      return { level: 'high', label: icon('dot') + ' סיכון גבוה', color: 'var(--red)' };
     if (pnlPct <= WARN_THRESHOLD_PCT || (stopPct !== null && stopPct < 5))
-      return { level: 'warn', label: '🟠 אזהרה', color: 'var(--gold)' };
-    return { level: 'ok', label: '🟢 תקין', color: 'var(--green)' };
+      return { level: 'warn', label: icon('dot') + ' אזהרה', color: 'var(--gold)' };
+    return { level: 'ok', label: icon('dot') + ' תקין', color: 'var(--green)' };
   }
 
   function posCard(p) {
@@ -144,8 +144,8 @@ const Positions = (() => {
 
         ${p.target ? `
           <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px">
-            <span style="color:var(--blue)">🎯 יעד: ${fprice(p.target)}${targetPct!==null?' ('+fpct(targetPct)+' נותר)':''}</span>
-            ${p.stop_loss ? `<span style="color:var(--red)">🛑 סטופ: ${fprice(p.stop_loss)}${stopPct!==null?' ('+fpct(-stopPct)+')':''}</span>` : ''}
+            <span style="color:var(--blue)">${icon('target')} יעד: ${fprice(p.target)}${targetPct!==null?' ('+fpct(targetPct)+' נותר)':''}</span>
+            ${p.stop_loss ? `<span style="color:var(--red)">${icon('octagon')} סטופ: ${fprice(p.stop_loss)}${stopPct!==null?' ('+fpct(-stopPct)+')':''}</span>` : ''}
           </div>` : ''}
 
         ${p.notes ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;font-style:italic">${p.notes}</div>` : ''}
@@ -171,10 +171,11 @@ const Positions = (() => {
 
   // ── Live Prices ─────────────────────────────────────────
 
-  // manual=true only for the explicit "🔄 רענן" button click — the
-  // automatic 15s poll (startPolling() in app.js) always calls this with
-  // no argument, so routine background refreshes never toast (see
-  // API.reportPriceSuccess/reportPriceError and docs/DESIGN_SYSTEM.md).
+  // manual=true only for the explicit "רענן" button click (refresh icon,
+  // see index.html) — the automatic 15s poll (startPolling() in app.js)
+  // always calls this with no argument, so routine background refreshes
+  // never toast (see API.reportPriceSuccess/reportPriceError and
+  // docs/DESIGN_SYSTEM.md).
   async function refreshPrices(manual = false) {
     if (!APP.positions.length) return;
     if (manual) API.setStatus('מרענן מחירים...', 'info');
@@ -271,15 +272,15 @@ const Positions = (() => {
       const pct   = (price - p.avg_price) / p.avg_price * 100;
       if (p.target && price >= p.target) {
         alerts.push({ id: _alertId('target', p.symbol, p.target), type: 'target', symbol: p.symbol,
-          msg: `🎯 ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
+          msg: `${icon('target')} ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
       }
       if (p.stop_loss && price <= p.stop_loss) {
         alerts.push({ id: _alertId('stop', p.symbol, p.stop_loss), type: 'stop', symbol: p.symbol,
-          msg: `🛑 ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
+          msg: `${icon('octagon')} ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
       }
       if (pct <= WARN_THRESHOLD_PCT && (!p.stop_loss || price > p.stop_loss)) {
         alerts.push({ id: _alertId('warn', p.symbol, WARN_THRESHOLD_PCT), type: 'warn', symbol: p.symbol,
-          msg: `⚠️ ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
+          msg: `${icon('alert-triangle')} ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
       }
     });
     return alerts;
@@ -343,7 +344,7 @@ const Positions = (() => {
     if (!badge) return;
     if (!alerts.length) { badge.style.display = 'none'; hideAlertList(); return; }
     badge.style.display = 'inline-flex';
-    badge.textContent = '🔴 ' + alerts.length + ' התראות';
+    badge.innerHTML = icon('alert-triangle') + ' ' + alerts.length + ' התראות';
     badge._alerts = alerts; // read by showAlertList()
   }
 

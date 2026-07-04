@@ -76,10 +76,20 @@ Each phase's rationale and verification is logged in
 - [x] **Phase 1 — icon system.** Replaced emoji with a hand-authored SVG
       sprite across main nav, hub headers, hub cards, mobile bottom nav,
       and header actions. See DESIGN_SYSTEM.md.
-- [ ] Phase 2 (candidate) — card-title and in-content icon pass (the
-      emoji intentionally left alone in Phase 1/3: alert badge, risk
-      pills, all other `js/*.js` card titles — Mission Control's own
-      card-title emoji were migrated as part of Phase 3 below).
+- [x] **Phase 2 — broader emoji cleanup.** Card-titles (`index.html`,
+      7 instances), alert badge + alert-toast messages, risk-status
+      pills (now color-matched everywhere via one `icon('dot')` +
+      `riskInfo.color`), position-card target/stop labels, Mission
+      Control's coach insight text, Daily Brief's remaining icons. Found
+      and respected a real constraint: toast/tooltip strings render via
+      `.textContent`/`data-tip` and can't carry HTML, so those specific
+      emoji stay as-is (documented, not missed). Remaining deferred:
+      every toast checkmark (`✓`/`❌` across CRUD actions — needs its own
+      phase since it requires changing `setStatus()` to `innerHTML`),
+      `dashboard.js` (separate module, not audited), Mistake Detector,
+      AI Coach's insight-type icons, Daily Grade, pre/after-market price
+      tags, and Quick Trade's `<option>` emoji (genuine platform
+      constraint — `<option>` can't render HTML). See DESIGN_SYSTEM.md.
 - [x] **Phase 3 — Mission Control visual hierarchy.** Done out of order
       at explicit request (before Phase 2). Restructured the home screen
       into hero (Open P&L, dominant) / context strip (today/week/month) /

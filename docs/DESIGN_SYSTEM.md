@@ -48,6 +48,15 @@ trader's numbers are the product.
   status: ambient vs toast" below. Frontend/UI only, zero calculation
   changes.
 
+- **Phase 2: broader emoji cleanup.** Card-titles, the alert badge and
+  alert-toast messages, risk-status pills, position-card target/stop
+  labels, Mission Control's coach insight, and Daily Brief's remaining
+  icons — see "Phase 2: broader emoji cleanup" below for the full list
+  and what's deliberately still deferred (toast checkmarks, `dashboard.js`,
+  Mistake Detector, AI Coach's insight-type icons, Daily Grade, and a
+  couple of genuine platform constraints). Zero calculation/backend
+  changes.
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -238,12 +247,54 @@ which are semantic-neutral by default):
   now explicitly set to `var(--green)` to match the existing active-label
   color, since emoji never needed a color rule but a monochrome SVG does).
 
-## What's still emoji (intentionally deferred, not forgotten)
+## Phase 2: broader emoji cleanup (card-titles, alerts, risk, in-content)
 
-Card-title prefixes (`📈 Equity Curve`, `⚠️ Mistake Detector`, `🎯
-Decision Engine`, etc. — scattered across `index.html` and most
-`js/*.js` render functions), the alert badge (`🔴 N התראות`), risk-status
-pills (`🔴`/`🟠`/`🟢`), Mission Control's inline glyphs, and data-context
-tags like the after-hours `🌙 AH:` price label. These are next in line
-for a design pass but were left alone this phase to keep the diff
-reviewable — see ROADMAP.md.
+Migrated the highest-traffic remaining emoji to the sprite: all 7 static
+`.card-title` prefixes in `index.html` (Equity Curve, Monthly Net,
+Drawdown, Mistake Detector, Decision Engine, AI Coach, Daily Grade's
+"actions" card) plus a handful of section labels/buttons in the same
+file (Quick Trade, Position Sizer, Decision Engine's "נתח מניה" button,
+AI Chat, Risk/Reward Calculator); `positions.js`'s `riskStatus()` labels
+(now an `icon('dot')` colored via the same `color` value already used
+for `.pos-card--*`/the Mission Control risk-card border — one color,
+everywhere), the alert badge, and the three alert-toast messages
+(target/stop/warn — now `icon('target')`/`icon('octagon')`/
+`icon('alert-triangle')`); position cards' target/stop-loss inline
+labels; Mission Control's `_shortCoachInsight()` text and its
+color-matched risk label; and Daily Brief's AI Coach icon, new-trades
+line, and risk-header icon. Four new sprite symbols added:
+`dot`, `octagon`, `check-circle`, `trending-down`, `ruler`.
+
+**A real constraint found and respected, not worked around:** `setStatus()`
+(`js/api.js`) sets `#sync-bar`'s content via `.textContent`, and
+`API.reportPriceError()`/`updateWsDot()` write the error into a
+`data-tip` attribute — neither can render HTML/SVG. The `❌`/`⚠️` prefixes
+inside `positions.js`'s price-error messages were **deliberately left as
+emoji**, not missed — converting them would print a literal `<svg>...`
+string on screen. This is the concrete reason the broader "toast
+checkmark" pass (see below) needs its own phase: it would require
+changing `setStatus()` to use `innerHTML` everywhere it's called, a
+bigger, shared-function change deserving its own review, not a drive-by
+in this phase.
+
+**Still emoji, intentionally deferred:**
+- Every toast/status message across `api.js`, `positions.js`,
+  `watchlist.js`, `trades.js`, `journal.js`, `quicktrade.js`,
+  `settings.js` (`✓`/`✅`/`❌` prefixes) — all go through `setStatus()`'s
+  `.textContent`, per the constraint above. Needs its own phase that
+  either accepts plain-text-only prefixes or migrates `setStatus()` to
+  `innerHTML` deliberately.
+- `dashboard.js`'s own hero/KPI/goal-card rendering (👋, 💊, 🎯, etc.) —
+  a separate module not audited this phase.
+- Mistake Detector's category icons (`analytics.js`), AI Coach's rich
+  insight-type icons (`aiCoach.js`), Daily Grade's grade badges
+  (`dailyGrade.js`), Trade Replay/Performance Timeline/Decision
+  Engine/Journal in-content emoji, Watchlist's own section header.
+- Position cards' pre/after-market price tags (`🌅 Pre:`/`🌙 AH:`) —
+  low-frequency (only shown when that data exists) and would need two
+  new single-use icons; not worth the addition yet.
+- Quick Trade's buy/sell `<option>` emoji (`🟢 קנייה`/`🔴 מכירה`) — a
+  genuine platform constraint, not an oversight: browsers render
+  `<option>` text as plain text only, HTML/SVG inside an `<option>` is
+  not supported. Leave as emoji, or restyle as a custom dropdown
+  component if this ever becomes worth the effort.

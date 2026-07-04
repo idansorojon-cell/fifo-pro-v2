@@ -20,8 +20,12 @@
 // fixed-position toast, no more layout shift on every 15s price poll) —
 // css/style.css, index.html, js/api.js, js/app.js, js/positions.js,
 // js/watchlist.js.
-const CACHE_NAME   = 'fifopro-v7';
-const STATIC_CACHE = 'fifopro-static-v7';
+// Bumped v7 -> v8: Design Phase 2 (broader emoji cleanup) — card-titles,
+// alert badge/toasts, risk pills, target/stop labels, Mission Control
+// coach insight, Daily Brief — index.html, css/style.css, js/app.js,
+// js/positions.js.
+const CACHE_NAME   = 'fifopro-v8';
+const STATIC_CACHE = 'fifopro-static-v8';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

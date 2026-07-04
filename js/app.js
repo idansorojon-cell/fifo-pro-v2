@@ -527,19 +527,19 @@ function renderDailyBrief() {
       </div>
 
       <div class="brief-coach">
-        <span class="brief-coach-icon">🤖</span>
+        <span class="brief-coach-icon">${icon('cpu')}</span>
         <strong>AI Coach:</strong> ${coachMsg}
       </div>
 
       ${newTrades > 0 ? `
         <div class="brief-changes">
-          <div class="brief-change-item">📊 ${newTrades} עסקאות חדשות מהכניסה האחרונה</div>
+          <div class="brief-change-item">${icon('list')} ${newTrades} עסקאות חדשות מהכניסה האחרונה</div>
         </div>
       ` : ''}
 
       ${risks.length ? `
         <div class="brief-risk">
-          <strong style="color:var(--red)">⚠️ סיכוני היום:</strong>
+          <strong style="color:var(--red);display:inline-flex;align-items:center;gap:5px">${icon('alert-triangle')} סיכוני היום:</strong>
           <ul style="margin-top:6px;padding-right:16px;font-size:12px">
             ${risks.map(r => `<li>${r}</li>`).join('')}
           </ul>
@@ -733,15 +733,15 @@ function _shortCoachInsight(st) {
   for (let i = trades.length - 1; i >= 0; i--) {
     if (trades[i].net < 0) streak++; else break;
   }
-  if (streak >= 3) return `⛔ ${streak} הפסדים רצופים — שקול להפסיק לסחור היום.`;
+  if (streak >= 3) return `${icon('octagon')} ${streak} הפסדים רצופים — שקול להפסיק לסחור היום.`;
 
   const recent = trades.slice(-10);
   const noStops = recent.filter(t => t.respected_stop === 'לא').length;
-  if (noStops >= 2) return `⚠️ ${noStops} מתוך 10 העסקאות האחרונות ללא כיבוד סטופ.`;
+  if (noStops >= 2) return `${icon('alert-triangle')} ${noStops} מתוך 10 העסקאות האחרונות ללא כיבוד סטופ.`;
 
-  if (st.winRate >= 65 && st.totalNet > 0) return '✅ ביצועים מצוינים — שמור על המשמעת והמשך לפי התוכנית.';
-  if (st.winRate < 50) return '📉 Win Rate מתחת ל-50% — שקול לצמצם גודל פוזיציות.';
-  return '💡 בקצב טוב. עקביות עדיפה על ניסיון לתפוס עסקה גדולה.';
+  if (st.winRate >= 65 && st.totalNet > 0) return `${icon('check-circle')} ביצועים מצוינים — שמור על המשמעת והמשך לפי התוכנית.`;
+  if (st.winRate < 50) return `${icon('trending-down')} Win Rate מתחת ל-50% — שקול לצמצם גודל פוזיציות.`;
+  return `${icon('bulb')} בקצב טוב. עקביות עדיפה על ניסיון לתפוס עסקה גדולה.`;
 }
 
 function _biggestRiskPosition() {
@@ -827,7 +827,7 @@ function renderMissionControl() {
         <div class="mc-label">${icon('alert-triangle')} הסיכון הגדול ביותר</div>
         ${risk
           ? `<div class="mc-value-sm ${risk.pnlPct>=0?'green':'red'}">${risk.p.symbol} ${Utils.fpct(risk.pnlPct)}</div>
-             <div class="mc-sub">${riskInfo.label}</div>`
+             <div class="mc-sub" style="display:flex;align-items:center;gap:4px;color:${riskInfo.color}">${riskInfo.label}</div>`
           : `<div class="mc-sub">אין נתוני סיכון עדיין</div>`}
       </div>
     </div>

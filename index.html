@@ -33,6 +33,9 @@
     <symbol id="icon-trending-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="4,17 10,11 14,15 20,6"/><polyline points="14,6 20,6 20,12"/>
     </symbol>
+    <symbol id="icon-trending-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4,7 10,13 14,9 20,18"/><polyline points="14,18 20,18 20,12"/>
+    </symbol>
     <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="10" cy="10" r="6.5"/><line x1="20" y1="20" x2="14.8" y2="14.8"/>
     </symbol>
@@ -122,6 +125,18 @@
     </symbol>
     <symbol id="icon-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 3 22 20 2 20z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="icon-dot" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="icon-octagon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"/>
+    </symbol>
+    <symbol id="icon-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><polyline points="8,12.5 11,15.5 16,9"/>
+    </symbol>
+    <symbol id="icon-ruler" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 16 16 4l4 4L8 20z"/><line x1="13" y1="7" x2="15" y2="9"/><line x1="10" y1="10" x2="12" y2="12"/><line x1="7" y1="13" x2="9" y2="15"/>
     </symbol>
   </defs>
 </svg>
@@ -421,15 +436,15 @@
     <div class="kpi-grid" id="kpi-grid"></div>
     <div class="card" id="portfolio-health"></div>
     <div class="card">
-      <div class="card-title">📈 Equity Curve — רווח נטו מצטבר ($)</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
       <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">📊 רווח נטו לפי חודש ($)</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> רווח נטו לפי חודש ($)</div>
       <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">📉 Drawdown Chart</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-trending-down"/></svg> Drawdown Chart</div>
       <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
     </div>
     <div class="card" id="goal-card"></div>
@@ -570,7 +585,7 @@
 
   <!-- QUICK TRADE -->
   <div id="tab-quicktrade" class="panel">
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:14px">⚡ הוספת עסקה מהירה</div>
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-zap"/></svg> הוספת עסקה מהירה</div>
     <div style="max-width:520px">
       <div class="card">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
@@ -600,7 +615,7 @@
           <div class="form-group"><label>מחיר קנייה ($)</label><input id="qt-buy-price" type="number" step="0.01" placeholder="רק למכירה" oninput="QuickTrade.calc()"></div>
         </div>
         <div class="sizer-box">
-          <div class="sizer-title">📐 Position Sizer</div>
+          <div class="sizer-title"><svg class="icon"><use href="#icon-ruler"/></svg> Position Sizer</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group"><label>גודל תיק ($)</label><input id="qt-portfolio" type="number" placeholder="67000" value="67000" oninput="QuickTrade.calc()"></div>
             <div class="form-group"><label>% סיכון מקס</label><input id="qt-risk-pct" type="number" step="0.1" placeholder="1.0" value="1.0" oninput="QuickTrade.calc()"></div>
@@ -680,7 +695,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title">⚠️ Mistake Detector</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-alert-triangle"/></svg> Mistake Detector</div>
       <div id="mistake-grid" class="mistake-grid"></div>
     </div>
   </div>
@@ -734,7 +749,7 @@
   <!-- DECISION ENGINE -->
   <div id="tab-decision" class="panel">
     <div class="card">
-      <div class="card-title">🎯 Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
       <div class="de-grid">
         <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
         <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
@@ -744,7 +759,7 @@
         <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="DecisionEngine.run()">🔍 נתח מניה</button>
+        <button class="btn btn-primary" onclick="DecisionEngine.run()"><svg class="icon"><use href="#icon-search"/></svg> נתח מניה</button>
         <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
@@ -760,13 +775,13 @@
   <!-- AI COACH -->
   <div id="tab-coach" class="panel">
     <div class="card">
-      <div class="card-title">🤖 AI Coach — ניתוח אופי המסחר שלך</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-cpu"/></svg> AI Coach — ניתוח אופי המסחר שלך</div>
       <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
     </div>
     <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
     <div id="coach-grid" class="coach-grid"></div>
     <div class="card">
-      <div class="card-title">🔧 פעולות לשבוע הקרוב</div>
+      <div class="card-title"><svg class="icon"><use href="#icon-clipboard"/></svg> פעולות לשבוע הקרוב</div>
       <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
     </div>
   </div>
@@ -774,7 +789,7 @@
   <!-- AI CHAT -->
   <div id="tab-aichat" class="panel">
     <div style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px">💬 AI Chat — שאל שאלות על המסחר שלך</div>
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px;display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-message"/></svg> AI Chat — שאל שאלות על המסחר שלך</div>
       <div class="chat-suggestions" id="chat-suggestions"></div>
     </div>
     <div class="chat-container">
@@ -832,7 +847,7 @@
     </div>
     <div class="form-group" style="margin-bottom:10px"><label>הערות</label><input id="pf-notes" placeholder="אופציונלי..."></div>
     <div class="rr-box" id="rr-box">
-      <div style="font-weight:700;margin-bottom:8px;color:var(--blue)">📐 Risk/Reward Calculator</div>
+      <div style="font-weight:700;margin-bottom:8px;color:var(--blue);display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-ruler"/></svg> Risk/Reward Calculator</div>
       <div class="rr-row"><span>Risk per share</span><span id="rr-risk">—</span></div>
       <div class="rr-row"><span>Reward per share</span><span id="rr-reward">—</span></div>
       <div class="rr-row"><span style="font-weight:700">R:R Ratio</span><span id="rr-ratio" style="font-weight:700">—</span></div>
