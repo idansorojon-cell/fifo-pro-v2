@@ -3,6 +3,12 @@
 > This file is for AI assistants (Claude, Gemini, ChatGPT, Copilot).
 > Read this before touching any code.
 
+> **This file predates `/docs` and is kept for historical/legacy context.**
+> For current, maintained documentation, start with `/docs/AI_CONTEXT.md`
+> and `/docs/ARCHITECTURE.md` instead — they reflect the app as it exists
+> today (auth currently disabled, Finnhub as sole price provider, Mission
+> Control home screen, lazy tab rendering, etc.), which this file does not.
+
 ---
 
 ## What is FIFO PRO?

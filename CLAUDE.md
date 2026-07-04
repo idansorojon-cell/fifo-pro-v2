@@ -1,5 +1,22 @@
 # FIFO PRO – Claude Project Instructions
 
+## Full documentation
+
+Detailed, current documentation lives in `/docs`. Read it before making
+non-trivial changes:
+
+- `docs/PROJECT_OVERVIEW.md` — what FIFO PRO is, stack, deployment, APIs, auth
+- `docs/ARCHITECTURE.md` — folder structure, rendering flow, state, caching
+- `docs/FEATURES.md` — every implemented screen/module
+- `docs/CURRENT_STATUS.md` — what's deployed right now, recent history
+- `docs/ROADMAP.md` — outstanding work by priority
+- `docs/TECHNICAL_DEBT.md` — known limitations and postponed fixes
+- `docs/DEVELOPMENT_RULES.md` — working methodology, verification checklist
+- `docs/AI_CONTEXT.md` — decisions already made; don't re-litigate these
+
+This `CLAUDE.md` remains the top-level rulebook; `/docs` is the detailed
+single source of truth underneath it.
+
 ## Project Goal
 
 FIFO PRO is an institutional-grade trading dashboard.
@@ -13,6 +30,10 @@ Every change must improve the production system.
 ---
 
 # Golden Rules
+
+**Evolution, not Revolution.** Never perform unnecessary rewrites or large
+refactors — the smallest correct change wins. See `docs/DEVELOPMENT_RULES.md`
+for the full methodology.
 
 Never break existing functionality.
 
