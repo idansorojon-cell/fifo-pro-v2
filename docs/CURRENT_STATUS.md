@@ -42,8 +42,9 @@ session:
 - `FINNHUB_API_KEY` was confirmed **already correctly configured** in
   Script Properties — verified live (real prices returned for ONDL/QBTX).
 - Diagnostics available by running directly in the Apps Script editor:
-  `testAuth_()`, `testFinnhub_()` (formerly `testPolygon_()` — Polygon
-  variant may still exist unused in the file).
+  `testAuth_()` and `testFinnhub_()` (confirmed present in
+  `AppScript_FULL.gs`; the earlier Polygon-specific `testPolygon_()` was
+  renamed to `testFinnhub_()`, not left as a duplicate).
 
 ⚠️ **Action needed:** confirm the currently-deployed Apps Script matches
 `AppScript_FULL.gs` in git. If any backend-side fix from this session

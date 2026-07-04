@@ -1,5 +1,31 @@
 # FIFO PRO — Technical Debt & Known Limitations
 
+## Data integrity — position target/stop/notes may be silently dropped
+
+**Likely bug, unconfirmed, high priority to verify.** The primary data
+path (`getOperations`, tried first by `js/api.js`'s `loadAll()`) derives
+open positions fresh on every load via FIFO matching over a raw
+transactions log (`"פעולות"` sheet), and that derivation hardcodes
+`target`, `stop_loss`, and `notes` to `''` (see `applyFIFO_` in
+`AppScript_FULL.gs`). Meanwhile, the position edit modal
+(`Positions.submit()` in `js/positions.js`) always writes those fields to
+a *separate*, legacy `Positions` sheet via `addPosition`/`updatePosition`.
+
+**If `getOperations` is the active path in production** (which it appears
+to be — no target/stop pill was ever observed on position cards during
+this session's live testing, consistent with those fields always coming
+back blank), then editing a position's target price, stop-loss, or notes
+will appear to succeed (the API call returns `ok: true`) but **the values
+will not reappear** on the next page load or refresh, because positions
+are always re-derived from the FIFO log with those fields empty.
+
+This was **not** introduced or touched this session — it appears to be a
+pre-existing architectural gap between two data paths that were probably
+built at different times. Do not attempt to fix this without explicit
+confirmation from the project owner about which path is actually meant to
+be authoritative — see `docs/ARCHITECTURE.md`'s "Data model" section for
+the full mechanics.
+
 ## Security
 
 - **Authentication is fully bypassed** (`AUTH_DISABLED = true` in

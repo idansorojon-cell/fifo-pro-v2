@@ -58,6 +58,27 @@ whichever screen was just opened. Prices poll every 15s via
 `Positions.refreshPrices()` → Apps Script `getPrices` → Finnhub → updates
 `APP.liveData` → re-renders positions grid + Mission Control.
 
+**⚠️ Two possible Google Sheets, not one.** `getOperations` (tried first)
+reads a `"פעולות"` transactions log — possibly in a *different*
+spreadsheet identified by the `OPERATIONS_SPREADSHEET_ID` Script Property
+(falls back to a hardcoded ID if unset) — and derives both trades and
+positions from it via FIFO matching. Derived positions always have
+`target`/`stop_loss`/`notes` hardcoded blank. The legacy `getTrades`/
+`getPositions` fallback path reads a separate `Positions` sheet directly,
+where those fields are real. **The position edit modal always writes to
+the legacy sheet regardless of which path is active** — if `getOperations`
+is the live path (it appears to be, based on this session's testing),
+target/stop/notes edits will not round-trip. See §7/§10 and
+`docs/ARCHITECTURE.md`'s "Data model" section — do not assume this is
+fixed or that it's safe to ignore.
+
+**Script Properties (Apps Script → Project Settings), not in git:**
+`LOGIN_PASSWORD`, `SESSION_TTL_HOURS` (dormant while auth disabled),
+`FINNHUB_API_KEY`, `ANTHROPIC_API_KEY` (both active/required),
+`OPERATIONS_SPREADSHEET_ID` (see above), `POLYGON_API_KEY`,
+`YAHOO_FALLBACK_ENABLED` (both dormant). Full table:
+`docs/PROJECT_OVERVIEW.md`.
+
 ---
 
 ## 2. Product Philosophy
@@ -207,8 +228,11 @@ Full detail + session history: `docs/CURRENT_STATUS.md`.
 ## 6. Outstanding Work
 
 **P0 (security/correctness):** restore authentication (see §7); confirm
-live Apps Script deployment matches git; identify source of recurring
-stale GitHub web-UI uploads (see §9/§10).
+live Apps Script deployment matches git; **confirm whether position
+target/stop-loss/notes actually round-trip** (likely broken under the
+primary `getOperations` data path — see §1/§4/§7, ask the project owner
+before changing anything); identify source of recurring stale GitHub
+web-UI uploads (see §9/§10).
 
 **P1 (reliability):** switch service worker to network-first for HTML/JS;
 resolve fate of `Script.html`/`Style.html`/`AppScript_PATCH.gs`; some form
@@ -227,6 +251,11 @@ Full detail: `docs/ROADMAP.md`.
 
 ## 7. Technical Debt
 
+- **Position `target`/`stop_loss`/`notes` may be silently dropped**
+  (likely bug, unconfirmed). See §1's "Two possible Google Sheets" note.
+  The edit modal's writes and the primary read path (`getOperations`)
+  target different sheets. Not introduced this session — appears to
+  predate it. Verify with the project owner before touching.
 - **Auth fully bypassed** — real, live exposure if used beyond a trusted
   device. To restore: set `AUTH_DISABLED = false` in `AppScript_FULL.gs`,
   `js/auth.js`, `js/api.js`; ensure `LOGIN_PASSWORD` Script Property is
@@ -256,6 +285,19 @@ Full detail: `docs/TECHNICAL_DEBT.md`.
 ---
 
 ## 8. Development Rules
+
+**Local development, read first:** project root is
+`/Users/idansorojon/Desktop/claude/fifo/files` (note nested `files/`).
+`python3 -m http.server` fails here (sandbox permission error) — use the
+`.claude/launch.json` preview config named exactly **`"fifo-pro"`**
+(port 5176, custom inline Node static server). ⚠️ The same launch.json
+also has `"trading-dashboard"` and `"dana-care-app"` for *unrelated*
+sibling projects — an inexact name can silently launch the wrong app
+(happened once this session). Before testing any change, clear the
+service worker + caches via `preview_eval` (see `docs/DEVELOPMENT_RULES.md`
+for the exact snippet) or you'll be looking at stale cached code. The
+local preview talks to the real, live Apps Script backend — there is no
+mock; test data changes are real.
 
 - **Diagnose before fixing** — reproduce the reported bug in a real
   browser (preview tools: screenshot, console, network, DOM state) before
@@ -339,6 +381,14 @@ has passed:_
   indefinitely for returning users.
 - **Verification standard on this project is "curl the live URL and grep
   for the specific change,"** not "the local diff looks correct."
+- **There may be two Google Sheets, not one** — see §1. Position
+  target/stop/notes edits likely don't round-trip under the primary data
+  path. Don't assume this is fixed; don't "fix" it without asking which
+  sheet is meant to be authoritative.
+- **Preview-tool naming collision:** always launch the local preview with
+  the exact name `"fifo-pro"` — `"trading-dashboard"` and
+  `"dana-care-app"` are different projects in sibling folders and will
+  launch silently with no error if you get the name slightly wrong.
 
 ---
 

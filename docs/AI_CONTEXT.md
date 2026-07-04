@@ -18,6 +18,17 @@ this repo, read this fully before editing anything.
    `CACHE_NAME`/`STATIC_CACHE` in `sw.js` in the same commit, or a
    returning browser may serve stale code indefinitely. This already
    caused real confusion once this session.
+3. **There may be two Google Sheets involved, and position edits may not
+   round-trip.** The primary data path (`getOperations`) derives trades
+   *and positions* fresh from a `"פעולות"` transactions log — possibly in
+   a different spreadsheet, identified by the `OPERATIONS_SPREADSHEET_ID`
+   Script Property (falls back to a hardcoded ID if unset). Positions
+   derived this way always have blank `target`/`stop_loss`/`notes`, while
+   the position edit modal writes those fields to a *different*, legacy
+   `Positions` sheet. If asked to debug "my stop-loss disappeared" or
+   similar, check this first — see ARCHITECTURE.md's "Data model" and
+   TECHNICAL_DEBT.md's "Data integrity" sections before assuming it's a
+   simple frontend bug.
 
 ## Decisions already made — don't re-litigate without new information
 
@@ -76,6 +87,19 @@ git push origin main
 Always verify with `git diff`/`git show origin/main:<file>` that the
 remote version is actually stale before blindly taking "ours" — don't
 assume, confirm.
+
+## Known recurring gotcha: wrong preview server launched by name collision
+
+`.claude/launch.json` has three configs: `"fifo-pro"` (this project,
+port 5176), `"trading-dashboard"`, and `"dana-care-app"` — the latter two
+are unrelated sibling projects in sibling folders. Starting a preview with
+an inexact name once launched the wrong project's dev server silently
+(no error — just the wrong app rendered) and cost real time before the
+mismatch was noticed via an unexpected screenshot. **Always pass the exact
+name `"fifo-pro"`** to `preview_start`. See DEVELOPMENT_RULES.md — "Local
+development" for the full local-dev setup, including why `python3 -m
+http.server` doesn't work here and why the service worker must be cleared
+before every local test.
 
 ## Verifying "done" means verifying the live site, not just local files
 

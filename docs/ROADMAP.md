@@ -9,6 +9,13 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 - [ ] **Confirm live Apps Script deployment matches `AppScript_FULL.gs` in
       git.** Backend deploys are manual; verify with `testAuth_()` and
       `testFinnhub_()` run directly in the Apps Script editor.
+- [ ] **Confirm whether position target/stop-loss/notes are actually being
+      saved and read back correctly** — the primary data path
+      (`getOperations`) derives positions with these fields hardcoded
+      blank, while the position edit modal writes them to a different,
+      legacy sheet. See TECHNICAL_DEBT.md — "Data integrity" and
+      ARCHITECTURE.md — "Data model." Ask the project owner which sheet is
+      actually meant to be authoritative before changing anything.
 - [ ] **Identify the source of the recurring GitHub web-UI stale uploads**
       (see CURRENT_STATUS.md). Fought against git pushes at least 3 times
       this session.

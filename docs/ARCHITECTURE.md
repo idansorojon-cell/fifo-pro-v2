@@ -139,6 +139,36 @@ existing on `window` already).
 - `diagnose()` — callable from the browser console (`API.diagnose()`) to
   probe GET/POST health without touching app state.
 
+## Data model: two possible sources for trades/positions
+
+`js/api.js`'s `loadAll()` tries `getOperations` **first**, falling back to
+legacy `getTrades`+`getPositions` only if it fails:
+
+- **`getOperations` (primary path, when available):** reads a `"פעולות"`
+  (raw BUY/SELL log) sheet — possibly in a *different spreadsheet* than
+  the Apps Script project's bound one, see PROJECT_OVERVIEW.md — "Two
+  spreadsheets." Both `trades` and `positions` are **derived on every
+  call** via FIFO lot-matching (`applyFIFO_` in `AppScript_FULL.gs`).
+  Derived positions have `target`/`stop_loss`/`notes` **hardcoded to
+  `''`** — these fields do not come from this path at all.
+- **`getTrades`+`getPositions` (fallback path):** reads the legacy
+  `Trades`/`Positions` sheets directly — rows are the actual source of
+  truth here, including whatever `target`/`stop_loss`/`notes` were saved.
+
+**Consequence:** `Positions.submit()` (the position edit modal) always
+calls `addPosition`/`updatePosition`, which write to the legacy
+`Positions` sheet — regardless of which path `loadAll()` used to read
+data. **If `getOperations` is the active path, those writes are never
+read back** — target/stop/notes will appear to save (the API call
+succeeds) but won't show up in the UI on next load, because positions are
+re-derived fresh from `"פעולות"` with those fields blank. This is
+consistent with what was observed live this session: position cards
+never rendered a target/stop pill despite the edit form supporting it.
+**This needs to be confirmed with the project owner** — see
+TECHNICAL_DEBT.md. Do not "fix" this without asking; it may be intentional
+(e.g. target/stop tracking might be meant to only work with the legacy
+sheet-based flow) or it may be a real, unnoticed bug.
+
 ## State flow
 
 Single global mutable object: `window.APP` (defined in `app.js`):

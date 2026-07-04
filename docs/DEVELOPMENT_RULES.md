@@ -1,5 +1,47 @@
 # FIFO PRO — Development Rules
 
+## Local development (read this before starting a preview server)
+
+- **Project root:** `/Users/idansorojon/Desktop/claude/fifo/files` — note
+  the nested `files/` subfolder; that's the actual git repo root, not the
+  parent `fifo/` folder.
+- **`python3 -m http.server` fails in this sandboxed environment** with a
+  `PermissionError` on `argparse`'s `--directory` flag — don't waste time
+  retrying it. It was tried and abandoned this session.
+- **Working local static server:** a `.claude/launch.json` entry named
+  exactly `"fifo-pro"` (not `"fifo"`) already exists, running a small
+  inline Node HTTP server on port 5176, `cwd` set to the project root
+  above. Use `preview_start` with `name: "fifo-pro"` — this is a pure
+  static file server (no build step, matches how GitHub Pages actually
+  serves the site).
+- **⚠️ Naming collision risk:** the same `.claude/launch.json` also has
+  entries named `"trading-dashboard"` and `"dana-care-app"` for two
+  *entirely unrelated* sibling projects (`../trading-dashboard`,
+  `../dana-care`). Starting a preview with a wrong/partial name (e.g.
+  `"fifo"` instead of `"fifo-pro"`) can silently launch the wrong
+  project's dev server — this happened once this session and produced a
+  screenshot of a completely different app before the mistake was caught.
+  **Always use the exact name `"fifo-pro"`.**
+- **Always clear the service worker + caches before testing a change:**
+  because `sw.js` is cache-first (see ARCHITECTURE.md), a local preview
+  tab can keep serving an old version of `index.html`/`js/*.js` even after
+  editing the files on disk. Before checking any UI fix, run in
+  `preview_eval`:
+  ```js
+  (async () => {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) await r.unregister();
+    const keys = await caches.keys();
+    for (const k of keys) await caches.delete(k);
+    window.location.reload();
+  })()
+  ```
+  This bit us more than once this session before it became a standing
+  habit — do it every time, not just when something looks stale.
+- The local preview talks to the **real, live** Apps Script backend (there
+  is no local backend/mock) — any data changes made while testing locally
+  are real changes to the live Google Sheet.
+
 ## Guiding principle: Evolution, not Revolution
 
 > Never perform unnecessary rewrites or large refactors.
