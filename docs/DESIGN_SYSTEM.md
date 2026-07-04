@@ -57,6 +57,15 @@ trader's numbers are the product.
   couple of genuine platform constraints). Zero calculation/backend
   changes.
 
+- **Follow-up: removed the manual-refresh success toast too.** After
+  shipping the live-status UX phase (automatic polling silenced), the
+  manual "🔄 רענן" button still toasted on success. Removed on reflection
+  — a refresh the user just triggered doesn't need an announcement after
+  the fact. Replaced with a spinning refresh-button icon
+  (`API.setButtonBusy`) plus the existing ambient dot/timestamp. Errors
+  still toast. See "Follow-up: removed the manual-refresh success toast
+  too" below.
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -160,13 +169,46 @@ not by assuming the removal was safe.
 **Verified, not assumed:** an automatic `refreshPrices()` call was
 measured before/after via `getBoundingClientRect()` on the Mission
 Control hero card — identical position, confirming zero layout shift.
-Manual refresh was confirmed to toast and auto-hide after 3s. The
-error-dedup behavior was confirmed via three simulated consecutive
+The error-dedup behavior was confirmed via three simulated consecutive
 failures. Mobile (375×812): the toast's fixed `top` offset needed a
 mobile-specific bump (`68px` → `76px` in `mobile.css`) because mobile
 hides `.main-nav`, leaving less natural clearance before the hub title —
 caught visually via screenshot, not assumed to just work from the
 desktop value.
+
+### Follow-up: removed the manual-refresh success toast too
+
+Initially, manual refresh (the "🔄 רענן" button) still showed a
+"✓ N/N מחירים עודכנו" toast on success — only the *automatic* 15s poll
+was silenced. On reflection this was inconsistent: a refresh the user
+just triggered themselves doesn't need an announcement after the fact:
+they already know they clicked it. Removed entirely, replaced with:
+
+- **`API.setButtonBusy(id, busy)`** (`js/api.js`) — disables the button
+  and toggles an `.icon-spin` class on its `<svg class="icon">` (reusing
+  the existing `spin` keyframe already used by `.spinner`, not a new
+  animation). `Positions.refreshPrices()`/`Watchlist.refresh()` call this
+  around the fetch in a `try/finally`, so the spin always clears even on
+  an error path.
+- The ambient `#ws-dot` pulse + `#last-updated` timestamp (already built
+  for the automatic case) now serve as the *only* success confirmation
+  for manual refresh too — one consistent mental model instead of two.
+- **Errors still toast** for manual refresh — that remains genuinely
+  actionable and worth interrupting for. Only the success path lost its
+  toast.
+
+`API.reportPriceSuccess()` no longer takes a `manual` parameter (it
+never had a reason to branch on it once the toast was removed).
+
+**Verified, not assumed:** confirmed via DOM inspection that the button
+is `disabled` with `.icon-spin` present mid-flight (checked at the 10ms
+mark of an in-flight call) and both clear once the call resolves, for
+both `Positions.refreshPrices(true)` and `Watchlist.refresh(true)`.
+Confirmed a simulated manual error still shows the toast. Confirmed a
+stable reference point (`.header`'s `getBoundingClientRect()`) doesn't
+move across a manual refresh — the position card's own bounding box
+*does* shift slightly, but that's the card's content legitimately
+changing height with fresh price data, not a toast-reflow regression.
 
 ## Icon system
 

@@ -24,8 +24,12 @@
 // alert badge/toasts, risk pills, target/stop labels, Mission Control
 // coach insight, Daily Brief — index.html, css/style.css, js/app.js,
 // js/positions.js.
-const CACHE_NAME   = 'fifopro-v8';
-const STATIC_CACHE = 'fifopro-static-v8';
+// Bumped v8 -> v9: removed the manual-refresh success toast entirely —
+// replaced with a spinning refresh-button icon (API.setButtonBusy) plus
+// the existing ambient dot/timestamp — index.html, css/style.css,
+// js/api.js, js/positions.js, js/watchlist.js.
+const CACHE_NAME   = 'fifopro-v9';
+const STATIC_CACHE = 'fifopro-static-v9';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

@@ -513,7 +513,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
+        <button id="pos-refresh-btn" class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" onclick="Positions.openForm()"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
       </div>
     </div>
@@ -637,7 +637,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
+        <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
       </div>
     </div>

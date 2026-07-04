@@ -305,19 +305,34 @@ const API = (() => {
   // existing once-per-day alert-dedup pattern in positions.js.
   let _priceErrorStreakShown = false;
 
-  function reportPriceSuccess(loadedCount, total, manual) {
+  // No success toast, ever — not even for a manual refresh. A refresh the
+  // user just triggered doesn't need an announcement after the fact; the
+  // button's own spin state (setButtonBusy) is the real-time feedback,
+  // and the dot pulse + timestamp below are the "it worked" confirmation.
+  // See docs/DESIGN_SYSTEM.md.
+  function reportPriceSuccess() {
     _priceErrorStreakShown = false;
     const now = new Date().toLocaleTimeString('he-IL');
     updateWsDot('ok', 'עודכן לאחרונה: ' + now);
     const lu = document.getElementById('last-updated');
     if (lu) lu.textContent = 'עודכן: ' + now;
-    if (manual) setStatus('✓ ' + loadedCount + '/' + total + ' מחירים עודכנו', 'ok');
   }
 
   function reportPriceError(msg, manual) {
     updateWsDot('error', msg);
     if (manual || !_priceErrorStreakShown) setStatus(msg, 'error');
     _priceErrorStreakShown = true;
+  }
+
+  // Toggles a spinning refresh icon + disables the button while a manual
+  // refresh is in flight — the real-time "is this working" signal that
+  // replaces the old "מרענן..." toast. id = the button's DOM id.
+  function setButtonBusy(id, busy) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = busy;
+    const svg = btn.querySelector('svg.icon');
+    if (svg) svg.classList.toggle('icon-spin', busy);
   }
 
   // ── Auth ──────────────────────────────────────────────────
@@ -430,7 +445,7 @@ const API = (() => {
     getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS, diagnose,
-    reportPriceSuccess, reportPriceError,
+    reportPriceSuccess, reportPriceError, setButtonBusy,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
     _url: API_URL
   };

@@ -173,63 +173,69 @@ const Positions = (() => {
 
   // manual=true only for the explicit "רענן" button click (refresh icon,
   // see index.html) — the automatic 15s poll (startPolling() in app.js)
-  // always calls this with no argument, so routine background refreshes
-  // never toast (see API.reportPriceSuccess/reportPriceError and
-  // docs/DESIGN_SYSTEM.md).
+  // always calls this with no argument. There is no success toast for
+  // either case — the button's own spin state (API.setButtonBusy) is the
+  // real-time feedback, and the #ws-dot pulse + #last-updated timestamp
+  // are the "it worked" confirmation. Only failures ever toast (see
+  // API.reportPriceSuccess/reportPriceError and docs/DESIGN_SYSTEM.md).
   async function refreshPrices(manual = false) {
     if (!APP.positions.length) return;
-    if (manual) API.setStatus('מרענן מחירים...', 'info');
-    const syms   = [...new Set(APP.positions.map(p => p.symbol))];
-    const prices = await API.fetchPrices(syms);
+    if (manual) API.setButtonBusy('pos-refresh-btn', true);
+    try {
+      const syms   = [...new Set(APP.positions.map(p => p.symbol))];
+      const prices = await API.fetchPrices(syms);
 
-    let loadedCount = 0;
-    const errors = [];
+      let loadedCount = 0;
+      const errors = [];
 
-    Object.entries(prices).forEach(([sym, p]) => {
-      if (p && p.ok) {
-        APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
-        loadedCount++;
-      } else {
-        const err = (p && p.error) || 'no data';
-        console.warn('[prices] failed for', sym, err);
-        errors.push(sym + ': ' + err);
+      Object.entries(prices).forEach(([sym, p]) => {
+        if (p && p.ok) {
+          APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
+          loadedCount++;
+        } else {
+          const err = (p && p.error) || 'no data';
+          console.warn('[prices] failed for', sym, err);
+          errors.push(sym + ': ' + err);
+        }
+      });
+
+      if (!Object.keys(prices).length) {
+        console.error('[prices] fetchPrices returned empty — auth or network error');
+        API.reportPriceError('❌ מחירים לא נטענו — בדוק חיבור ו-API key', manual);
+        render();
+        return;
       }
-    });
 
-    if (!Object.keys(prices).length) {
-      console.error('[prices] fetchPrices returned empty — auth or network error');
-      API.reportPriceError('❌ מחירים לא נטענו — בדוק חיבור ו-API key', manual);
       render();
-      return;
-    }
+      // Mission Control's Open P&L / biggest-risk widgets depend on live
+      // prices — keep them current every poll without re-rendering anything
+      // else. app.js loads after positions.js but this only ever runs at
+      // runtime (after boot), so the function is guaranteed to exist by then.
+      if (typeof renderMissionControl === 'function') renderMissionControl();
 
-    render();
-    // Mission Control's Open P&L / biggest-risk widgets depend on live
-    // prices — keep them current every poll without re-rendering anything
-    // else. app.js loads after positions.js but this only ever runs at
-    // runtime (after boot), so the function is guaranteed to exist by then.
-    if (typeof renderMissionControl === 'function') renderMissionControl();
-
-    if (loadedCount > 0) {
-      API.reportPriceSuccess(loadedCount, syms.length, manual);
-    } else {
-      // Surface the first real error rather than a generic message
-      const firstErr = errors[0] || '';
-      let errMsg;
-      if (firstErr.includes('401') || firstErr.includes('Unauthorized') || firstErr.includes('API key'))
-        errMsg = '❌ Finnhub 401 — בדוק FINNHUB_API_KEY ב-Script Properties';
-      else if (firstErr.includes('429') || firstErr.includes('Rate Limit'))
-        errMsg = '⚠️ Finnhub 429 — חרגת ממכסת הקריאות';
-      else if (firstErr.includes('FINNHUB_API_KEY חסר'))
-        errMsg = '❌ הגדר FINNHUB_API_KEY ב-Script Properties של Apps Script';
-      else if (firstErr.includes('network') || firstErr.includes('רשת'))
-        errMsg = '❌ שגיאת רשת — בדוק חיבור לאינטרנט';
-      else if (firstErr)
-        errMsg = '⚠️ ' + firstErr.slice(0, 80);
-      else
-        errMsg = '⚠️ לא ניתן לטעון מחירים';
-      console.error('[prices] errors:', errors.join(' | '));
-      API.reportPriceError(errMsg, manual);
+      if (loadedCount > 0) {
+        API.reportPriceSuccess();
+      } else {
+        // Surface the first real error rather than a generic message
+        const firstErr = errors[0] || '';
+        let errMsg;
+        if (firstErr.includes('401') || firstErr.includes('Unauthorized') || firstErr.includes('API key'))
+          errMsg = '❌ Finnhub 401 — בדוק FINNHUB_API_KEY ב-Script Properties';
+        else if (firstErr.includes('429') || firstErr.includes('Rate Limit'))
+          errMsg = '⚠️ Finnhub 429 — חרגת ממכסת הקריאות';
+        else if (firstErr.includes('FINNHUB_API_KEY חסר'))
+          errMsg = '❌ הגדר FINNHUB_API_KEY ב-Script Properties של Apps Script';
+        else if (firstErr.includes('network') || firstErr.includes('רשת'))
+          errMsg = '❌ שגיאת רשת — בדוק חיבור לאינטרנט';
+        else if (firstErr)
+          errMsg = '⚠️ ' + firstErr.slice(0, 80);
+        else
+          errMsg = '⚠️ לא ניתן לטעון מחירים';
+        console.error('[prices] errors:', errors.join(' | '));
+        API.reportPriceError(errMsg, manual);
+      }
+    } finally {
+      if (manual) API.setButtonBusy('pos-refresh-btn', false);
     }
   }
 

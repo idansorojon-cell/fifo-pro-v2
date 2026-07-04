@@ -55,24 +55,31 @@ const Watchlist = (() => {
 
   // ── Refresh ────────────────────────────────────────────
 
-  // manual=true only for the explicit "🔄 רענן" button click — refreshing
-  // by opening the tab (switchTab('watchlist') in app.js) is navigation,
-  // not a request for a status toast (see docs/DESIGN_SYSTEM.md).
+  // manual=true only for the explicit "רענן" button click — refreshing by
+  // opening the tab (switchTab('watchlist') in app.js) is navigation, not
+  // a request for feedback. No success toast either way — the button's
+  // spin state (API.setButtonBusy) is the real-time signal; a plain
+  // "it worked" doesn't need an announcement after the fact. "Watchlist
+  // ריק" stays because it's a genuinely distinct state (nothing to show),
+  // not a success confirmation. See docs/DESIGN_SYSTEM.md.
   async function refresh(manual = false) {
-    if (manual) API.setStatus('מרענן Watchlist...', 'info');
-    await _reloadFromSheets(true);
-    if (!APP.watchlist.length) {
+    if (manual) API.setButtonBusy('wl-refresh-btn', true);
+    try {
+      await _reloadFromSheets(true);
+      if (!APP.watchlist.length) {
+        render();
+        if (manual) API.setStatus('Watchlist ריק', 'warn');
+        return;
+      }
+      const syms   = APP.watchlist.map(w => w.symbol);
+      const prices = await API.fetchPrices(syms);
+      Object.entries(prices).forEach(([sym, p]) => {
+        if (p?.ok) APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
+      });
       render();
-      if (manual) API.setStatus('Watchlist ריק', 'warn');
-      return;
+    } finally {
+      if (manual) API.setButtonBusy('wl-refresh-btn', false);
     }
-    const syms   = APP.watchlist.map(w => w.symbol);
-    const prices = await API.fetchPrices(syms);
-    Object.entries(prices).forEach(([sym, p]) => {
-      if (p?.ok) APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
-    });
-    render();
-    if (manual) API.setStatus('✓ Watchlist עודכן', 'ok');
   }
 
   async function _reloadFromSheets(silent=false) {

@@ -104,6 +104,11 @@ Each phase's rationale and verification is logged in
       toast reserved for manual actions and errors. Recurring background
       errors surface once, then degrade to a quiet dot state instead of
       repeating. See DESIGN_SYSTEM.md.
+- [x] **Follow-up — removed the manual-refresh success toast too.** Manual
+      "🔄 רענן" clicks no longer toast on success either — replaced with a
+      spinning refresh-button icon (`API.setButtonBusy`, reuses the
+      existing `.spinner` keyframe) plus the ambient dot/timestamp.
+      Errors still toast. See DESIGN_SYSTEM.md.
 - [ ] Phase 4+ — KPI/card component differentiation, form/native-control
       restyle, chart restyle, motion pass, loading/empty states. Full
       original proposal (colors, typography, spacing system, borrowed
