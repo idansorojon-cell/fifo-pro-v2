@@ -781,48 +781,56 @@ function renderMissionControl() {
     if (t.month === curMonth) monthNet += t.net;
   });
 
-  const risk = _biggestRiskPosition();
-  const insight = _shortCoachInsight(st);
+  const risk     = _biggestRiskPosition();
+  const riskInfo = risk ? Positions.riskStatus(risk.p, risk.live) : null;
+  const insight  = _shortCoachInsight(st);
 
+  // Hierarchy, top to bottom: hero (Open P&L, dominant) -> context strip
+  // (today/week/month, subordinate) -> status row (positions + risk,
+  // risk gets a colored edge reusing the exact pos-card--<level> classes
+  // already used on Positions cards, so severity reads the same way
+  // everywhere) -> AI Coach. All values above are unchanged; only the
+  // markup/layout differs from the previous flat 6-box grid.
   el.innerHTML = `
-    <div class="mc-grid">
-      <div class="mc-card mc-card-hero">
-        <div class="mc-label">Open P&L</div>
-        <div class="mc-value ${openPnl>=0?'green':'red'}">${Utils.f$(Math.round(openPnl))}</div>
-        <div class="mc-sub">${liveCount}/${APP.positions.length} פוזיציות live${openCost?' · '+Utils.fpct(openPnl/openCost*100):''}</div>
+    <div class="mc-hero">
+      <div class="mc-hero-label">Open P&L <span class="mc-live-dot" title="מתעדכן כל 15 שניות"></span></div>
+      <div class="mc-hero-value ${openPnl>=0?'green':'red'}">${Utils.f$(Math.round(openPnl))}</div>
+      <div class="mc-hero-sub">${liveCount}/${APP.positions.length} פוזיציות live${openCost?' · '+Utils.fpct(openPnl/openCost*100):''}</div>
+    </div>
+
+    <div class="mc-strip">
+      <div class="mc-strip-item">
+        <div class="mc-strip-label">היום</div>
+        <div class="mc-strip-value ${todayNet>=0?'green':'red'}">${Utils.f$(Math.round(todayNet))}</div>
       </div>
-      <div class="mc-card">
-        <div class="mc-label">היום</div>
-        <div class="mc-value-sm ${todayNet>=0?'green':'red'}">${Utils.f$(Math.round(todayNet))}</div>
+      <div class="mc-strip-item">
+        <div class="mc-strip-label">השבוע</div>
+        <div class="mc-strip-value ${weekNet>=0?'green':'red'}">${Utils.f$(Math.round(weekNet))}</div>
       </div>
-      <div class="mc-card">
-        <div class="mc-label">השבוע</div>
-        <div class="mc-value-sm ${weekNet>=0?'green':'red'}">${Utils.f$(Math.round(weekNet))}</div>
-      </div>
-      <div class="mc-card">
-        <div class="mc-label">החודש</div>
-        <div class="mc-value-sm ${monthNet>=0?'green':'red'}">${Utils.f$(Math.round(monthNet))}</div>
+      <div class="mc-strip-item">
+        <div class="mc-strip-label">החודש</div>
+        <div class="mc-strip-value ${monthNet>=0?'green':'red'}">${Utils.f$(Math.round(monthNet))}</div>
       </div>
     </div>
 
     <div class="mc-grid mc-grid-2">
       <div class="mc-card">
-        <div class="mc-label">📈 פוזיציות פתוחות</div>
+        <div class="mc-label">${icon('trending-up')} פוזיציות פתוחות</div>
         ${APP.positions.length
           ? `<div class="mc-value-sm">${APP.positions.length}</div><div class="mc-sub">${APP.positions.map(p=>p.symbol).join(', ')}</div>`
           : `<div class="mc-sub">אין פוזיציות פתוחות</div>`}
       </div>
-      <div class="mc-card">
-        <div class="mc-label">⚠️ הסיכון הגדול ביותר</div>
+      <div class="mc-card mc-risk-card" style="${riskInfo ? 'border-right-color:'+riskInfo.color : ''}">
+        <div class="mc-label">${icon('alert-triangle')} הסיכון הגדול ביותר</div>
         ${risk
           ? `<div class="mc-value-sm ${risk.pnlPct>=0?'green':'red'}">${risk.p.symbol} ${Utils.fpct(risk.pnlPct)}</div>
-             <div class="mc-sub">${Positions.riskStatus(risk.p, risk.live).label}</div>`
+             <div class="mc-sub">${riskInfo.label}</div>`
           : `<div class="mc-sub">אין נתוני סיכון עדיין</div>`}
       </div>
     </div>
 
     <div class="mc-card mc-coach">
-      <div class="mc-label">🤖 AI Coach</div>
+      <div class="mc-label">${icon('cpu')} AI Coach</div>
       <div class="mc-coach-msg">${insight}</div>
       <button class="btn btn-ghost btn-sm" onclick="switchCategory('ai', document.querySelector('.nav-cat[data-cat=\\'ai\\']')); switchTab('coach')">פתח AI Coach מלא ←</button>
     </div>

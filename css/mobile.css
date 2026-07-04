@@ -55,9 +55,12 @@
   .pos-grid { grid-template-columns: 1fr; }
 
   /* Mission Control */
+  .mc-hero        { padding: 18px 18px; }
+  .mc-hero-value  { font-size: 36px; }
+  .mc-strip-item  { padding: 10px 8px; }
+  .mc-strip-value { font-size: 15px; }
   .mc-grid   { grid-template-columns: 1fr 1fr; }
   .mc-grid-2 { grid-template-columns: 1fr; }
-  .mc-value  { font-size: 24px; }
   .alert-list-dropdown { left: auto; right: 0; max-width: calc(100vw - 32px); }
 
   /* Insight grid */

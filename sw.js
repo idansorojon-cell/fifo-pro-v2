@@ -14,8 +14,10 @@
 // Bumped v4 -> v5: icon system (Design Phase 1) — index.html (icon
 // sprite + markup), css/style.css, js/utils.js, js/app.js, js/settings.js
 // all changed.
-const CACHE_NAME   = 'fifopro-v5';
-const STATIC_CACHE = 'fifopro-static-v5';
+// Bumped v5 -> v6: Mission Control hierarchy (Design Phase 3) —
+// index.html (new icon symbol), css/style.css, css/mobile.css, js/app.js.
+const CACHE_NAME   = 'fifopro-v6';
+const STATIC_CACHE = 'fifopro-static-v6';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

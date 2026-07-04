@@ -25,6 +25,58 @@ trader's numbers are the product.
   JS render functions and are a separate, later phase so this one stays
   reviewable.
 
+- **Phase 3: Mission Control visual hierarchy.** Restructured the home
+  screen (`renderMissionControl()` in `js/app.js`) from a flat 6-box grid
+  where every number had similar visual weight into a deliberate 3-tier
+  hierarchy — see "Mission Control hierarchy" below. All underlying
+  calculations (`openPnl`, `todayNet`/`weekNet`/`monthNet`,
+  `_biggestRiskPosition()`, `_shortCoachInsight()`) are byte-for-byte
+  unchanged — this phase touched only the template and CSS. As part of
+  this phase, Mission Control's own remaining emoji (📈/⚠️/🤖 card-title
+  prefixes) were also migrated to the icon sprite, since the template was
+  already being rewritten — Phase 2's remaining scope (alert badge, risk
+  pills, all other screens' card titles) is unaffected by this.
+  (Phase 2 itself — the broader card-title/in-content icon pass — has not
+  been started; Phase 3 was done first at explicit request.)
+
+## Mission Control hierarchy (Phase 3)
+
+Three deliberate tiers, top to bottom, each visually quieter than the one
+above it:
+
+1. **Hero (`.mc-hero`)** — Open P&L alone. `52px`/weight 800 (vs. `20px`/
+   weight 700 for every other number in the old layout) — not just "a bit
+   bigger," genuinely dominant. A small pulsing dot (`.mc-live-dot`,
+   `@keyframes mc-pulse`) ties it to the 15s price-poll cadence, and the
+   card's own border tints toward green/red at low opacity via
+   `:has(.mc-hero-value.green/red)` — a secondary, peripheral-vision
+   signal beyond just the number's own color. `:has()` is a progressive
+   enhancement — unsupported browsers just keep the default border, no
+   breakage.
+2. **Context strip (`.mc-strip`)** — today/week/month collapsed into one
+   bordered unit with internal dividers, not three separate competing
+   cards. Deliberately quiet: no individual borders, smaller type
+   (`17px`).
+3. **Status row (`.mc-grid.mc-grid-2`)** — positions summary + biggest
+   risk. The risk card gets a colored right-edge accent
+   (`.mc-risk-card`, 4px) matching the exact color `Positions.riskStatus()`
+   already uses for `.pos-card--high/warn/ok` elsewhere in the app — same
+   severity, same color, everywhere. **Implementation note:** this is set
+   via an inline `style="border-right-color:..."` in `js/app.js`, not by
+   applying the `.pos-card--*` class to the Mission Control card — reusing
+   the class silently failed (the `.mc-card` shorthand `border: 1px solid
+   var(--border)` was defined later in `style.css` than `.pos-card--*`,
+   so cascade order overrode the color back to default). Inline style has
+   the highest specificity and sidesteps the ordering dependency entirely
+   — if you add more color-accented cards elsewhere, prefer inline
+   style-from-JS over cross-file class reuse for exactly this reason.
+4. **AI Coach card** — unchanged position (bottom), icon swapped from 🤖
+   to the sprite's `cpu` icon.
+
+Mobile: hero drops to `36px`, strip padding tightens, and the status row
+(`.mc-grid-2`) stacks to a single column (existing mobile.css rule,
+unchanged) — verified via browser preview at 375×812.
+
 ## Icon system
 
 **Mechanism:** a single hidden `<svg><defs>` sprite of `<symbol>`

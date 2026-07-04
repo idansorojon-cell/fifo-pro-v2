@@ -77,11 +77,14 @@ Each phase's rationale and verification is logged in
       sprite across main nav, hub headers, hub cards, mobile bottom nav,
       and header actions. See DESIGN_SYSTEM.md.
 - [ ] Phase 2 (candidate) — card-title and in-content icon pass (the
-      emoji intentionally left alone in Phase 1: alert badge, risk pills,
-      Mission Control inline glyphs, all `js/*.js` card titles).
-- [ ] Phase 3 (candidate) — Mission Control visual hierarchy pass (hero
-      P&L number given genuine typographic dominance over secondary
-      metrics).
+      emoji intentionally left alone in Phase 1/3: alert badge, risk
+      pills, all other `js/*.js` card titles — Mission Control's own
+      card-title emoji were migrated as part of Phase 3 below).
+- [x] **Phase 3 — Mission Control visual hierarchy.** Done out of order
+      at explicit request (before Phase 2). Restructured the home screen
+      into hero (Open P&L, dominant) / context strip (today/week/month) /
+      status row (positions + color-accented risk card) / AI Coach.
+      Zero calculation changes. See DESIGN_SYSTEM.md.
 - [ ] Phase 4+ — KPI/card component differentiation, form/native-control
       restyle, chart restyle, motion pass, loading/empty states. Full
       original proposal (colors, typography, spacing system, borrowed
