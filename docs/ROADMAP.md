@@ -19,22 +19,30 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       redeployed by the trader — treated as live, not independently
       re-verified this session.
 - [x] **Tax calculation understated every losing trade by 25% — fixed in
-      code, needs redeploy.** Found via a full-history audit (`SEED` array
-      in `js/app.js` vs. live `getOperations` output, matched field-by-field
-      on symbol/dates/qty/prices — zero data/lot-matching discrepancies,
-      28 of 108 trades mismatched, 100% of them losses). `applyFIFO_`
-      clamped tax to 0 on losses instead of applying the same 25% rate
-      symmetrically (`CLAUDE.md`'s own documented formula has no sign
-      condition). Fixed by removing the clamp. Verified by simulation
-      against live pre-fix data: May 2026 moves from $27,979.99 to
-      $30,854.99 (matches the trader's manual spreadsheet exactly);
-      full-history total moves by +$9,585.77. See TECHNICAL_DEBT.md and
-      ARCHITECTURE.md — "Data model". **Action needed: manually redeploy
-      `AppScript_FULL.gs`** — retroactively corrects every past month's
-      total the instant it's redeployed, no migration needed.
+      code, redeployed and confirmed by the trader.** Found via a
+      full-history audit (`SEED` array in `js/app.js` vs. live
+      `getOperations` output, matched field-by-field on symbol/dates/qty/
+      prices — zero data/lot-matching discrepancies, 28 of 108 trades
+      mismatched, 100% of them losses). `applyFIFO_` clamped tax to 0 on
+      losses instead of applying the same 25% rate symmetrically
+      (`CLAUDE.md`'s own documented formula has no sign condition). Fixed
+      by removing the clamp. Verified by simulation against live pre-fix
+      data: May 2026 moves from $27,979.99 to $30,854.99 (matches the
+      trader's manual spreadsheet exactly); full-history total moves by
+      +$9,585.77. See TECHNICAL_DEBT.md and ARCHITECTURE.md — "Data
+      model". Manually redeployed and verified live by the trader.
 - [ ] **New positions vanish/get overwritten after refresh** — root cause
       found (collision between FIFO-derived and manually-entered
       positions), not yet fixed. See TECHNICAL_DEBT.md.
+- [ ] **Verify whether `Trades.submit()`/`openEdit()` have the same class
+      of bug as the position issue above.** Noticed in passing while
+      implementing Phase 5b (not investigated): the Trades add/edit modal
+      writes via the legacy `addTrade`/`updateTrade` endpoints, but the
+      primary read path (`getOperations`) derives its trade list purely
+      from the raw `"פעולות"` transaction log — structurally the same
+      shape as the position bug (write path and primary read path
+      targeting different data sources). Unverified whether editing/adding
+      a trade via this modal actually persists correctly across a reload.
 - [ ] **Identify the source of the recurring GitHub web-UI stale uploads**
       (see CURRENT_STATUS.md). Fought against git pushes at least 3 times
       this session.
@@ -159,8 +167,15 @@ Each phase's rationale and verification is logged in
       one — verified via `getComputedStyle` first that it was additive,
       not conflicting, so the merge preserves the exact prior appearance.
       Zero calculation/backend changes. See DESIGN_SYSTEM.md.
-- [ ] **Phase 5b** — Trades modal date fields (`f-buy-date`/`f-sell-date`)
-      → native `type="date"`, matching Quick Trade/Position modal.
+- [x] **Phase 5b — Trades modal date fields → native `type="date"`.**
+      `f-buy-date`/`f-sell-date` (the highest-traffic form) now match
+      Quick Trade/Position modal's native pickers instead of free-text
+      `DD/MM/YYYY` typing. Uses existing `ddToISO`/`isoToDD` helpers at
+      the read/write boundary only — stored format, API payload, and
+      `hold_days`/`month` calc are byte-for-byte unchanged. Verified via
+      round-trip conversion checks and live DOM inspection, without
+      submitting a real edit (to avoid writing test data into production).
+      See DESIGN_SYSTEM.md.
 - [ ] **Phase 5c** — Unify Settings' `.s-input`/`.s-input-num` with the
       global `input, select, textarea` styling.
 - [ ] **Phase 5d** — Replace native `confirm()` (6 call sites) with a

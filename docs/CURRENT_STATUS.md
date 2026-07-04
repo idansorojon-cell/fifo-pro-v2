@@ -46,10 +46,11 @@ session:
   `AppScript_FULL.gs`; the earlier Polygon-specific `testPolygon_()` was
   renamed to `testFinnhub_()`, not left as a duplicate).
 - `applyFIFO_`'s tax calculation fixed (`tax = gross × 0.25` unconditionally,
-  no more clamping to 0 on losses) — **in git, NOT yet redeployed.** Found
-  via a full-history audit that traced a $2,875 May 2026 discrepancy to a
-  systemic bug affecting 28 of 108 historical trades ($9,585.78 total
-  understatement). See TECHNICAL_DEBT.md and ARCHITECTURE.md — "Data model".
+  no more clamping to 0 on losses) — **redeployed and confirmed live by the
+  trader.** Found via a full-history audit that traced a $2,875 May 2026
+  discrepancy to a systemic bug affecting 28 of 108 historical trades
+  ($9,585.78 total understatement). See TECHNICAL_DEBT.md and
+  ARCHITECTURE.md — "Data model".
 
 ⚠️ **Action needed:** confirm the currently-deployed Apps Script matches
 `AppScript_FULL.gs` in git. If any backend-side fix from this session

@@ -81,6 +81,14 @@ trader's numbers are the product.
   skeleton loading states, `.s-input`/global-input unification, Journal's
   filter-bar inline styles). Zero calculation/backend changes.
 
+- **Phase 5b: Trades modal date fields → native `type="date"`.** The
+  Trades add/edit modal (`#modal-form`) was the one form still requiring
+  free-text `DD/MM/YYYY` typing, inconsistent with Quick Trade and the
+  Position modal's native date pickers. See "Phase 5b" below. Frontend/UI
+  only — the stored/transmitted date format (`DD/MM/YYYY`) and all
+  downstream calc (`hold_days`, `month`) are unchanged; only the input
+  widget and a read-boundary conversion changed.
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -566,3 +574,61 @@ title render as expected; confirmed at both desktop (1400px) and mobile
   (`mobile.css`'s `padding:3px 5px`) — flagged, not addressed this phase.
 - Visible `:focus`/`:focus-visible` state for buttons (currently only
   inputs/selects get a focus affordance) — flagged, not addressed.
+
+## Phase 5b: Trades modal date fields → native `type="date"`
+
+### What this phase did
+
+`#modal-form` (Trades add/edit — the single highest-traffic data-entry
+form, since every closed trade goes through it) had `f-buy-date`/
+`f-sell-date` as plain text inputs with a `placeholder="DD/MM/YYYY"` —
+the trader had to type dates by hand, with zero native picker, while
+Quick Trade (`qt-buy-date`/`qt-sell-date`) and the Position modal
+(`pf-date`) both already used real `type="date"` pickers. Changed both
+inputs to `type="date"` (removed the now-inert placeholder — native date
+inputs don't render placeholder text).
+
+Native date inputs require their `.value` in ISO `YYYY-MM-DD`, while every
+other part of the app (storage, the API payload, `hold_days`/`month`
+calc) uses `DD/MM/YYYY` — the same format mismatch Quick Trade/Position
+already solved. Rather than duplicating Position modal's inline split/
+join conversion, this phase used the existing `js/utils.js` helpers
+directly (`ddToISO`/`isoToDD`, added this phase to `trades.js`'s
+destructure line):
+
+- **`Trades.openEdit()`**: `document.getElementById('f-buy-date').value =
+  ddToISO(t.buy_date)` (was a direct string assignment — silently wrong
+  for a date input, since native date inputs reject non-ISO strings).
+- **`Trades.submit()`**: `bd`/`sd` are now computed as
+  `isoToDD(document.getElementById('f-buy-date').value.trim())` at the
+  very top of the function — everywhere else in `submit()` (the trade
+  object sent to the API, `hold_days` via `parseDD`, `month` via
+  `sd.split('/')`) is **byte-for-byte unchanged**, since `bd`/`sd` are
+  already back in the `DD/MM/YYYY` format those lines expect.
+
+Zero calculation changes — this is a widget + read-boundary-conversion
+change only. `Trades.calcPreview()` doesn't read the date fields at all,
+so it needed no changes.
+
+### Verified, not assumed
+
+Confirmed via `getComputedStyle`/bounding-box inspection (not just
+screenshot) that `#modal-form` and its inputs render at full expected
+size. Confirmed `Trades.openEdit()` converts existing trades' dates
+correctly (e.g. `"10/03/2025"` → input value `"2025-03-10"`) for a real
+trade. Confirmed the `ddToISO`/`isoToDD` round-trip is lossless for
+several sample dates (including a 1-digit day and a year boundary)
+without calling the live API — a real edit/add was deliberately **not**
+submitted during verification, to avoid writing test data into the
+trader's production Google Sheet; the round-trip and the conversion
+call-sites were verified in isolation instead. Screenshotted both the
+edit and add flows at desktop and mobile (375×812) — native calendar
+icon renders correctly, dates display and edit correctly, no layout
+overflow, zero new console errors after a full service-worker/cache
+clear + reload.
+
+### Deliberately out of scope (unchanged from the Phase 5a list)
+
+5c (`.s-input` unification), 5d (`confirm()` → styled modal), 5e
+(skeleton loading states), 5f (Journal filter bar), mobile touch-target
+sizing, and button focus states all remain deferred, per the list above.

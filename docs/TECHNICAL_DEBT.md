@@ -1,6 +1,6 @@
 # FIFO PRO — Technical Debt & Known Limitations
 
-## Tax calculation — losing trades were not receiving their 25% tax offset (FIXED, pending backend redeploy)
+## Tax calculation — losing trades were not receiving their 25% tax offset (FIXED, redeployed and confirmed live by the trader)
 
 **Found via a full-history audit** (user noticed May 2026's net total didn't
 match their original manual spreadsheet by exactly $2,875.00). A programmatic,
@@ -38,14 +38,12 @@ the user's manual spreadsheet), and the full-history total moves by
 within a cent, the difference being rounding order — 28 trades rounded
 individually vs. 110 trades summed then rounded once).
 
-**Status:** frontend is unaffected (this is a pure backend/`AppScript_FULL.gs`
-change) — no `git push` deploys it. **Requires a manual Apps Script
-redeploy** (paste `AppScript_FULL.gs` into script.google.com, new deployment
-version) before the corrected tax/net values appear live. Since
-`getOperations` recomputes trades from the raw transaction log on every
-load (nothing is stored), the fix takes effect **retroactively across all
-history** the moment it's redeployed — every past month's displayed total
-will shift upward, with no data migration needed.
+**Status:** backend-only change (`AppScript_FULL.gs`) — manually redeployed
+and confirmed live by the trader. Since `getOperations` recomputes trades
+from the raw transaction log on every load (nothing is stored), the fix
+took effect **retroactively across all history** the moment it was
+redeployed — every past month's displayed total shifted upward, with no
+data migration needed.
 
 ## Data integrity — position target/stop/notes silently dropped (FIXED, pending backend redeploy)
 

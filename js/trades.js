@@ -5,7 +5,7 @@
  */
 
 const Trades = (() => {
-  const { f$, fILS, fpct, fnum, TAX, parseDD,
+  const { f$, fILS, fpct, fnum, TAX, parseDD, isoToDD, ddToISO,
           normalizeTrade, usdToIls, rateForMonth, monthLabel, LS } = Utils;
 
   // ── Filters ──────────────────────────────────────────────
@@ -132,8 +132,8 @@ const Trades = (() => {
     if (!t) return;
     document.getElementById('modal-title').textContent = 'עריכת עסקה';
     document.getElementById('f-symbol').value    = t.symbol;
-    document.getElementById('f-buy-date').value  = t.buy_date;
-    document.getElementById('f-sell-date').value = t.sell_date;
+    document.getElementById('f-buy-date').value  = ddToISO(t.buy_date);
+    document.getElementById('f-sell-date').value = ddToISO(t.sell_date);
     document.getElementById('f-qty').value        = t.qty;
     document.getElementById('f-buy-price').value  = t.buy_price;
     document.getElementById('f-sell-price').value = t.sell_price;
@@ -165,8 +165,8 @@ const Trades = (() => {
 
   async function submit() {
     const sym = (document.getElementById('f-symbol').value || '').trim().toUpperCase();
-    const bd  = document.getElementById('f-buy-date').value.trim();
-    const sd  = document.getElementById('f-sell-date').value.trim();
+    const bd  = isoToDD(document.getElementById('f-buy-date').value.trim());
+    const sd  = isoToDD(document.getElementById('f-sell-date').value.trim());
     const qty = +document.getElementById('f-qty').value;
     const bp  = +document.getElementById('f-buy-price').value;
     const sp  = +document.getElementById('f-sell-price').value;
