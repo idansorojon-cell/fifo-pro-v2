@@ -455,21 +455,26 @@ const Positions = (() => {
     API.setStatus('שומר פוזיציה...', 'info');
     API.showSpinner(true);
 
-    if (editingId !== null) {
-      pos.id = editingId;
-      const res = await API.updatePosition(pos);
-      APP.positions = APP.positions.map(p => p.id === editingId ? { ...pos } : p);
-      LS.set('fifo_positions_backup', APP.positions);
-      API.setStatus(res.ok ? '✓ פוזיציה עודכנה' : '✓ נשמר מקומית', 'ok');
-    } else {
-      const res = await API.addPosition(pos);
-      const saved = res.ok && res.position ? res.position : { ...pos, id: Date.now() };
-      APP.positions.push(saved);
-      LS.set('fifo_positions_backup', APP.positions);
-      API.setStatus(res.ok ? '✓ פוזיציה נוספה' : '✓ נשמר מקומית', 'ok');
+    // Saved by symbol, not id: positions from getOperations (the primary data
+    // path) get a synthetic id recomputed on every load that never matches a
+    // real row in the Positions sheet — saving by id there silently dropped
+    // target/stop-loss/notes. See AppScript_FULL.gs handleUpsertPositionMeta_.
+    const res = await API.upsertPositionMeta(pos);
+    API.showSpinner(false);
+
+    if (!res.ok) {
+      API.setStatus('❌ ' + (res.error || 'שמירת הפוזיציה נכשלה'), 'error');
+      render();
+      return;
     }
 
-    API.showSpinner(false);
+    if (editingId !== null) {
+      APP.positions = APP.positions.map(p => p.id === editingId ? { ...p, ...pos } : p);
+    } else {
+      APP.positions.push({ ...pos, id: Date.now() });
+    }
+    LS.set('fifo_positions_backup', APP.positions);
+    API.setStatus(editingId !== null ? '✓ פוזיציה עודכנה' : '✓ פוזיציה נוספה', 'ok');
     render();
 
     if (!APP.liveData[sym]) {

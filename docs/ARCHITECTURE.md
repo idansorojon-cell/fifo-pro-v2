@@ -144,30 +144,44 @@ existing on `window` already).
 `js/api.js`'s `loadAll()` tries `getOperations` **first**, falling back to
 legacy `getTrades`+`getPositions` only if it fails:
 
-- **`getOperations` (primary path, when available):** reads a `"פעולות"`
-  (raw BUY/SELL log) sheet — possibly in a *different spreadsheet* than
-  the Apps Script project's bound one, see PROJECT_OVERVIEW.md — "Two
-  spreadsheets." Both `trades` and `positions` are **derived on every
-  call** via FIFO lot-matching (`applyFIFO_` in `AppScript_FULL.gs`).
-  Derived positions have `target`/`stop_loss`/`notes` **hardcoded to
-  `''`** — these fields do not come from this path at all.
+- **`getOperations` (primary path — confirmed active in production):**
+  reads a `"פעולות"` (raw BUY/SELL log) sheet — possibly in a *different
+  spreadsheet* than the Apps Script project's bound one, see
+  PROJECT_OVERVIEW.md — "Two spreadsheets." Both `trades` and `positions`
+  are **derived on every call** via FIFO lot-matching (`applyFIFO_` in
+  `AppScript_FULL.gs`). `applyFIFO_` itself still returns
+  `target`/`stop_loss`/`notes` as `''` — it has no way to know about them,
+  they aren't part of the raw transaction log.
 - **`getTrades`+`getPositions` (fallback path):** reads the legacy
-  `Trades`/`Positions` sheets directly — rows are the actual source of
+  `Trades`/`Positions` sheets directly — rows are the real source of
   truth here, including whatever `target`/`stop_loss`/`notes` were saved.
 
-**Consequence:** `Positions.submit()` (the position edit modal) always
-calls `addPosition`/`updatePosition`, which write to the legacy
-`Positions` sheet — regardless of which path `loadAll()` used to read
-data. **If `getOperations` is the active path, those writes are never
-read back** — target/stop/notes will appear to save (the API call
-succeeds) but won't show up in the UI on next load, because positions are
-re-derived fresh from `"פעולות"` with those fields blank. This is
-consistent with what was observed live this session: position cards
-never rendered a target/stop pill despite the edit form supporting it.
-**This needs to be confirmed with the project owner** — see
-TECHNICAL_DEBT.md. Do not "fix" this without asking; it may be intentional
-(e.g. target/stop tracking might be meant to only work with the legacy
-sheet-based flow) or it may be a real, unnoticed bug.
+**Fix (this session): `mergePositionMeta_()`.** Immediately after
+`applyFIFO_()` returns, `handleGetOperations_` calls
+`mergePositionMeta_(result.positions)`, which reads the legacy
+`Positions` sheet and overlays `target`/`stop_loss`/`notes` onto each
+derived position **matched by symbol**. The legacy sheet is now treated
+purely as an annotation store for these three fields, while `qty`/
+`avg_price`/`added_date` on open positions always come from the FIFO
+derivation (the actual source of truth for "what do I currently hold").
+
+**Write path: `handleUpsertPositionMeta_()` (new endpoint,
+`upsertPositionMeta`).** The position edit modal (`Positions.submit()` in
+`js/positions.js`) now calls this instead of `addPosition`/
+`updatePosition`. It finds-or-creates the legacy sheet row **by symbol**,
+not by the numeric `id` `applyFIFO_` hands out synthetically on every call
+(which never matched a real row id, and could in principle have collided
+with an unrelated row's id — confirmed via live testing that the one
+existing legacy row, a stale `OKLL` position, wasn't even one of the two
+real open positions at the time). `addPosition`/`updatePosition`/
+`deletePosition`/`getPositions` are unchanged — the legacy fallback path's
+behavior is identical to before.
+
+**Deployment note:** this fix lives in `AppScript_FULL.gs` and, like any
+backend change, only takes effect after a manual Apps Script redeploy —
+see PROJECT_OVERVIEW.md "Deployment." Until redeployed, the frontend will
+correctly show `❌ Unknown action: upsertPositionMeta` rather than the
+previous silent-success behavior.
 
 ## State flow
 

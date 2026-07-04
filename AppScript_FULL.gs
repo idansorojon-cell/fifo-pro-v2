@@ -1427,9 +1427,10 @@ function doPost(e) {
       case 'delete':         return handleDeleteTrade_(data.id);
       case 'seedAll':        return handleSeedAll_(data.trades);
       case 'setGoal':        return handleSetGoal_(data.goal);
-      case 'addPosition':    return handleAddPosition_(data.position);
-      case 'updatePosition': return handleUpdatePosition_(data.position);
-      case 'deletePosition': return handleDeletePosition_(data.id);
+      case 'addPosition':        return handleAddPosition_(data.position);
+      case 'updatePosition':     return handleUpdatePosition_(data.position);
+      case 'deletePosition':     return handleDeletePosition_(data.id);
+      case 'upsertPositionMeta': return handleUpsertPositionMeta_(data.position);
       case 'aiChat':         return handleAiChat_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
@@ -1864,6 +1865,41 @@ function handleDeletePosition_(id) {
   const found = findRowById_(sh, id);
   if (!found) return jsonOut_({ ok: false, error: 'Position not found: ' + id });
   sh.deleteRow(found.rowIndex);
+  return jsonOut_({ ok: true });
+}
+
+// handleUpsertPositionMeta_: saves target/stop_loss/notes keyed by SYMBOL, not
+// row id. Needed because positions returned by getOperations (the FIFO-derived,
+// primary data path — see applyFIFO_) get a synthetic id recomputed on every
+// load, which never matches a real row id in the legacy Positions sheet. Saving
+// by id against that mismatch either silently no-ops or, worse, overwrites an
+// unrelated row that happens to share the same small integer id. This endpoint
+// is additive — addPosition/updatePosition/deletePosition are untouched.
+function handleUpsertPositionMeta_(pos) {
+  const symbol = String((pos && pos.symbol) || '').trim().toUpperCase();
+  if (!symbol) return jsonOut_({ ok: false, error: 'symbol required' });
+
+  const sh = getSheet_('Positions');
+  ensureHeaders_(sh, POSITION_HEADERS);
+  const data    = sh.getDataRange().getValues();
+  const headers = data[0];
+  const symCol  = headers.indexOf('symbol');
+
+  const fields = ['qty', 'avg_price', 'target', 'stop_loss', 'notes', 'added_date'];
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][symCol]).toUpperCase() === symbol) {
+      const rowArr = headers.map((h, c) =>
+        (fields.indexOf(h) !== -1 && pos[h] !== undefined) ? pos[h] : data[i][c]);
+      sh.getRange(i + 1, 1, 1, headers.length).setValues([rowArr]);
+      return jsonOut_({ ok: true });
+    }
+  }
+
+  const { rows } = readRows_(sh);
+  const newRow = { id: nextId_(rows), symbol: symbol };
+  fields.forEach(f => { newRow[f] = pos[f] !== undefined ? pos[f] : ''; });
+  appendRow_(sh, POSITION_HEADERS, newRow);
   return jsonOut_({ ok: true });
 }
 
@@ -2560,10 +2596,33 @@ function handleGetOperations_() {
     }
 
     var result = applyFIFO_(ops);
+    mergePositionMeta_(result.positions);
     return jsonOut_({ ok: true, trades: result.trades, positions: result.positions });
   } catch (err) {
     return jsonOut_({ ok: false, error: err.message });
   }
+}
+
+// mergePositionMeta_: FIFO-derived positions (applyFIFO_) always come back with
+// target/stop_loss/notes blank — those fields aren't part of the raw "פעולות"
+// transactions log, they're annotations the trader adds separately via the
+// position edit modal. This overlays them from the legacy Positions sheet,
+// matched by symbol (see handleUpsertPositionMeta_ for the write side).
+function mergePositionMeta_(positions) {
+  const sh = getSheet_('Positions');
+  ensureHeaders_(sh, POSITION_HEADERS);
+  const { rows } = readRows_(sh);
+  const bySymbol = {};
+  rows.forEach(r => { bySymbol[String(r.symbol).toUpperCase()] = r; });
+  positions.forEach(p => {
+    const meta = bySymbol[String(p.symbol).toUpperCase()];
+    if (meta) {
+      p.target    = meta.target    || '';
+      p.stop_loss = meta.stop_loss || '';
+      p.notes     = meta.notes     || '';
+    }
+  });
+  return positions;
 }
 
 function applyFIFO_(ops) {

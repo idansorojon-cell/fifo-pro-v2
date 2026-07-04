@@ -192,6 +192,10 @@ const API = (() => {
   const addPosition    = pos => post({ action:'addPosition',    position:pos });
   const updatePosition = pos => post({ action:'updatePosition', position:pos });
   const deletePosition = id  => post({ action:'deletePosition', id });
+  // Symbol-keyed upsert for target/stop-loss/notes — required when positions
+  // come from getOperations (FIFO-derived, synthetic per-load id, never a
+  // real row id in the Positions sheet). See AppScript_FULL.gs handleUpsertPositionMeta_.
+  const upsertPositionMeta = pos => post({ action:'upsertPositionMeta', position:pos });
 
   // ── Watchlist ──────────────────────────────────────────
 
@@ -389,7 +393,7 @@ const API = (() => {
     isConfigured, setStatus, showSpinner,
     loadAll,
     addTrade, updateTrade, deleteTrade, seedAll, setGoal,
-    addPosition, updatePosition, deletePosition,
+    addPosition, updatePosition, deletePosition, upsertPositionMeta,
     addWatchlistItem, removeWatchlistItem, getWatchlist,
     getIndicators, getNews,
     fetchPrices, fetchPrice,

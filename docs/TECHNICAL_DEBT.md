@@ -1,30 +1,55 @@
 # FIFO PRO — Technical Debt & Known Limitations
 
-## Data integrity — position target/stop/notes may be silently dropped
+## Data integrity — position target/stop/notes silently dropped (FIXED, pending backend redeploy)
 
-**Likely bug, unconfirmed, high priority to verify.** The primary data
-path (`getOperations`, tried first by `js/api.js`'s `loadAll()`) derives
-open positions fresh on every load via FIFO matching over a raw
-transactions log (`"פעולות"` sheet), and that derivation hardcodes
-`target`, `stop_loss`, and `notes` to `''` (see `applyFIFO_` in
-`AppScript_FULL.gs`). Meanwhile, the position edit modal
-(`Positions.submit()` in `js/positions.js`) always writes those fields to
-a *separate*, legacy `Positions` sheet via `addPosition`/`updatePosition`.
+**Confirmed live via direct API calls against production** (`curl`'ing
+`getOperations` and `getPositions` on the live Apps Script URL): the
+primary data path (`getOperations`, tried first by `js/api.js`'s
+`loadAll()`) derives open positions fresh on every load via FIFO matching
+over a raw transactions log (`"פעולות"` sheet), hardcoding `target`,
+`stop_loss`, and `notes` to `''` (`applyFIFO_` in `AppScript_FULL.gs`).
+The real, currently-open positions (QBTX, ONDL) confirmed this — both
+came back with those three fields blank. Meanwhile the position edit
+modal (`Positions.submit()` in `js/positions.js`) wrote those fields to a
+*separate*, legacy `Positions` sheet keyed by a numeric `id` — and that
+sheet's one existing row (OKLL) wasn't even one of the two real open
+positions, and its `id` was a small integer with real collision potential
+against the synthetic per-load ids `applyFIFO_` hands out (1, 2, ...).
+**The actual risk was worse than "values don't round-trip"**: an edit
+could have silently overwritten an unrelated row that happened to share
+the same small integer id, and the frontend's status message
+(`res.ok ? '✓ ...' : '✓ נשמר מקומית'`) reported success on the UI
+regardless of whether the backend call actually succeeded — so this was
+invisible by design, not just by omission.
 
-**If `getOperations` is the active path in production** (which it appears
-to be — no target/stop pill was ever observed on position cards during
-this session's live testing, consistent with those fields always coming
-back blank), then editing a position's target price, stop-loss, or notes
-will appear to succeed (the API call returns `ok: true`) but **the values
-will not reappear** on the next page load or refresh, because positions
-are always re-derived from the FIFO log with those fields empty.
+**Fix implemented (this session):**
+- `mergePositionMeta_()` (new, `AppScript_FULL.gs`) — overlays
+  `target`/`stop_loss`/`notes` from the legacy `Positions` sheet onto
+  `getOperations`-derived positions, matched by **symbol**, called from
+  `handleGetOperations_` right after `applyFIFO_`.
+- `handleUpsertPositionMeta_()` (new endpoint, `upsertPositionMeta`) —
+  finds-or-creates a row **by symbol**, not id, eliminating the id-collision
+  risk entirely. Existing endpoints (`addPosition`/`updatePosition`/
+  `deletePosition`/`getPositions`) are **untouched** — nothing about the
+  legacy fallback path changed.
+- `js/positions.js`'s `submit()` now calls `API.upsertPositionMeta()` and
+  **surfaces real failures** (`❌ <error>`) instead of always reporting
+  success — verified live: with the (still unpatched) production backend,
+  the app now correctly shows `❌ Unknown action: upsertPositionMeta`
+  instead of a false green checkmark.
 
-This was **not** introduced or touched this session — it appears to be a
-pre-existing architectural gap between two data paths that were probably
-built at different times. Do not attempt to fix this without explicit
-confirmation from the project owner about which path is actually meant to
-be authoritative — see `docs/ARCHITECTURE.md`'s "Data model" section for
-the full mechanics.
+**Status:** frontend fix ships automatically on `git push`. **Backend fix
+requires a manual Apps Script redeploy** (paste `AppScript_FULL.gs` into
+script.google.com, new deployment version) before target/stop/notes
+actually save in production — until then, the app will correctly show the
+`Unknown action` error above rather than silently losing data, which is a
+strict improvement over the previous silent-failure state even
+pre-redeploy.
+
+**Deliberately not touched:** deleting a position that came from
+`getOperations` — that's a separate, pre-existing UX question (the
+position would likely just reappear on the next load since it's derived
+from the trade log), out of scope for this fix.
 
 ## Security
 

@@ -58,19 +58,30 @@ whichever screen was just opened. Prices poll every 15s via
 `Positions.refreshPrices()` → Apps Script `getPrices` → Finnhub → updates
 `APP.liveData` → re-renders positions grid + Mission Control.
 
-**⚠️ Two possible Google Sheets, not one.** `getOperations` (tried first)
-reads a `"פעולות"` transactions log — possibly in a *different*
-spreadsheet identified by the `OPERATIONS_SPREADSHEET_ID` Script Property
-(falls back to a hardcoded ID if unset) — and derives both trades and
-positions from it via FIFO matching. Derived positions always have
-`target`/`stop_loss`/`notes` hardcoded blank. The legacy `getTrades`/
-`getPositions` fallback path reads a separate `Positions` sheet directly,
-where those fields are real. **The position edit modal always writes to
-the legacy sheet regardless of which path is active** — if `getOperations`
-is the live path (it appears to be, based on this session's testing),
-target/stop/notes edits will not round-trip. See §7/§10 and
-`docs/ARCHITECTURE.md`'s "Data model" section — do not assume this is
-fixed or that it's safe to ignore.
+**⚠️ Two possible Google Sheets, not one.** `getOperations` (tried first,
+confirmed active in production) reads a `"פעולות"` transactions log —
+possibly in a *different* spreadsheet identified by the
+`OPERATIONS_SPREADSHEET_ID` Script Property (falls back to a hardcoded ID
+if unset) — and derives both trades and positions from it via FIFO
+matching. The legacy `getTrades`/`getPositions` fallback path reads a
+separate `Positions` sheet directly.
+
+**Position target/stop/notes data-loss — fixed this session, pending
+backend redeploy.** Confirmed live via direct API calls: derived
+positions had `target`/`stop_loss`/`notes` hardcoded blank, while the
+edit modal wrote those fields to the legacy sheet by numeric id — an id
+that never matched a real row (real collision risk with unrelated rows),
+and the frontend reported success even when the save silently failed.
+Fixed via `mergePositionMeta_()` (read-side merge by symbol) and
+`handleUpsertPositionMeta_()` (new `upsertPositionMeta` endpoint,
+find-or-create by symbol) in `AppScript_FULL.gs`, plus `positions.js` now
+calling that endpoint and surfacing real errors. **This fix is in git but
+NOT live** — it requires the same manual Apps Script redeploy as any
+other backend change (see "Deployment" above). Until redeployed, the
+frontend will correctly show `❌ Unknown action: upsertPositionMeta`
+instead of the previous false-success message. See
+`docs/TECHNICAL_DEBT.md` and `docs/ARCHITECTURE.md`'s "Data model" for
+full mechanics.
 
 **Script Properties (Apps Script → Project Settings), not in git:**
 `LOGIN_PASSWORD`, `SESSION_TTL_HOURS` (dormant while auth disabled),
@@ -228,10 +239,9 @@ Full detail + session history: `docs/CURRENT_STATUS.md`.
 ## 6. Outstanding Work
 
 **P0 (security/correctness):** restore authentication (see §7); confirm
-live Apps Script deployment matches git; **confirm whether position
-target/stop-loss/notes actually round-trip** (likely broken under the
-primary `getOperations` data path — see §1/§4/§7, ask the project owner
-before changing anything); identify source of recurring stale GitHub
+live Apps Script deployment matches git; **redeploy `AppScript_FULL.gs`
+to activate the position target/stop/notes fix** (code-complete, see §1 —
+not live until redeployed); identify source of recurring stale GitHub
 web-UI uploads (see §9/§10).
 
 **P1 (reliability):** switch service worker to network-first for HTML/JS;
@@ -251,11 +261,12 @@ Full detail: `docs/ROADMAP.md`.
 
 ## 7. Technical Debt
 
-- **Position `target`/`stop_loss`/`notes` may be silently dropped**
-  (likely bug, unconfirmed). See §1's "Two possible Google Sheets" note.
-  The edit modal's writes and the primary read path (`getOperations`)
-  target different sheets. Not introduced this session — appears to
-  predate it. Verify with the project owner before touching.
+- **Position `target`/`stop_loss`/`notes` silently dropped — fixed in
+  code, pending backend redeploy.** See §1. Predated this session; fixed
+  via symbol-keyed merge/upsert (`mergePositionMeta_`/
+  `handleUpsertPositionMeta_` in `AppScript_FULL.gs` +
+  `Positions.submit()` in `js/positions.js`). Not live until
+  `AppScript_FULL.gs` is manually redeployed.
 - **Auth fully bypassed** — real, live exposure if used beyond a trusted
   device. To restore: set `AUTH_DISABLED = false` in `AppScript_FULL.gs`,
   `js/auth.js`, `js/api.js`; ensure `LOGIN_PASSWORD` Script Property is
@@ -381,10 +392,10 @@ has passed:_
   indefinitely for returning users.
 - **Verification standard on this project is "curl the live URL and grep
   for the specific change,"** not "the local diff looks correct."
-- **There may be two Google Sheets, not one** — see §1. Position
-  target/stop/notes edits likely don't round-trip under the primary data
-  path. Don't assume this is fixed; don't "fix" it without asking which
-  sheet is meant to be authoritative.
+- **There are two Google Sheets, not one** — see §1. Position
+  target/stop/notes now merge/upsert by symbol across both
+  (`mergePositionMeta_`/`handleUpsertPositionMeta_`) — **fixed in code,
+  not live until `AppScript_FULL.gs` is manually redeployed.**
 - **Preview-tool naming collision:** always launch the local preview with
   the exact name `"fifo-pro"` — `"trading-dashboard"` and
   `"dana-care-app"` are different projects in sibling folders and will
