@@ -171,9 +171,13 @@ const Positions = (() => {
 
   // ── Live Prices ─────────────────────────────────────────
 
-  async function refreshPrices() {
+  // manual=true only for the explicit "🔄 רענן" button click — the
+  // automatic 15s poll (startPolling() in app.js) always calls this with
+  // no argument, so routine background refreshes never toast (see
+  // API.reportPriceSuccess/reportPriceError and docs/DESIGN_SYSTEM.md).
+  async function refreshPrices(manual = false) {
     if (!APP.positions.length) return;
-    API.setStatus('מרענן מחירים...', 'info');
+    if (manual) API.setStatus('מרענן מחירים...', 'info');
     const syms   = [...new Set(APP.positions.map(p => p.symbol))];
     const prices = await API.fetchPrices(syms);
 
@@ -193,7 +197,7 @@ const Positions = (() => {
 
     if (!Object.keys(prices).length) {
       console.error('[prices] fetchPrices returned empty — auth or network error');
-      API.setStatus('❌ מחירים לא נטענו — בדוק חיבור ו-API key', 'error');
+      API.reportPriceError('❌ מחירים לא נטענו — בדוק חיבור ו-API key', manual);
       render();
       return;
     }
@@ -206,7 +210,7 @@ const Positions = (() => {
     if (typeof renderMissionControl === 'function') renderMissionControl();
 
     if (loadedCount > 0) {
-      API.setStatus('✓ ' + loadedCount + '/' + syms.length + ' מחירים עודכנו', 'ok');
+      API.reportPriceSuccess(loadedCount, syms.length, manual);
     } else {
       // Surface the first real error rather than a generic message
       const firstErr = errors[0] || '';
@@ -224,7 +228,7 @@ const Positions = (() => {
       else
         errMsg = '⚠️ לא ניתן לטעון מחירים';
       console.error('[prices] errors:', errors.join(' | '));
-      API.setStatus(errMsg, 'error');
+      API.reportPriceError(errMsg, manual);
     }
   }
 

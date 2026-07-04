@@ -55,12 +55,15 @@ const Watchlist = (() => {
 
   // ── Refresh ────────────────────────────────────────────
 
-  async function refresh() {
-    API.setStatus('מרענן Watchlist...', 'info');
+  // manual=true only for the explicit "🔄 רענן" button click — refreshing
+  // by opening the tab (switchTab('watchlist') in app.js) is navigation,
+  // not a request for a status toast (see docs/DESIGN_SYSTEM.md).
+  async function refresh(manual = false) {
+    if (manual) API.setStatus('מרענן Watchlist...', 'info');
     await _reloadFromSheets(true);
     if (!APP.watchlist.length) {
       render();
-      API.setStatus('Watchlist ריק', 'warn');
+      if (manual) API.setStatus('Watchlist ריק', 'warn');
       return;
     }
     const syms   = APP.watchlist.map(w => w.symbol);
@@ -69,7 +72,7 @@ const Watchlist = (() => {
       if (p?.ok) APP.liveData[sym] = { ...(APP.liveData[sym]||{}), ...p, updated: new Date().toLocaleTimeString('he-IL') };
     });
     render();
-    API.setStatus('✓ Watchlist עודכן', 'ok');
+    if (manual) API.setStatus('✓ Watchlist עודכן', 'ok');
   }
 
   async function _reloadFromSheets(silent=false) {

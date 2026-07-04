@@ -148,6 +148,7 @@ const API = (() => {
       if (ops.code === 401 || gr.code === 401) return null;
 
       if (ops.ok) {
+        setStatus(''); // clear "טוען נתונים..." — success is reflected by #last-updated, not a toast
         return {
           trades:    ops.trades    || [],
           positions: ops.positions || [],
@@ -164,6 +165,7 @@ const API = (() => {
       ]);
       if (tr.code === 401) return null;
       if (!tr.ok) throw new Error(tr.error || 'שגיאה בטעינת עסקאות');
+      setStatus(''); // clear "טוען נתונים..." — same as the primary path above
       return {
         trades:    tr.trades    || [],
         positions: pr.ok ? pr.positions : null,
@@ -272,20 +274,50 @@ const API = (() => {
   // stable no-op API so callers (positions.js) don't need to change.
 
   function connectWS(/* symbols, onPrice */) {
-    updateWsDot(false); // always shows "Polling" — no live WS connection
+    updateWsDot('idle'); // no real WS connection — idle until the first poll lands
   }
 
   function disconnectWS() {
-    updateWsDot(false);
+    updateWsDot('idle');
   }
 
-  function updateWsDot(connected) {
+  // ── Ambient live-status indicator (Live-status UX phase) ────
+  // Reflects the 15s price-poll result via the header's #ws-dot/#ws-label/
+  // #last-updated — never a banner, never shifts layout. state: 'idle'
+  // (no positions yet / never polled), 'ok' (fresh data), 'error' (last
+  // poll failed). See css/style.css .ws-dot--ok/--error and
+  // docs/DESIGN_SYSTEM.md for the full rationale.
+  function updateWsDot(state, detail) {
     const dot   = document.getElementById('ws-dot');
     const label = document.getElementById('ws-label');
-    if (!dot || !label) return;
-    dot.style.background  = connected ? '#4ecca8' : '#555';
-    dot.style.animation   = connected ? 'pulse 1.5s infinite' : 'none';
-    label.textContent     = connected ? 'Live' : 'Polling';
+    if (dot) {
+      dot.classList.remove('ws-dot--ok', 'ws-dot--error');
+      if (state === 'ok' || state === 'error') dot.classList.add('ws-dot--' + state);
+      if (detail) dot.setAttribute('data-tip', detail); else dot.removeAttribute('data-tip');
+    }
+    if (label) label.textContent = state === 'ok' ? 'Live' : state === 'error' ? 'Offline' : 'Polling';
+  }
+
+  // Tracks whether the *current* streak of poll failures has already been
+  // surfaced as a toast — so a recurring background error (e.g. a missing
+  // API key firing every 15s) interrupts the user once, then degrades to
+  // the quiet #ws-dot--error state instead of repeating. Mirrors the
+  // existing once-per-day alert-dedup pattern in positions.js.
+  let _priceErrorStreakShown = false;
+
+  function reportPriceSuccess(loadedCount, total, manual) {
+    _priceErrorStreakShown = false;
+    const now = new Date().toLocaleTimeString('he-IL');
+    updateWsDot('ok', 'עודכן לאחרונה: ' + now);
+    const lu = document.getElementById('last-updated');
+    if (lu) lu.textContent = 'עודכן: ' + now;
+    if (manual) setStatus('✓ ' + loadedCount + '/' + total + ' מחירים עודכנו', 'ok');
+  }
+
+  function reportPriceError(msg, manual) {
+    updateWsDot('error', msg);
+    if (manual || !_priceErrorStreakShown) setStatus(msg, 'error');
+    _priceErrorStreakShown = true;
   }
 
   // ── Auth ──────────────────────────────────────────────────
@@ -398,6 +430,7 @@ const API = (() => {
     getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS, diagnose,
+    reportPriceSuccess, reportPriceError,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
     _url: API_URL
   };

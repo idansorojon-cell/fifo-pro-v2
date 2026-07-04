@@ -201,7 +201,10 @@ async function load() {
 
   invalidateStats();
   updateSeedBanner();
-  API.setStatus('✓ עודכן: ' + new Date().toLocaleTimeString('he-IL'), 'ok');
+  // Ambient timestamp only — no toast. This runs on every boot (and after
+  // the manual "seed historical trades" flow, which already shows its own
+  // confirmation toasts), so a duplicate "✓ עודכן" banner here was just
+  // repeating what #last-updated already says with zero layout cost.
   const el = document.getElementById('last-updated');
   if (el) el.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
   return true;

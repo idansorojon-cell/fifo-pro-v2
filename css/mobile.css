@@ -39,6 +39,11 @@
   .header { padding: 12px 0 10px; }
   .header-logo h1 { font-size: 15px; }
 
+  /* Toast — mobile hides .main-nav, so there's less natural clearance
+     between the header and content than on desktop; nudge it down a
+     little so it floats clear of the hub title instead of overlapping it. */
+  .sync-bar { top: 76px; }
+
   /* Hide add button — use FAB */
   #add-btn { display: none; }
   .fab { display: block; }

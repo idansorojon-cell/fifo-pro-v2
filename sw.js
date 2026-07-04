@@ -16,8 +16,12 @@
 // all changed.
 // Bumped v5 -> v6: Mission Control hierarchy (Design Phase 3) —
 // index.html (new icon symbol), css/style.css, css/mobile.css, js/app.js.
-const CACHE_NAME   = 'fifopro-v6';
-const STATIC_CACHE = 'fifopro-static-v6';
+// Bumped v6 -> v7: live-status UX (ambient header dot/timestamp vs
+// fixed-position toast, no more layout shift on every 15s price poll) —
+// css/style.css, index.html, js/api.js, js/app.js, js/positions.js,
+// js/watchlist.js.
+const CACHE_NAME   = 'fifopro-v7';
+const STATIC_CACHE = 'fifopro-static-v7';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

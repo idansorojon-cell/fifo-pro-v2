@@ -158,17 +158,29 @@ body {
   gap: 8px;
 }
 
-/* ── Sync Bar ───────────────────────────────────────────── */
+/* ── Sync Bar / toast (Live-status UX phase) ─────────────────
+   Fixed overlay, NOT in document flow — this used to be a normal-flow
+   block that appeared/disappeared on every 15s price poll, reflowing
+   the entire page every cycle. Now reserved for user-triggered actions
+   and errors only (see API.reportPriceSuccess/reportPriceError and
+   docs/DESIGN_SYSTEM.md) — routine background polling updates the
+   ambient #ws-dot/#last-updated indicators instead, which never move. */
 .sync-bar {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: var(--r-md);
   font-size: 12px;
   font-weight: 500;
-  margin: 8px 0;
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  max-width: calc(100vw - 32px);
   animation: slideDown 0.2s ease;
 }
 .sync-bar--info   { background: var(--blue-dim);  color: var(--blue);  border-color: var(--blue); }
@@ -2404,21 +2416,6 @@ select.s-input { cursor: pointer; }
 }
 .logout-btn:hover { border-color: var(--red); color: var(--red); }
 
-/* ── WS Indicator relocated ─────────────────────────────── */
-.ws-indicator {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--text-3);
-}
-#ws-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: #555;
-  display: inline-block;
-}
-
 /* ── Sym notes grid ─────────────────────────────────────── */
 .sym-notes-grid {
   display: grid;
@@ -2464,7 +2461,13 @@ select.s-input { cursor: pointer; }
 }
 [data-tip]:hover::after { opacity: 1; }
 
-/* ── WS indicator ───────────────────────────────────────── */
+/* ── WS indicator — ambient live-status dot (Live-status UX phase) ──
+   Reflects the 15s price-poll health without ever showing a banner:
+   idle (never polled / no positions) -> ok (fresh data, gentle pulse,
+   same mc-pulse keyframe as Mission Control's hero for one consistent
+   "this is live" language) -> error (poll failed, static red — a pulse
+   here would read as alarming rather than reassuring). See
+   API.reportPriceSuccess/reportPriceError in js/api.js. */
 .ws-indicator {
   display: flex;
   align-items: center;
@@ -2479,6 +2482,11 @@ select.s-input { cursor: pointer; }
   display: inline-block;
   transition: background var(--t-med);
 }
+#ws-dot.ws-dot--ok {
+  background: var(--green);
+  animation: mc-pulse 2s ease-out infinite;
+}
+#ws-dot.ws-dot--error { background: var(--red); }
 
 /* ── Note area ──────────────────────────────────────────── */
 .note-area { resize: vertical; min-height: 90px; }

@@ -39,6 +39,15 @@ trader's numbers are the product.
   (Phase 2 itself — the broader card-title/in-content icon pass — has not
   been started; Phase 3 was done first at explicit request.)
 
+- **Live-status UX phase (done between Phase 3 and Phase 2, at explicit
+  request): split ambient status from toast notifications.** The
+  automatic 15s price poll was showing a "✓ N/N מחירים עודכנו" banner
+  every cycle via `#sync-bar`, which was a normal-flow element (not
+  `position:fixed`) — every appearance/disappearance reflowed the entire
+  page. Fixed by splitting one overloaded mechanism into two: see "Live
+  status: ambient vs toast" below. Frontend/UI only, zero calculation
+  changes.
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -76,6 +85,79 @@ above it:
 Mobile: hero drops to `36px`, strip padding tightens, and the status row
 (`.mc-grid-2`) stacks to a single column (existing mobile.css rule,
 unchanged) — verified via browser preview at 375×812.
+
+## Live status: ambient vs toast
+
+**Problem:** `#sync-bar` was a single, normal-flow element used for nine
+different situations — routine 15s price-poll success/start, poll
+failure, full-boot-load status, CRUD confirmations, and genuine errors.
+Because it toggled `display:none`/`flex` in normal document flow (no
+`position:fixed`), *every* appearance reflowed the whole page — most
+visibly the routine poll, which fired every 15 seconds.
+
+**Fix — split into two channels by purpose, not by look:**
+
+1. **Ambient status (header, fixed position, permanent, never a
+   banner).** Two elements already existed but were half-wired —
+   `#last-updated` (only updated on full boot load) and `#ws-dot`/
+   `#ws-label` (a static "Polling" label left over from an abandoned
+   real-WebSocket plan). Both are now updated on every price-poll result
+   via two new `js/api.js` functions:
+   - `API.reportPriceSuccess(loadedCount, total, manual)` — updates
+     `#last-updated`'s timestamp and sets `#ws-dot` to `.ws-dot--ok`
+     (green, gentle pulse via the same `mc-pulse` keyframe Mission
+     Control's hero uses — one consistent "this is live" visual
+     language). No banner unless `manual` is true.
+   - `API.reportPriceError(msg, manual)` — sets `#ws-dot` to
+     `.ws-dot--error` (red, static — a pulsing red would read as
+     alarming rather than reassuring) with the error in a `data-tip`
+     tooltip (reusing the existing `[data-tip]::after` tooltip
+     convention, not a new mechanism).
+2. **Toast (`#sync-bar`, now `position:fixed`, floats above content,
+   zero layout impact) — reserved for user-triggered actions and
+   errors only:** manual refresh button clicks, save/delete
+   confirmations, login/session/config errors. `setStatus()` itself is
+   unchanged; what changed is *who's allowed to call it for routine
+   events* — routine automatic polling no longer does.
+
+**Manual vs automatic is a real parameter, not a guess.** Both
+`Positions.refreshPrices(manual = false)` and `Watchlist.refresh(manual
+= false)` take an explicit flag. The "🔄 רענן" buttons in `index.html`
+call them with `true`; every automatic call site (the 15s
+`setInterval` in `startPolling()`, tab-open, initial boot) calls them
+with no argument, defaulting to `false`. This is the actual mechanism
+that stops the routine case from ever toasting — not a heuristic.
+
+**Recurring errors degrade instead of repeating.** A module-level flag
+in `js/api.js` (`_priceErrorStreakShown`) mirrors the existing
+once-per-day alert-dedup pattern already used for price alerts in
+`positions.js`: the *first* failure in a streak toasts (if automatic) or
+always toasts (if manual); every subsequent automatic failure in the
+same streak only updates the ambient `#ws-dot` tooltip, silently, until
+a poll succeeds again and the flag resets. Verified directly: three
+simulated consecutive automatic failures produced exactly one toast
+(frozen on the first error's text) while the dot's tooltip kept updating
+to the latest error.
+
+**A regression caught during verification, not shipped:** removing the
+old `loadAll()` success banner (it duplicated `#last-updated`) initially
+left the "טוען נתונים..." (loading) message stuck on screen forever,
+because `info`-type toasts don't auto-hide (only `ok` does after 3s) and
+nothing was left to replace it. Fixed by explicitly clearing the status
+(`setStatus('')`) at both success-return points in `API.loadAll()`.
+Caught by checking `#sync-bar`'s actual DOM state after a full reload,
+not by assuming the removal was safe.
+
+**Verified, not assumed:** an automatic `refreshPrices()` call was
+measured before/after via `getBoundingClientRect()` on the Mission
+Control hero card — identical position, confirming zero layout shift.
+Manual refresh was confirmed to toast and auto-hide after 3s. The
+error-dedup behavior was confirmed via three simulated consecutive
+failures. Mobile (375×812): the toast's fixed `top` offset needed a
+mobile-specific bump (`68px` → `76px` in `mobile.css`) because mobile
+hides `.main-nav`, leaving less natural clearance before the hub title —
+caught visually via screenshot, not assumed to just work from the
+desktop value.
 
 ## Icon system
 

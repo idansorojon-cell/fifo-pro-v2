@@ -85,6 +85,15 @@ Each phase's rationale and verification is logged in
       into hero (Open P&L, dominant) / context strip (today/week/month) /
       status row (positions + color-accented risk card) / AI Coach.
       Zero calculation changes. See DESIGN_SYSTEM.md.
+- [x] **Live-status UX phase — ambient header status vs toast
+      notifications.** Done between Phase 3 and Phase 2, at explicit
+      request. The automatic 15s price poll no longer shows a
+      "prices updated" banner (it was reflowing the whole page every
+      cycle) — routine polling now only updates an ambient `#ws-dot`/
+      `#last-updated` in the header; `#sync-bar` is now a fixed-position
+      toast reserved for manual actions and errors. Recurring background
+      errors surface once, then degrade to a quiet dot state instead of
+      repeating. See DESIGN_SYSTEM.md.
 - [ ] Phase 4+ — KPI/card component differentiation, form/native-control
       restyle, chart restyle, motion pass, loading/empty states. Full
       original proposal (colors, typography, spacing system, borrowed
