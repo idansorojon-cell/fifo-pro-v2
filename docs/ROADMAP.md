@@ -109,12 +109,26 @@ Each phase's rationale and verification is logged in
       spinning refresh-button icon (`API.setButtonBusy`, reuses the
       existing `.spinner` keyframe) plus the ambient dot/timestamp.
       Errors still toast. See DESIGN_SYSTEM.md.
-- [ ] Phase 4+ — KPI/card component differentiation, form/native-control
-      restyle, chart restyle, motion pass, loading/empty states. Full
-      original proposal (colors, typography, spacing system, borrowed
-      ideas from TradingView/Linear/Bloomberg/Stripe) discussed in
-      session history; DESIGN_SYSTEM.md is the living version of that
-      plan going forward.
+- [x] **Phase 4 — KPI/card differentiation.** Unified five parallel
+      "small stat card" implementations (`.kpi`, `.prog-kpi`,
+      `.week-card`, `.brief-kpi`, and a dormant unused `.kpi-v3`) into
+      one visual language without renaming any classes; differentiated
+      chart cards (`.card:has(.chart-wrap)`) and list cards
+      (`.card--flush`) from generic content cards; found and fixed a
+      real `!important` cascade conflict that was silently overriding
+      `.kpi`'s styling; removed confirmed-dead CSS (`.kpi-v3`,
+      `.card-glass`, `.kpi-trend`, `.prog-kpi-val`). Zero calculation
+      changes. See DESIGN_SYSTEM.md.
+- [ ] Phase 5+ — form/native-control restyle, chart restyle, motion pass,
+      loading/empty states, a full stylesheet-wide spacing audit (the
+      scattered 10/12/14/18/28px margins outside the Dashboard tab,
+      confirmed but not fixed this phase), the `.card`/`.card-title`
+      `!important` duplicate adjacent to the one resolved in Phase 4, and
+      the `.perf-grid`/`.grade-card`/`.mistake-grid`/`.insight-grid`
+      families on Analysis screens (explicitly out of scope through
+      Phase 4). DESIGN_SYSTEM.md is the living version of the original
+      full proposal (colors, typography, spacing system, borrowed ideas
+      from TradingView/Linear/Bloomberg/Stripe) going forward.
 
 ## Explicitly out of scope (per repeated instruction this session)
 

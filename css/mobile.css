@@ -50,11 +50,11 @@
 
   /* KPI Grid */
   .kpi-grid { grid-template-columns: 1fr 1fr; }
-  .kpi-val  { font-size: 18px; }
+  .kpi-val  { font-size: 19px; }
 
   /* Week grid */
   .week-grid { grid-template-columns: 1fr 1fr 1fr; }
-  .week-card-val { font-size: 15px; }
+  .week-card-val { font-size: 16px; }
 
   /* Pos grid */
   .pos-grid { grid-template-columns: 1fr; }
@@ -87,8 +87,6 @@
   .stats-2col { grid-template-columns: 1fr; }
   .perf-grid  { grid-template-columns: 1fr 1fr; }
 
-  /* Progress */
-  .prog-kpi-val { font-size: 16px; }
 
   /* Coach */
   .coach-grid { grid-template-columns: 1fr; }
@@ -116,7 +114,7 @@
 /* ── Small Mobile (≤380px) ──────────────────────────────── */
 @media (max-width: 380px) {
   .kpi-grid { grid-template-columns: 1fr 1fr; }
-  .kpi-val  { font-size: 16px; }
+  .kpi-val  { font-size: 17px; }
   .week-grid { grid-template-columns: 1fr; }
   .wl-grid { grid-template-columns: 1fr; }
   .insight-grid { grid-template-columns: 1fr; }

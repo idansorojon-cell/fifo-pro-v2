@@ -200,7 +200,7 @@ const Dashboard = (() => {
     ];
 
     el.innerHTML = kpis.map(k => `
-      <div class="kpi">
+      <div class="kpi" style="--accent:var(--${k.color})">
         <div class="kpi-label">${k.label}</div>
         <div class="kpi-val ${k.color}">${k.val}</div>
         <div class="kpi-sub">${k.sub}</div>

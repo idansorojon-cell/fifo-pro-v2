@@ -66,6 +66,14 @@ trader's numbers are the product.
   still toast. See "Follow-up: removed the manual-refresh success toast
   too" below.
 
+- **Phase 4: KPI/card differentiation.** Unified five parallel, slightly
+  inconsistent "small stat card" implementations (`.kpi`, `.prog-kpi`,
+  `.week-card`, `.brief-kpi`, and a dormant unused `.kpi-v3`) into one
+  visual language; differentiated chart cards and list cards from generic
+  content cards; removed confirmed-dead CSS. See "Phase 4: KPI/card
+  differentiation" below for the full audit, scope, and a real
+  cascade-conflict this phase found and fixed (not just avoided).
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -340,3 +348,118 @@ in this phase.
   `<option>` text as plain text only, HTML/SVG inside an `<option>` is
   not supported. Leave as emoji, or restyle as a custom dropdown
   component if this ever becomes worth the effort.
+
+## Phase 4: KPI/card differentiation
+
+### Audit — the real problem wasn't sameness, it was duplication
+
+Five parallel implementations of the same "small metric card" concept
+existed before this phase, each slightly different for no functional
+reason:
+
+| Class | Used by | Padding (before) | Value (before) |
+|---|---|---|---|
+| `.kpi` / `.kpi-grid` | Main Dashboard (`dashboard.js`) | 14px 16px | 22px/700 |
+| `.prog-kpi` | Progress tab (`analytics.js`) | 14px 16px | *(see below — never actually used)* |
+| `.week-card` | Weekly summary (`dashboard.js`) | 14px | 20px/700 |
+| `.brief-kpi` | Daily Brief (`app.js`) | 14px | 20px/700 |
+| `.kpi-v3` | **Nobody — zero references anywhere** | 20px | 28px/800 |
+
+Plus: `.card-glass` (zero references), `.kpi-trend` (zero references —
+`dashboard.js` uses `.kpi-sub` with an inline opacity instead), and
+`.prog-kpi-val` (defined, styled, but **also zero references** — Progress
+renders a before/after comparison layout with inline styles instead of
+a single hero value, discovered while doing the alignment pass below,
+not before).
+
+### What this phase did
+
+**Consolidated, didn't rename.** `.kpi` (Dashboard's grid — the highest-
+traffic KPI surface, holding up to ~11 peer stats at once) got the
+better-designed-but-dormant `.kpi-v3` treatment merged into it: `--r-xl`
+radius, bolder 24px/800 value, a 2px accent bar revealed on hover,
+colored per-metric via a `--accent` custom property `dashboard.js` now
+sets inline (`style="--accent:var(--${k.color})"` — one line, purely
+presentational, the color values themselves are unchanged). `.kpi-v3`
+itself was deleted once merged. `.prog-kpi`/`.week-card`/`.brief-kpi`
+were **not renamed** — their classes still exist independently in
+`analytics.js`/`dashboard.js`/`app.js` exactly as before — but their
+padding/radius/value typography now matches `.kpi`'s, so all four read
+as one system instead of four slightly-different ones.
+
+**Deliberately kept dense, not blown up.** `.kpi-v3`'s original padding
+was 20px (a size that suits 3-4 cards, not the Dashboard's ~11). The
+merged `.kpi` uses 16px 18px — a modest bump from the original 14px 16px,
+matching generic `.card`'s own padding, not `.kpi-v3`'s more spacious
+value. The value size moved 22px→24px, not to `.kpi-v3`'s 28px. Hierarchy
+on the Dashboard tab comes from `.dash-hero` already being visually
+dominant above this grid (unchanged) — the goal was a *more polished*
+stat card, not a *bigger* one competing with the hero.
+
+**Chart cards** now get more generous padding than a generic content
+card, via `.card:has(.chart-wrap) { padding: 20px 22px 18px; }` — no
+markup change needed on any of the chart cards in `index.html`, and it
+degrades harmlessly to the default `.card` padding on any browser without
+`:has()` support (same technique as Mission Control's `.mc-hero:has()`
+border tint in Phase 3).
+
+**List cards** got a real class, `.card--flush` (`padding:0;overflow:
+hidden`), replacing the inline `style="padding:0;overflow:hidden"`
+repeated on Trades' and Journal's table-in-a-card markup in `index.html`.
+
+### A real cascade conflict found and fixed, not just avoided
+
+While rewriting `.kpi`, a duplicate "GLOBAL CARD PREMIUM UPGRADE" section
+was discovered ~2200 lines later in `style.css`, forcing `.kpi`'s
+border-radius, hover state, and `.kpi-val`/`.kpi-label` typography via
+`!important` — the exact same silent-cascade-conflict shape as the risk-
+card border bug from Phase 3 (a later rule in file order winning over an
+earlier one with equal specificity). Verified via `getComputedStyle`
+*before* touching it — `.kpi-label` was actually rendering at
+`font-weight:700; letter-spacing:0.7px` from the `!important` block, not
+the `600`/`0.8px` the "base" definition claimed. Rather than layering a
+sixth definition on top, the two were merged into one (preserving the
+already-live 700/0.7px value, not silently changing it) and the
+`!important` duplicate was deleted. The adjacent `.card`/`.card-title`
+`!important` overrides in that same "premium upgrade" section were left
+alone — they don't conflict with anything this phase touched, and
+resolving them isn't necessary for this phase's correctness (flagged
+below as a known follow-up instead of fixed opportunistically).
+
+### Spacing
+
+Audited Dashboard's own top-level rhythm (`.dash-hero` → `.kpi-grid` →
+chart/content cards) specifically, since that's the screen in scope.
+Found it was already a reasonably consistent two-tier rhythm (20px
+between major blocks, 16px default `.card` spacing) — **not** the
+scattered 10/12/14/18/28px mix that exists elsewhere in the stylesheet.
+Deliberately did not force a change where none was needed; a broader
+spacing audit across every other screen remains a real, separate
+follow-up (see below), not something to manufacture busywork for here.
+
+### Verified, not assumed
+
+Desktop and mobile (375×812) screenshots of Dashboard's KPI grid, weekly
+summary, and chart cards; Trades/Journal tables confirmed still flush
+edge-to-edge after switching from inline styles to `.card--flush`; the
+`--accent` custom property confirmed resolving to the correct color
+(`rgb(78,204,168)` for a green metric) via `getComputedStyle`; the
+`!important` conflict confirmed present before the fix (`border-radius:
+18px` — i.e. `var(--r-xl)` — was NOT applying) and confirmed resolved
+after (it was); zero references confirmed via `grep` before deleting
+`.kpi-v3`, `.card-glass`, `.kpi-trend`, and `.prog-kpi-val`.
+
+### Deliberately deferred (documented, not forgotten)
+
+- Renaming `.prog-kpi`/`.week-card`/`.brief-kpi` to literally share the
+  `.kpi` class in markup (would touch `analytics.js`/`dashboard.js`/
+  `app.js` structurally, not just visually — a bigger, separate change).
+- The `.perf-grid`/`.grade-card`/`.mistake-grid`/`.insight-grid` families
+  on Analysis-category screens (out of scope per explicit instruction).
+- The adjacent `.card`/`.card-title` `!important` duplicate in the same
+  "premium upgrade" section (doesn't conflict with anything this phase
+  needed, so left alone rather than opportunistically rewritten).
+- A full stylesheet-wide spacing audit (10/12/14/18/28px scattered
+  values outside the Dashboard tab) — confirmed out of scope, not fixed.
+- Chart.js's internal color/gridline config — already tracked separately
+  in `ROADMAP.md`'s Phase 4+ item.

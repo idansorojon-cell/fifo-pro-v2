@@ -356,6 +356,19 @@ body {
 }
 .card:hover { border-color: var(--border-2); }
 
+/* Chart cards (Phase 4): a chart is the single focus of its card — a
+   little more breathing room than a dense stat/content card. Targets
+   any .card containing a .chart-wrap without needing a markup change on
+   every chart card in index.html; degrades harmlessly (default padding)
+   on browsers without :has() support. */
+.card:has(.chart-wrap) { padding: 20px 22px 18px; }
+
+/* List/content cards (Phase 4): formalizes the padding:0;overflow:hidden
+   pattern already used inline for Trades/Journal's table-in-a-card
+   layout, so it's a real, reusable modifier instead of a repeated inline
+   style. */
+.card--flush { padding: 0; overflow: hidden; }
+
 .card-title {
   font-size: 11px;
   color: var(--text-3);
@@ -368,17 +381,16 @@ body {
   gap: 6px;
 }
 
-.card-glass {
-  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 16px 18px;
-  margin-bottom: 16px;
-}
-
-/* ── KPI Grid ───────────────────────────────────────────── */
+/* ── KPI Grid (Phase 4: KPI/card differentiation) ──────────
+   This grid holds up to ~11 peer stats at once (Dashboard tab) — the
+   design goal here is a *polished, dense* stat card, not a bigger one.
+   Hierarchy on this screen comes from .dash-hero already being visually
+   dominant above this grid, not from inflating each of these. Merges the
+   better-designed-but-never-wired .kpi-v3 treatment (bigger radius,
+   bolder value, hover-reveal accent bar colored per-metric via the
+   --accent custom property dashboard.js sets inline) into the one .kpi
+   class actually used, instead of keeping two parallel systems. See
+   docs/DESIGN_SYSTEM.md. */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -389,34 +401,37 @@ body {
 .kpi {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 14px 16px;
+  border-radius: var(--r-xl);
+  padding: 16px 18px;
   position: relative;
   overflow: hidden;
   transition: all var(--t-fast);
   cursor: default;
 }
-.kpi::before {
+.kpi::after {
   content: '';
   position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.03), transparent);
-  pointer-events: none;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent, var(--border-2));
+  opacity: 0;
+  transition: opacity var(--t-fast);
 }
-.kpi:hover { border-color: var(--border-2); transform: translateY(-1px); }
+.kpi:hover { border-color: var(--border-2); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.kpi:hover::after { opacity: 1; }
 
 .kpi-label {
   font-size: 10px;
   color: var(--text-3);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.7px;
   margin-bottom: 6px;
 }
 
 .kpi-val {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   letter-spacing: -0.5px;
   line-height: 1.1;
 }
@@ -425,16 +440,6 @@ body {
   font-size: 11px;
   color: var(--text-3);
   margin-top: 4px;
-}
-
-.kpi-trend {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: var(--r-full);
 }
 
 /* ── Color tokens ───────────────────────────────────────── */
@@ -705,12 +710,12 @@ input[type=date] { direction: ltr; text-align: right; }
 .week-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 14px;
+  border-radius: var(--r-xl);
+  padding: 16px 14px;
   text-align: center;
 }
 .week-card-label { font-size: 11px; color: var(--text-3); margin-bottom: 5px; }
-.week-card-val   { font-size: 20px; font-weight: 700; }
+.week-card-val   { font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
 
 /* ── Decision Engine ────────────────────────────────────── */
 .de-grid {
@@ -807,15 +812,20 @@ input[type=date] { direction: ltr; text-align: right; }
 }
 
 /* ── Progress KPIs ──────────────────────────────────────── */
+/* Container matches .kpi's padding/radius (Phase 4) so it doesn't read as
+   a lesser component. Progress's actual values are a before/after
+   comparison (analytics.js renderProgress()), styled inline per side —
+   there's no single hero number here to give .kpi-val's treatment to, so
+   .prog-kpi-val (unused — confirmed zero references) was removed rather
+   than kept as unused/misleading scaffolding. */
 .prog-kpi {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 14px 16px;
+  border-radius: var(--r-xl);
+  padding: 16px 18px;
   text-align: center;
 }
 .prog-kpi-label { font-size: 10px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
-.prog-kpi-val   { font-size: 20px; font-weight: 700; }
 .prog-kpi-sub   { font-size: 11px; color: var(--text-3); margin-top: 3px; }
 
 .trend-up   { color: var(--green); }
@@ -1681,8 +1691,9 @@ body.light .nav-cat.active {
   margin-bottom: 5px;
 }
 .brief-kpi-val {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
 }
 .brief-coach {
   background: rgba(100,181,246,0.06);
@@ -2328,40 +2339,6 @@ select.s-input { cursor: pointer; }
 .empty-sub   { font-size: 14px; line-height: 1.6; }
 .empty-cta   { margin-top: 16px; }
 
-/* ── Enhanced KPI (v3) ──────────────────────────────────── */
-.kpi-v3 {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-xl);
-  padding: 20px;
-  position: relative;
-  overflow: hidden;
-  transition: all var(--t-med);
-}
-.kpi-v3::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--accent-color, var(--green));
-  opacity: 0;
-  transition: opacity var(--t-fast);
-}
-.kpi-v3:hover { border-color: var(--border-2); transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.kpi-v3:hover::after { opacity: 1; }
-.kpi-v3-icon { font-size: 20px; margin-bottom: 10px; }
-.kpi-v3-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-3); margin-bottom: 6px; }
-.kpi-v3-val   { font-size: 28px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
-.kpi-v3-sub   { font-size: 12px; color: var(--text-3); margin-top: 5px; }
-.kpi-v3-trend {
-  position: absolute; top: 14px; left: 14px;
-  font-size: 10px; font-weight: 700;
-  padding: 2px 7px;
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--text-3);
-}
-
 /* ── News Impact ────────────────────────────────────────── */
 .news-score-badge {
   display: inline-flex;
@@ -2635,30 +2612,12 @@ select.s-input { cursor: pointer; }
   letter-spacing: 0.01em;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   KPI GRID — premium upgrade
-═══════════════════════════════════════════════════════════ */
-.kpi {
-  border-radius: var(--r-lg) !important;
-  transition: all 0.2s ease !important;
-}
-.kpi:hover {
-  border-color: var(--border-2) !important;
-  transform: translateY(-2px) !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
-}
-.kpi-val {
-  font-size: 24px !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.5px !important;
-  line-height: 1.1 !important;
-}
-.kpi-label {
-  font-size: 10px !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.7px !important;
-}
+/* KPI grid's "premium upgrade" duplicate (border-radius/hover/value/label
+   overrides via !important) was merged into the single .kpi/.kpi-val/
+   .kpi-label definition above (Phase 4) and removed from here — it was
+   silently fighting that definition rather than layering on top of it
+   (the exact cascade-order trap documented in DESIGN_SYSTEM.md's Mission
+   Control section). One definition now, not two disagreeing ones. */
 
 /* ═══════════════════════════════════════════════════════════
    EMPTY STATES — premium upgrade

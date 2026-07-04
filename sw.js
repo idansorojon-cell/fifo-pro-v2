@@ -28,8 +28,14 @@
 // replaced with a spinning refresh-button icon (API.setButtonBusy) plus
 // the existing ambient dot/timestamp — index.html, css/style.css,
 // js/api.js, js/positions.js, js/watchlist.js.
-const CACHE_NAME   = 'fifopro-v9';
-const STATIC_CACHE = 'fifopro-static-v9';
+// Bumped v9 -> v10: Design Phase 4 (KPI/card differentiation) — unified
+// .kpi styling (merged a dormant, conflicting !important duplicate),
+// aligned .prog-kpi/.week-card/.brief-kpi typography, chart-card and
+// list-card (.card--flush) differentiation, removed confirmed-dead CSS
+// (.kpi-v3, .card-glass, .kpi-trend, .prog-kpi-val) — css/style.css,
+// css/mobile.css, index.html, js/dashboard.js.
+const CACHE_NAME   = 'fifopro-v10';
+const STATIC_CACHE = 'fifopro-static-v10';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
