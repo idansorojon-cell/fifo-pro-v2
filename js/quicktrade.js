@@ -77,7 +77,18 @@ const QuickTrade = (() => {
     }
   }
 
+  // PHASE A (persistence-layer migration): the "buy" branch calls the old,
+  // id-keyed addPosition endpoint (not the fixed, symbol-keyed
+  // upsertPositionMeta that the main Position modal uses) — a second,
+  // still-unpatched position-write path with the original id-collision
+  // risk. The "sell" branch calls addTrade, the same legacy "Trades"
+  // sheet write that Trades.submit() uses — invisible after refresh,
+  // same as everywhere else. Both disabled at the entry point; the
+  // calculator/preview above (calc()) is unaffected, it never persists
+  // anything. See docs/TECHNICAL_DEBT.md "Persistence architecture".
   async function submit() {
+    API.setStatus('❌ שמירה מ-Quick Trade מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
+    return;
     const sym       = (document.getElementById('qt-symbol')?.value || '').trim().toUpperCase();
     const action    = document.getElementById('qt-action')?.value;
     const qty       = +document.getElementById('qt-qty')?.value;

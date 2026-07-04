@@ -272,6 +272,15 @@ body {
 .btn-icon:hover { background: var(--surface-3); color: var(--text-1); border-color: var(--border-2); }
 .btn-icon.danger:hover { background: var(--red-dim); color: var(--red); border-color: var(--red); }
 
+/* ── Disabled action (Phase A: persistence-layer migration) ───────
+   Marks a control whose write path is temporarily disabled — it writes
+   to a legacy sheet the primary read path never reads, so it either
+   silently fails to persist or fake-succeeds. Clicking still works and
+   explains why via a toast; this only signals visually that the control
+   differs from a normal enabled one. See docs/TECHNICAL_DEBT.md
+   "Persistence architecture". */
+.action-disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ── Icon system (see docs/DESIGN_SYSTEM.md) ─────────────
    Sized to 1em so it inherits whatever font-size the slot it sits in
    already had (nav-cat-icon, hub-icon, hub-card-icon, bn-icon) — no

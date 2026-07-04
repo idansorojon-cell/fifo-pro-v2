@@ -73,15 +73,27 @@ const Journal = (() => {
           ${t.emotion || '—'}
         </td>
         <td>
-          <button class="btn-icon" onclick="Journal.openModal(${t.id})">${icon('edit')}</button>
+          <button class="btn-icon action-disabled" onclick="Journal.openModal(${t.id})" title="מבוטל זמנית">${icon('edit')}</button>
         </td>
       </tr>
     `).join('');
   }
 
   // ── Journal Modal ────────────────────────────────────────
+  // PHASE A (persistence-layer migration): entry/exit reason, respected
+  // stop, followed plan, lesson and emotion all wrote via updateTrade()
+  // to the legacy "Trades" sheet by id — but applyFIFO_ (the primary read
+  // path) hardcodes all six of these fields to '' on every derived trade,
+  // with no merge function to overlay them back (unlike positions'
+  // target/stop/notes). So a save here was *guaranteed* to be invisible
+  // after refresh, for every trade, every time — this is exactly why the
+  // Journal table always shows "—". Disabled at the entry point; see
+  // docs/TECHNICAL_DEBT.md "Persistence architecture" for the full audit.
+  // Original logic kept below, unreachable, as reference for Phase B.
 
   function openModal(id) {
+    API.setStatus('❌ יומן מסחר מבוטל זמנית — השדות לא היו נשמרים בפועל אחרי רענון', 'warn');
+    return;
     APP.journalId = id;
     const t = APP.trades.find(x => x.id === id);
     if (!t) return;
@@ -101,6 +113,8 @@ const Journal = (() => {
   }
 
   async function save() {
+    API.setStatus('❌ שמירת יומן מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
+    return;
     const t = APP.trades.find(x => x.id === APP.journalId);
     if (!t) { closeModal(); return; }
     const updated = {
@@ -127,8 +141,15 @@ const Journal = (() => {
   }
 
   // ── Notes Modal ──────────────────────────────────────────
+  // PHASE A: same root cause as the Journal modal above — notes written
+  // here go to the legacy "Trades" sheet, which is not what applyFIFO_
+  // reads for a trade's `notes` field (it reads the notes column on the
+  // raw "פעולות" row itself). Disabled at the entry point; see
+  // docs/TECHNICAL_DEBT.md "Persistence architecture".
 
   function openNote(id) {
+    API.setStatus('❌ הערות עסקה מבוטלות זמנית — לא היו נשמרות בפועל אחרי רענון', 'warn');
+    return;
     APP.noteId = id;
     const t = APP.trades.find(x => x.id === id);
     document.getElementById('note-text').value = t?.notes || '';
@@ -141,6 +162,8 @@ const Journal = (() => {
   }
 
   async function saveNote() {
+    API.setStatus('❌ שמירת הערה מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
+    return;
     const txt = document.getElementById('note-text').value.trim();
     const t   = APP.trades.find(x => x.id === APP.noteId);
     if (!t) { closeNote(); return; }

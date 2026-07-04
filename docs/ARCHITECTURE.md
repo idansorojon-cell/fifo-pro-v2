@@ -196,6 +196,14 @@ see PROJECT_OVERVIEW.md "Deployment." Until redeployed, the frontend will
 correctly show `❌ Unknown action: upsertPositionMeta` rather than the
 previous silent-success behavior.
 
+**This turned out to be the one write path of many that got updated for
+the FIFO migration** — Trades add/edit/delete, Journal, Trade Notes, and
+Quick Trade's buy/sell tabs all still wrote to pre-migration sheets this
+read path never looks at. See `docs/TECHNICAL_DEBT.md` — "Persistence
+architecture" for the full audit and the phased fix (Phase A disabled
+every one of those paths at the UI level; Phase B will generalize this
+exact symbol/composite-key overlay pattern to trades).
+
 ## State flow
 
 Single global mutable object: `window.APP` (defined in `app.js`):

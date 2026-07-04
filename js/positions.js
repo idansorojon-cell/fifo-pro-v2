@@ -151,8 +151,8 @@ const Positions = (() => {
         ${p.notes ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;font-style:italic">${p.notes}</div>` : ''}
 
         <div style="display:flex;gap:6px;margin-top:12px">
-          <button class="btn-icon" onclick="Positions.openEdit(${p.id})">${icon('edit')}</button>
-          <button class="btn-icon danger" onclick="Positions.remove(${p.id})">${icon('x')}</button>
+          <button class="btn-icon" onclick="Positions.openEdit(${p.id})" title="ערוך יעד/סטופ/הערות">${icon('edit')}</button>
+          <button class="btn-icon danger action-disabled" onclick="Positions.remove(${p.id})" title="מבוטל זמנית">${icon('x')}</button>
         </div>
       </div>
     `;
@@ -400,8 +400,19 @@ const Positions = (() => {
   }
 
   // ── CRUD ────────────────────────────────────────────────
+  // PHASE A (persistence-layer migration): a brand-new position (a symbol
+  // with no open FIFO lot in the "פעולות" transaction log) saves to the
+  // legacy "Positions" sheet, but the primary read path only overlays
+  // target/stop/notes onto positions that already survived FIFO
+  // derivation — it never adds one for a symbol with none. The position
+  // appeared to save, then was invisible after refresh. Disabled at the
+  // entry point; editing an *existing* derived position's target/stop/
+  // notes (openEdit below) is unaffected — that path is already correct.
+  // See docs/TECHNICAL_DEBT.md "Persistence architecture".
 
   function openForm() {
+    API.setStatus('❌ פוזיציה חדשה שאינה מגובה בעסקה קיימת ביומן אינה נתמכת — תעדו את הקנייה בפעולות', 'warn');
+    return;
     APP.posEditId = null;
     document.getElementById('pos-modal-title').textContent = 'פוזיציה חדשה';
     ['symbol','qty','price','target','stop','notes'].forEach(f => {
@@ -441,6 +452,15 @@ const Positions = (() => {
   }
 
   async function submit() {
+    // PHASE A guard: defense-in-depth in case "new position" mode is ever
+    // reached without going through the now-disabled openForm() — editing
+    // an existing FIFO-derived position (posEditId set) is unaffected and
+    // continues to use the already-correct upsertPositionMeta path below.
+    if (APP.posEditId === null) {
+      API.setStatus('❌ פוזיציה חדשה שאינה מגובה בעסקה קיימת ביומן אינה נתמכת', 'warn');
+      closeForm();
+      return;
+    }
     const sym   = (document.getElementById('pf-symbol').value || '').trim().toUpperCase();
     const qty   = +document.getElementById('pf-qty').value;
     const price = +document.getElementById('pf-price').value;
@@ -494,7 +514,17 @@ const Positions = (() => {
     }
   }
 
+  // PHASE A: deletePosition matches the legacy "Positions" sheet by
+  // numeric id (not symbol), and even if it "succeeds" there, the position
+  // reappears next load since it's re-derived fresh from the "פעולות" log
+  // every time — deleting a row nothing reads back doesn't remove the
+  // position. Also found in passing: the old code showed a green "✓ נמחק
+  // מקומית" success message even when res.ok was false — exactly the
+  // fake-success pattern this phase eliminates. Disabled at the entry
+  // point; original logic kept below, unreachable, as reference.
   async function remove(id) {
+    API.setStatus('❌ מחיקת פוזיציה מבוטלת זמנית — היא תחזור אחרי רענון כי היא נגזרת מיומן הפעולות', 'warn');
+    return;
     if (!confirm('למחוק פוזיציה זו?')) return;
     const res = await API.deletePosition(id);
     APP.positions = APP.positions.filter(p => p.id !== id);

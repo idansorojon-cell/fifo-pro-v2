@@ -31,18 +31,41 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       trader's manual spreadsheet exactly); full-history total moves by
       +$9,585.77. See TECHNICAL_DEBT.md and ARCHITECTURE.md — "Data
       model". Manually redeployed and verified live by the trader.
-- [ ] **New positions vanish/get overwritten after refresh** — root cause
-      found (collision between FIFO-derived and manually-entered
-      positions), not yet fixed. See TECHNICAL_DEBT.md.
-- [ ] **Verify whether `Trades.submit()`/`openEdit()` have the same class
-      of bug as the position issue above.** Noticed in passing while
-      implementing Phase 5b (not investigated): the Trades add/edit modal
-      writes via the legacy `addTrade`/`updateTrade` endpoints, but the
-      primary read path (`getOperations`) derives its trade list purely
-      from the raw `"פעולות"` transaction log — structurally the same
-      shape as the position bug (write path and primary read path
-      targeting different data sources). Unverified whether editing/adding
-      a trade via this modal actually persists correctly across a reload.
+- [x] **Persistence architecture audit — complete.** Full trace of every
+      editable module's write path vs. read path confirmed this is one
+      incomplete data-model migration, not isolated bugs: exactly one
+      write path (position target/stop/notes) was ever updated to read
+      from the new FIFO-derived model; every other path (Trades add/edit/
+      delete, Journal, Trade Notes, Quick Trade's buy/sell) still writes
+      to pre-migration sheets the primary read path never reads. Trades'
+      edit/delete elevated to P0 independently — it matches by numeric id
+      (`findRowById_`), the exact mechanism already proven risky and fixed
+      for positions, and it's the single most-used CRUD action in the app.
+      Full detail, per-module table, and the agreed unified fix strategy
+      (two sources of truth: `"פעולות"`/`applyFIFO_` for facts, a
+      stable-key annotation overlay for everything else) in
+      TECHNICAL_DEBT.md — "Persistence architecture".
+- [x] **Phase A — disable every fake-persistence write path (frontend-
+      only).** Trades add/edit/delete, Journal, Trade Notes, new-position
+      creation, Quick Trade's buy/sell tabs all disabled at their UI entry
+      point with an explanatory toast — original logic kept in place
+      (unreachable), nothing deleted. Position target/stop/notes editing
+      on an *existing* derived position is unaffected (already correct);
+      its qty/avg_price/symbol/date fields are now `disabled` inputs
+      instead of silently discarding input. Found and eliminated a
+      fake-success message in passing (`Positions.remove()` showed a
+      green checkmark even on API failure). Verified live in the running
+      app (not just read in source) that every disabled path leaves
+      `APP.trades`/`APP.positions` unchanged and shows a clear warning
+      toast, at both desktop and mobile. See TECHNICAL_DEBT.md.
+- [ ] **Phase B (next) — real Trade/Journal/Notes persistence.** New
+      `upsertTradeMeta` endpoint + `mergeTradeMeta_()` read-side merge,
+      generalizing the position-meta pattern to trades via a stable
+      composite key (`symbol+buy_date+sell_date+qty+buy_price+sell_price`).
+      Requires Apps Script redeploy. See TECHNICAL_DEBT.md.
+- [ ] **Phase C — Quick Trade's "buy" tab.** Point it at the already-
+      existing `upsertPositionMeta` instead of the old, id-keyed
+      `addPosition`. Frontend-only, no backend change needed.
 - [ ] **Identify the source of the recurring GitHub web-UI stale uploads**
       (see CURRENT_STATUS.md). Fought against git pushes at least 3 times
       this session.

@@ -96,44 +96,113 @@ pre-redeploy.
 position would likely just reappear on the next load since it's derived
 from the trade log), out of scope for this fix.
 
-## New positions vanish or get silently overwritten after refresh (FOUND, NOT YET FIXED)
+## Persistence architecture — incomplete data-model migration (Phase A shipped, Phase B next)
 
-**Root cause confirmed** via full code trace (`Positions.submit()` →
-`upsertPositionMeta` → `handleUpsertPositionMeta_` for the write path;
-`loadAll()` → `getOperations` → `applyFIFO_` → `mergePositionMeta_` for the
-read path) plus a read-only live check (`getPositions`, which bypasses the
-FIFO derivation and reads the legacy `Positions` sheet directly — no data
-was written to verify this).
+### The full picture
 
-The write always succeeds (`handleUpsertPositionMeta_` finds-or-creates the
-row by symbol in the legacy `Positions` sheet). The bug is entirely on the
-read side: the primary path's list of open positions is derived **only**
-from unconsumed BUY lots in the `"פעולות"` transaction log; `mergePositionMeta_`
-only overlays `target`/`stop_loss`/`notes` onto positions that already
-survived that derivation. It never adds a position for a symbol with no
-open FIFO lot. Two distinct symptoms result:
+FIFO PRO migrated its primary data model once, from plain CRUD sheets
+(`Trades`/`Positions`, edited by row id) to data **derived fresh on every
+load** from a raw transaction log (`"פעולות"`, via `applyFIFO_`). Exactly
+one write path was updated to bridge old and new: position
+`target`/`stop_loss`/`notes`, via `mergePositionMeta_`/`upsertPositionMeta`,
+matched by **symbol** (not id). Every other write path in the app still
+wrote into the pre-migration sheets, using pre-migration assumptions,
+and the new read path was never taught to look at any of them. A key
+supporting fact: **there is no handler anywhere in `AppScript_FULL.gs`
+that writes to `"פעולות"` itself** — `getOperationsSheet_()` is called
+exactly once, read-only, from `handleGetOperations_`. The one sheet the
+primary read path actually trusts can only be edited by hand.
 
-- **Symbol with no open FIFO lot at all** (a purely manual holding never
-  logged as a real BUY/SELL): saved to the legacy sheet, shown immediately
-  via the frontend's optimistic client-side insert, then **entirely
-  invisible after refresh**.
-- **Symbol that already has an open FIFO-derived position**: still shows
-  after refresh, but the `qty`/`avg_price`/`added_date` typed into the
-  modal are silently discarded and replaced by the FIFO-derived numbers —
-  only `target`/`stop_loss`/`notes` survive.
+Full per-module trace (write path -> read path -> outcome):
 
-Confirmed live (read-only, `getPositions`): the legacy sheet currently has
-an orphaned `OKLL` row (qty 4400 @ $6.40, target $10, no matching FIFO
-position anywhere in the app) and an `ONDL` row (qty 3500 @ $7.00) that
-doesn't match the ONDL card actually displayed (qty 10500 @ $11.38, from
-the FIFO derivation) — both are live instances of the mechanism above, not
-reconstructed from code alone.
+| Module | Write path | Read path | Outcome |
+|---|---|---|---|
+| Trades (add/edit) | `addTrade`/`updateTrade` -> legacy `Trades` sheet, **by id** | `getOperations` -> `applyFIFO_`, never reads `Trades` | ❌ Broken — invisible after refresh |
+| Trades (delete) | `deleteTrade`, **by id** | same | ❌ Broken, **and the one with real corruption risk** — see below |
+| Journal (entry/exit reason, respected stop, followed plan, lesson, emotion) | `updateTrade` -> legacy `Trades` sheet, by id | `applyFIFO_` **hardcodes all 6 fields to `''`** — no merge function exists for them at all | ❌ Broken, deterministically, for every trade — this is why the Journal table always shows "—" |
+| Trade Notes | `updateTrade` -> legacy `Trades` sheet | `applyFIFO_` populates `notes` from the raw `"פעולות"` row's own notes column, **not** the legacy `Trades` sheet | ❌ Broken, same shape as Journal |
+| Positions — target/stop/notes on an *existing* derived position | `upsertPositionMeta`, **by symbol** | `mergePositionMeta_` overlays these 3 fields by symbol | ✅ Fully persistent — the one path already fixed |
+| Positions — qty/avg_price on an *existing* position | `upsertPositionMeta` writes them too | `mergePositionMeta_` **deliberately never reads them back** | ❌ Broken, silently — fake success, input discarded on reload |
+| Positions — brand-new symbol, no FIFO lot | `upsertPositionMeta`, new row | never derived, never merged | ❌ Broken — the originally-reported "New Position" bug |
+| Positions — Quick Trade "buy" tab | `addPosition` (the **old**, id-keyed endpoint, not the fixed one) | same as above | ❌ Broken, and a **second, still-unpatched** id-collision risk |
+| Quick Trade "sell" tab | `addTrade` -> legacy `Trades` sheet | same as Trades add | ❌ Broken — phantom trade |
+| Watchlist | `addWatchlist`/`removeWatchlist` -> `Watchlist` sheet, by symbol | `getWatchlist` -> same sheet, same key | ✅ Fully persistent — never went through the migration, single sheet/key throughout |
+| Goals (monthly) | `setGoal` -> `Settings` sheet, key `goal` | `getGoal` -> same sheet, same key | ✅ Fully persistent |
 
-**Not yet fixed — this needs a product decision, not just a code fix**:
-either restrict "New Position" to annotating symbols that already have a
-real FIFO-derived position, or extend the read path to union in legacy-only
-positions with a defined reconciliation rule for what happens once a real
-BUY is later logged for that symbol. See ROADMAP.md P0.
+**Trades' edit/delete path is the one elevated to P0**, independent of the
+others: `findRowById_` matches by numeric id, the exact mechanism already
+proven risky and replaced for positions. The legacy `Trades` sheet (108
+rows, ids 1-108, a one-time mirror from the original `seedAll` import)
+currently aligns numerically with the FIFO-derived list's synthetic ids
+only because both were built from the same original chronological order —
+coincidental, not structural, and it has already partially drifted (the 2
+newest trades, ids 109-110, have no legacy row at all). Real financial
+data, silent-corruption potential, and the single most-used CRUD action in
+the app is a combination that outranks the "just invisible after refresh"
+bugs on its own.
+
+### Unified fix strategy (agreed)
+
+Two sources of truth going forward, not one: `"פעולות"` + `applyFIFO_`
+remain sole authority for transactional facts (what happened, what was
+earned) — untouched, and the app will **not** be given write access to it
+in this round (it's the actual source of P&L truth, may live in a
+different spreadsheet, and the trader edits it by hand — concurrent
+app-writes are a new failure mode not worth introducing for this fix).
+Annotations (journal, notes, target/stop/notes) get a generalized version
+of the one pattern that already works: overlay by a **stable, content-
+derived key** (symbol for positions; a composite
+`symbol+buy_date+sell_date+qty+buy_price+sell_price` key for trades,
+proven unique across the full 108-trade history during the tax audit),
+never a synthetic/regenerated id.
+
+Phases: **A** (frontend-only, disable every fake-persistence path — this
+section) -> **B** (backend, generalize the annotation pattern to trades:
+new `upsertTradeMeta` + `mergeTradeMeta_`) -> **C** (frontend-only, point
+Quick Trade's "buy" tab at the already-existing `upsertPositionMeta`) ->
+**D** (optional/future, writing real trades to `"פעולות"` itself — its own
+design conversation, not scheduled) -> **E** (Settings fake-controls
+cleanup, after persistence is safe, per explicit instruction) -> **F**
+(remaining Phase 5 UI polish).
+
+### Phase A — shipped this commit
+
+Every fake-persistence path disabled at its UI entry point (not deleted —
+original logic kept in place behind an early `return`, as a reference for
+Phase B/D):
+
+- `Trades.openAddForm()` / `openEdit()` / `submit()` / `remove()` — all
+  four now show a toast explaining why and do nothing else.
+- `Journal.openModal()` / `save()` / `openNote()` / `saveNote()` — same,
+  all four.
+- `Positions.openForm()` (new position) — disabled. `Positions.submit()`
+  gets a guard for the same case (defense-in-depth). `Positions.openEdit()`
+  for an *existing* derived position is **unaffected** — target/stop/notes
+  remain fully editable via the already-correct `upsertPositionMeta` path.
+- `Positions.remove()` — disabled. Found in passing: the old code showed a
+  green "✓ נמחק מקומית" success message even when the API call failed —
+  exactly the fake-success pattern this phase exists to eliminate.
+- Position modal's symbol/date/qty/avg-price inputs are now `disabled`
+  (grayed, with an explanatory note) for the same reason —
+  they were already silently discarded on save; now they can't be typed
+  into at all.
+- `QuickTrade.submit()` — disabled entirely (both the buy and sell
+  branches); the calculator/preview above it (`calc()`) is unaffected,
+  since it never persisted anything.
+- All corresponding buttons get a shared `.action-disabled` CSS class
+  (dimmed, `cursor:not-allowed`) plus an updated `title` tooltip, so the
+  disabled state is visible at rest, not just on click.
+
+**Verified, not assumed:** every one of the above was actually invoked in
+the running app (via `preview_eval`, not just read in source) and
+confirmed to (a) show the explanatory toast, (b) leave `APP.trades`/
+`APP.positions` byte-for-byte unchanged, and (c) never open a modal that
+can't do anything useful. Editing an *existing* position's target/stop/
+notes was separately confirmed still fully functional. Checked at both
+desktop and mobile (375x812).
+
+**Not yet done:** Phase B (real trade/journal/notes persistence via
+`upsertTradeMeta`/`mergeTradeMeta_`) — see ROADMAP.md.
 
 ## Security
 

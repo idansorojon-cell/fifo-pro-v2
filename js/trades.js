@@ -82,10 +82,10 @@ const Trades = (() => {
         <td style="color:var(--text-3)">${t.hold_days}י'</td>
         <td>
           <div class="actions" style="display:flex;gap:4px">
-            <button class="btn-icon" onclick="Journal.openNote(${t.id})"   title="הערה">${icon('note')}</button>
-            <button class="btn-icon" onclick="Journal.openModal(${t.id})"  title="יומן">${icon('book')}</button>
-            <button class="btn-icon" onclick="Trades.openEdit(${t.id})"    title="ערוך">${icon('edit')}</button>
-            <button class="btn-icon danger" onclick="Trades.remove(${t.id})" title="מחק">${icon('x')}</button>
+            <button class="btn-icon action-disabled" onclick="Journal.openNote(${t.id})"   title="הערה — מבוטל זמנית">${icon('note')}</button>
+            <button class="btn-icon action-disabled" onclick="Journal.openModal(${t.id})"  title="יומן — מבוטל זמנית">${icon('book')}</button>
+            <button class="btn-icon action-disabled" onclick="Trades.openEdit(${t.id})"    title="ערוך — מבוטל זמנית">${icon('edit')}</button>
+            <button class="btn-icon danger action-disabled" onclick="Trades.remove(${t.id})" title="מחק — מבוטל זמנית">${icon('x')}</button>
           </div>
         </td>
       </tr>`;
@@ -114,8 +114,20 @@ const Trades = (() => {
   }
 
   // ── Add/Edit Modal ────────────────────────────────────────
+  // PHASE A (persistence-layer migration): adding/editing/deleting a trade
+  // here writes to the legacy "Trades" sheet by id, which the primary read
+  // path (getOperations -> applyFIFO_, deriving trades fresh from the
+  // "פעולות" transaction log) never reads — the edit appeared to save but
+  // silently reverted on refresh, and worse, the numeric id only
+  // coincidentally aligns with the derived list today (see
+  // docs/TECHNICAL_DEBT.md "Persistence architecture"). Disabled at the
+  // entry point rather than at submit() so the trader isn't invited to
+  // fill out a form that can't actually save. Original logic kept below,
+  // unreachable, as reference for Phase B/D — not deleted.
 
   function openAddForm() {
+    API.setStatus('❌ הוספת עסקאות מבוטלת זמנית — עסקאות מגיעות רק מיומן הפעולות ב-Google Sheets', 'warn');
+    return;
     APP.editId = null;
     document.getElementById('modal-title').textContent = 'עסקה חדשה';
     ['symbol','buy-date','sell-date','qty','buy-price','sell-price','notes'].forEach(f => {
@@ -127,6 +139,8 @@ const Trades = (() => {
   }
 
   function openEdit(id) {
+    API.setStatus('❌ עריכת עסקאות מבוטלת זמנית — השינוי לא היה נשמר בפועל אחרי רענון', 'warn');
+    return;
     APP.editId = id;
     const t = APP.trades.find(x => x.id === id);
     if (!t) return;
@@ -164,6 +178,11 @@ const Trades = (() => {
   }
 
   async function submit() {
+    // PHASE A guard: defense-in-depth in case this is ever reached without
+    // going through the now-disabled openAddForm()/openEdit() — same
+    // reasoning as those two, see the comment above them.
+    API.setStatus('❌ שמירת עסקאות מבוטלת זמנית — לא הייתה נשמרת בפועל אחרי רענון', 'warn');
+    return;
     const sym = (document.getElementById('f-symbol').value || '').trim().toUpperCase();
     const bd  = isoToDD(document.getElementById('f-buy-date').value.trim());
     const sd  = isoToDD(document.getElementById('f-sell-date').value.trim());
@@ -225,6 +244,8 @@ const Trades = (() => {
   }
 
   async function remove(id) {
+    API.setStatus('❌ מחיקת עסקאות מבוטלת זמנית — יש למחוק מיומן הפעולות ב-Google Sheets', 'warn');
+    return;
     if (!confirm('למחוק עסקה זו?')) return;
     API.setStatus('מוחק...', 'info');
     API.showSpinner(true);
