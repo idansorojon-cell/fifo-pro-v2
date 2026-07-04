@@ -99,8 +99,8 @@ const Settings = (() => {
               <span class="settings-row-sub">Dark / Light mode</span>
             </div>
             <div class="seg-ctrl">
-              <button class="seg-btn ${p.theme==='dark'?'active':''}" onclick="Settings.setTheme('dark')">🌙 Dark</button>
-              <button class="seg-btn ${p.theme==='light'?'active':''}" onclick="Settings.setTheme('light')">☀️ Light</button>
+              <button class="seg-btn ${p.theme==='dark'?'active':''}" onclick="Settings.setTheme('dark')">${icon('moon')} Dark</button>
+              <button class="seg-btn ${p.theme==='light'?'active':''}" onclick="Settings.setTheme('light')">${icon('sun')} Light</button>
             </div>
           </div>
 
@@ -519,7 +519,7 @@ const Settings = (() => {
     APP.darkMode = isDark;
     document.body.classList.toggle('light', !isDark);
     const btn = document.getElementById('dark-btn');
-    if (btn) btn.textContent = isDark ? '☀️ Light' : '🌙 Dark';
+    if (btn) btn.innerHTML = (isDark ? icon('sun') + ' Light' : icon('moon') + ' Dark');
     Utils.LS.set('fifo_dark', isDark ? '1' : '0');
     render();
   }

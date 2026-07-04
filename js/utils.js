@@ -41,6 +41,11 @@ const fnum = v => Math.round(v).toLocaleString();
 /** $12.34 */
 const fprice = v => '$' + Number(v).toFixed(2);
 
+/** Inline reference to a <symbol> in index.html's icon sprite — use for any
+ *  icon injected via innerHTML/template strings from JS (static markup in
+ *  index.html references the sprite directly, no need for this there). */
+const icon = name => `<svg class="icon"><use href="#icon-${name}"/></svg>`;
+
 // ── תאריכים ────────────────────────────────────────────────
 
 /** DD/MM/YYYY → Date */
@@ -412,7 +417,7 @@ function finalRecommendation(score) {
 
 window.Utils = {
   TAX, DEFAULT_ILS, MONTHLY_ILS, GREEN, RED, BLUE, GOLD,
-  f$, fILS, fpct, fnum, fprice,
+  f$, fILS, fpct, fnum, fprice, icon,
   parseDD, toDD, isoToDD, ddToISO, monthLabel, currentMonthKey,
   rateForMonth, usdToIls, tradesNetIls,
   normalizeTrade, calcStats, detectMistakes,

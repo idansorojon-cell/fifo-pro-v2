@@ -147,7 +147,7 @@ function toggleDark() {
   APP.darkMode = !APP.darkMode;
   document.body.classList.toggle('light', !APP.darkMode);
   const btn = document.getElementById('dark-btn');
-  if (btn) btn.textContent = APP.darkMode ? '☀️ Light' : '🌙 Dark';
+  if (btn) btn.innerHTML = (APP.darkMode ? icon('sun') + ' Light' : icon('moon') + ' Dark');
   Utils.LS.set('fifo_dark', APP.darkMode ? '1' : '0');
 }
 
@@ -844,7 +844,7 @@ async function _initApp() {
   APP.darkMode = savedDark !== '0';
   if (!APP.darkMode) document.body.classList.add('light');
   const btn = document.getElementById('dark-btn');
-  if (btn) btn.textContent = APP.darkMode ? '☀️ Light' : '🌙 Dark';
+  if (btn) btn.innerHTML = (APP.darkMode ? icon('sun') + ' Light' : icon('moon') + ' Dark');
 
   // load() clears in-memory state first, then fetches from the authenticated backend.
   // If it returns false (401 or network failure), do NOT render — the login screen

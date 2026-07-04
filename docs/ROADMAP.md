@@ -35,6 +35,15 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 
 ## P2 — Product
 
+- [ ] **Verify Polygon is actually unwired in the live backend.** Live
+      console logs observed this session show `[prices] errors: QBTX:
+      POLYGON_API_KEY חסר ב-Script Properties` on every price poll — this
+      contradicts CURRENT_STATUS.md's claim that `handleGetPrices_` calls
+      Finnhub only. Prices still load successfully (2/2), so this may be
+      a harmless fallback-attempt log rather than a real failure, but it
+      wasn't caused by this session's changes (confirmed via `git diff`
+      showing zero uncommitted changes to `AppScript_FULL.gs` at the time
+      it was observed) — worth a follow-up look at `handleGetPrices_`.
 - [ ] Revisit whether Polygon.io should be permanently removed or kept as
       a documented, dormant fallback option (currently dormant code, see
       TECHNICAL_DEBT.md).
@@ -56,6 +65,29 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 - [ ] PWA icon assets (`assets/icon-192.png`, `assets/icon-512.png`)
       referenced in `manifest.json` were not verified to exist this
       session — check if install prompts/icons look broken.
+
+## Design & UX overhaul (in progress — see docs/DESIGN_SYSTEM.md)
+
+FIFO PRO is being deliberately redesigned into a premium trading
+platform, in small reviewable phases, per "Evolution, not Revolution."
+Each phase's rationale and verification is logged in
+`docs/DESIGN_SYSTEM.md`'s "Phase log."
+
+- [x] **Phase 1 — icon system.** Replaced emoji with a hand-authored SVG
+      sprite across main nav, hub headers, hub cards, mobile bottom nav,
+      and header actions. See DESIGN_SYSTEM.md.
+- [ ] Phase 2 (candidate) — card-title and in-content icon pass (the
+      emoji intentionally left alone in Phase 1: alert badge, risk pills,
+      Mission Control inline glyphs, all `js/*.js` card titles).
+- [ ] Phase 3 (candidate) — Mission Control visual hierarchy pass (hero
+      P&L number given genuine typographic dominance over secondary
+      metrics).
+- [ ] Phase 4+ — KPI/card component differentiation, form/native-control
+      restyle, chart restyle, motion pass, loading/empty states. Full
+      original proposal (colors, typography, spacing system, borrowed
+      ideas from TradingView/Linear/Bloomberg/Stripe) discussed in
+      session history; DESIGN_SYSTEM.md is the living version of that
+      plan going forward.
 
 ## Explicitly out of scope (per repeated instruction this session)
 

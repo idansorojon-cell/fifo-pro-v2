@@ -257,7 +257,23 @@ body {
 .btn-icon:hover { background: var(--surface-3); color: var(--text-1); border-color: var(--border-2); }
 .btn-icon.danger:hover { background: var(--red-dim); color: var(--red); border-color: var(--red); }
 
+/* ── Icon system (see docs/DESIGN_SYSTEM.md) ─────────────
+   Sized to 1em so it inherits whatever font-size the slot it sits in
+   already had (nav-cat-icon, hub-icon, hub-card-icon, bn-icon) — no
+   per-instance sizing needed. Color is currentColor, so it inherits
+   hover/active states for free too. */
+.icon {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}
+
 .dark-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 5px 12px;
   border-radius: var(--r-full);
   border: 1px solid var(--border-2);
@@ -1337,13 +1353,14 @@ body.light .nav-cat.active {
   margin-bottom: 28px;
 }
 .hub-icon {
-  font-size: 36px;
+  font-size: 32px;
   width: 60px;
   height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--surface-2);
+  color: var(--green);
   border-radius: var(--r-lg);
   flex-shrink: 0;
 }
@@ -1447,16 +1464,20 @@ body.light .nav-cat.active {
 
 .hub-card-icon {
   grid-area: icon;
-  font-size: 26px;
+  font-size: 22px;
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--surface-2);
+  color: var(--text-2);
   border-radius: var(--r-md);
   flex-shrink: 0;
+  transition: color var(--t-fast);
 }
+.hub-card:hover .hub-card-icon  { color: var(--green); }
+.hub-card-ai:hover .hub-card-icon { color: var(--purple); }
 .hub-card-label {
   grid-area: label;
   font-size: 15px;
@@ -1513,7 +1534,7 @@ body.light .nav-cat.active {
   font-family: var(--font-main);
   transition: all var(--t-fast);
 }
-.bn-icon { font-size: 20px; transition: transform var(--t-fast); }
+.bn-icon { font-size: 20px; color: var(--text-3); transition: transform var(--t-fast), color var(--t-fast); }
 .bn-label {
   font-size: 9.5px;
   color: var(--text-3);
@@ -1521,7 +1542,7 @@ body.light .nav-cat.active {
   letter-spacing: 0.3px;
   transition: color var(--t-fast);
 }
-.bn-item.active .bn-icon { transform: scale(1.1); }
+.bn-item.active .bn-icon { transform: scale(1.1); color: var(--green); }
 .bn-item.active .bn-label { color: var(--green); }
 .bn-item:active .bn-icon { transform: scale(0.92); }
 
@@ -2299,6 +2320,9 @@ select.s-input { cursor: pointer; }
 
 /* ── Logout button in header ────────────────────────────── */
 .logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 5px 12px;
   border-radius: var(--r-full);
   border: 1px solid var(--border-2);

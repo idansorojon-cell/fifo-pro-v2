@@ -11,8 +11,11 @@
 // on a cache-first-served stale bundle indefinitely. Bump this version
 // any time index.html or any js/*.js file changes, or clients will keep
 // serving old code forever regardless of what's deployed.
-const CACHE_NAME   = 'fifopro-v4';
-const STATIC_CACHE = 'fifopro-static-v4';
+// Bumped v4 -> v5: icon system (Design Phase 1) — index.html (icon
+// sprite + markup), css/style.css, js/utils.js, js/app.js, js/settings.js
+// all changed.
+const CACHE_NAME   = 'fifopro-v5';
+const STATIC_CACHE = 'fifopro-static-v5';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

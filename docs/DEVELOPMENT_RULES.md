@@ -117,6 +117,13 @@ one combined rulebook.
 - New heavy content (tables, charts, long lists) should render lazily on
   tab-open, not eagerly at boot — this is now an explicit house rule after
   the lazy-rendering fix this session, not just an implementation detail.
+- **No new emoji in the UI.** FIFO PRO is being deliberately redesigned
+  away from emoji icons toward a hand-authored SVG sprite (see
+  `docs/DESIGN_SYSTEM.md`). Any new icon need should add a `<symbol>` to
+  the sprite in `index.html` (matching the existing 24x24 stroke-icon
+  spec), not an emoji character. Static markup references the sprite
+  directly (`<svg class="icon"><use href="#icon-name"/></svg>`); JS
+  template strings use the `icon(name)` helper in `js/utils.js`.
 
 ## Verification checklist before considering a fix "done"
 

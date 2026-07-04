@@ -237,6 +237,15 @@ APP = {
   (`fifo_alerts_shown_v1`) so the same alert only toasts once per day,
   even though `checkAlerts()` recomputes on every 15s poll.
 
+## Icon system
+
+Main nav, hub headers, hub cards, mobile bottom nav, and header actions
+use a hand-authored SVG `<symbol>` sprite (defined once near the top of
+`index.html`'s `<body>`) instead of emoji — full spec, rationale, and
+the icon inventory live in `docs/DESIGN_SYSTEM.md`. Card-title and
+in-content emoji (alert badge, risk pills, Mission Control glyphs) are
+intentionally not yet migrated — see that doc's "Phase log."
+
 ## PWA behavior
 
 - `manifest.json` declares a standalone, portrait, RTL (`dir: "he"`) app
