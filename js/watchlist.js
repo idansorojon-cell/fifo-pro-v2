@@ -172,8 +172,8 @@ const Watchlist = (() => {
         <div class="wl-meta">${live?.updated || ''}</div>
 
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">🎯 Analyze</button>
-          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">📋 Trade Plan</button>
+          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">${icon('target')} Analyze</button>
+          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">${icon('clipboard')} Trade Plan</button>
         </div>
       </div>
     `;

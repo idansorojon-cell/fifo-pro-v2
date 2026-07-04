@@ -2330,13 +2330,17 @@ select.s-input { cursor: pointer; }
 
 /* ── Empty States ───────────────────────────────────────── */
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   padding: 60px 20px;
   color: var(--text-3);
 }
-.empty-icon  { font-size: 48px; margin-bottom: 16px; animation: float 3s ease infinite; }
-.empty-title { font-size: 18px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
-.empty-sub   { font-size: 14px; line-height: 1.6; }
+.empty-icon  { font-size: 48px; margin-bottom: 16px; animation: float 3s ease infinite; opacity: 0.5; }
+.empty-title { font-size: 18px; font-weight: 700; color: var(--text-2); margin-bottom: 8px; }
+.empty-sub   { font-size: 14px; line-height: 1.5; color: var(--text-3); max-width: 320px; }
 .empty-cta   { margin-top: 16px; }
 
 /* ── News Impact ────────────────────────────────────────── */
@@ -2619,20 +2623,13 @@ select.s-input { cursor: pointer; }
    (the exact cascade-order trap documented in DESIGN_SYSTEM.md's Mission
    Control section). One definition now, not two disagreeing ones. */
 
-/* ═══════════════════════════════════════════════════════════
-   EMPTY STATES — premium upgrade
-═══════════════════════════════════════════════════════════ */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-}
-.empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-.empty-state .empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-.empty-state .empty-sub { font-size: 14px; color: var(--text-3); max-width: 320px; line-height: 1.5; }
+/* Empty states' "premium upgrade" duplicate (display:flex layout, icon
+   opacity, title/sub spacing) was merged into the single .empty-state
+   definition above (Phase 5a) and removed from here — same duplicate-
+   block shape as the .kpi fix in Phase 4, this time additive rather than
+   conflicting (verified via getComputedStyle before merging: both blocks'
+   properties were already live simultaneously, nothing was actually dead).
+   One definition now, not two 300 lines apart. */
 
 /* ═══════════════════════════════════════════════════════════
    MOBILE: dashboard hero, settings

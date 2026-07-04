@@ -22,7 +22,7 @@ const TradeReplay = (() => {
 
     const months = getMonths();
     if (!months.length) {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">🎬</div><div class="empty-title">אין עסקאות</div><div class="empty-sub">הוסף עסקאות כדי לראות Replay</div></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">${icon('film')}</div><div class="empty-title">אין עסקאות</div><div class="empty-sub">הוסף עסקאות כדי לראות Replay</div></div>`;
       return;
     }
 

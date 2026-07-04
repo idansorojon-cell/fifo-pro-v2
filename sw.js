@@ -34,8 +34,8 @@
 // list-card (.card--flush) differentiation, removed confirmed-dead CSS
 // (.kpi-v3, .card-glass, .kpi-trend, .prog-kpi-val) — css/style.css,
 // css/mobile.css, index.html, js/dashboard.js.
-const CACHE_NAME   = 'fifopro-v10';
-const STATIC_CACHE = 'fifopro-static-v10';
+const CACHE_NAME   = 'fifopro-v11';
+const STATIC_CACHE = 'fifopro-static-v11';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

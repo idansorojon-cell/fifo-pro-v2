@@ -82,10 +82,10 @@ const Trades = (() => {
         <td style="color:var(--text-3)">${t.hold_days}י'</td>
         <td>
           <div class="actions" style="display:flex;gap:4px">
-            <button class="btn-icon ${t.notes?'':''}      " onclick="Journal.openNote(${t.id})"    title="הערה">📝</button>
-            <button class="btn-icon ${t.entry_reason?'':''}" onclick="Journal.openModal(${t.id})"  title="יומן">📓</button>
-            <button class="btn-icon"                          onclick="Trades.openEdit(${t.id})"    title="ערוך">✏️</button>
-            <button class="btn-icon danger"                   onclick="Trades.remove(${t.id})"      title="מחק">✕</button>
+            <button class="btn-icon" onclick="Journal.openNote(${t.id})"   title="הערה">${icon('note')}</button>
+            <button class="btn-icon" onclick="Journal.openModal(${t.id})"  title="יומן">${icon('book')}</button>
+            <button class="btn-icon" onclick="Trades.openEdit(${t.id})"    title="ערוך">${icon('edit')}</button>
+            <button class="btn-icon danger" onclick="Trades.remove(${t.id})" title="מחק">${icon('x')}</button>
           </div>
         </td>
       </tr>`;

@@ -119,16 +119,40 @@ Each phase's rationale and verification is logged in
       `.kpi`'s styling; removed confirmed-dead CSS (`.kpi-v3`,
       `.card-glass`, `.kpi-trend`, `.prog-kpi-val`). Zero calculation
       changes. See DESIGN_SYSTEM.md.
-- [ ] Phase 5+ — form/native-control restyle, chart restyle, motion pass,
-      loading/empty states, a full stylesheet-wide spacing audit (the
-      scattered 10/12/14/18/28px margins outside the Dashboard tab,
-      confirmed but not fixed this phase), the `.card`/`.card-title`
-      `!important` duplicate adjacent to the one resolved in Phase 4, and
-      the `.perf-grid`/`.grade-card`/`.mistake-grid`/`.insight-grid`
-      families on Analysis screens (explicitly out of scope through
-      Phase 4). DESIGN_SYSTEM.md is the living version of the original
-      full proposal (colors, typography, spacing system, borrowed ideas
-      from TradingView/Linear/Bloomberg/Stripe) going forward.
+- [x] **Phase 5a — table icon-buttons, empty-state icons, `.empty-state`
+      de-dup.** First slice of Forms/Tables/Controls Polish. Migrated
+      table row-action buttons (Trades/Positions/Journal/Watchlist) and
+      three lazily-rendered empty states (Portfolio Heatmap/Performance
+      Timeline/Trade Replay) from emoji to the SVG sprite (3 new symbols:
+      `edit`, `x`, `note`; reused existing `book`/`target`/`clipboard`/
+      `grid`/`calendar`/`film` where semantically exact). Consolidated
+      `.empty-state`'s duplicate CSS definition (300 lines apart) into
+      one — verified via `getComputedStyle` first that it was additive,
+      not conflicting, so the merge preserves the exact prior appearance.
+      Zero calculation/backend changes. See DESIGN_SYSTEM.md.
+- [ ] **Phase 5b** — Trades modal date fields (`f-buy-date`/`f-sell-date`)
+      → native `type="date"`, matching Quick Trade/Position modal.
+- [ ] **Phase 5c** — Unify Settings' `.s-input`/`.s-input-num` with the
+      global `input, select, textarea` styling.
+- [ ] **Phase 5d** — Replace native `confirm()` (6 call sites) with a
+      styled confirmation modal.
+- [ ] **Phase 5e** — Wire up the dormant `.skeleton*` classes as real
+      loading states for Trades/Positions/Journal (currently built,
+      zero references anywhere).
+- [ ] **Phase 5f** — Journal's filter bar → reuse `.search-row` instead of
+      its own inline-styled div + hardcoded per-select `max-width`.
+- [ ] Phase 5g+ — chart restyle, motion pass, a full stylesheet-wide
+      spacing audit (the scattered 10/12/14/18/28px margins outside the
+      Dashboard tab, confirmed but not fixed through Phase 5a), mobile
+      touch-target sizing for `.btn-icon` in tables, visible keyboard
+      `:focus`/`:focus-visible` state for buttons, the `.card`/
+      `.card-title` `!important` duplicate adjacent to the one resolved
+      in Phase 4, and the `.perf-grid`/`.grade-card`/`.mistake-grid`/
+      `.insight-grid` families on Analysis screens (explicitly out of
+      scope through Phase 5a). DESIGN_SYSTEM.md is the living version of
+      the original full proposal (colors, typography, spacing system,
+      borrowed ideas from TradingView/Linear/Bloomberg/Stripe) going
+      forward.
 
 ## Explicitly out of scope (per repeated instruction this session)
 

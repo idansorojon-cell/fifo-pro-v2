@@ -647,7 +647,7 @@ function renderPortfolioHeatmap() {
   if (!el) return;
 
   if (!APP.trades.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><div class="empty-title">אין עסקאות</div></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">${icon('grid')}</div><div class="empty-title">אין עסקאות</div></div>`;
     return;
   }
 

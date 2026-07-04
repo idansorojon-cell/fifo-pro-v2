@@ -74,6 +74,13 @@ trader's numbers are the product.
   differentiation" below for the full audit, scope, and a real
   cascade-conflict this phase found and fixed (not just avoided).
 
+- **Phase 5a: table icon-button + empty-state icon migration, `.empty-state`
+  duplicate consolidation.** First slice of the Forms/Tables/Controls Polish
+  phase — see "Phase 5a" below for the full audit and what's deliberately
+  deferred to 5b/5c/5d/5e/5f (native-date fields, confirm() replacement,
+  skeleton loading states, `.s-input`/global-input unification, Journal's
+  filter-bar inline styles). Zero calculation/backend changes.
+
 ## Mission Control hierarchy (Phase 3)
 
 Three deliberate tiers, top to bottom, each visually quieter than the one
@@ -463,3 +470,99 @@ after (it was); zero references confirmed via `grep` before deleting
   values outside the Dashboard tab) — confirmed out of scope, not fixed.
 - Chart.js's internal color/gridline config — already tracked separately
   in `ROADMAP.md`'s Phase 4+ item.
+
+## Phase 5a: table icon-buttons, empty-state icons, `.empty-state` de-dup
+
+### Audit (full findings in the Phase 5 UX-audit conversation)
+
+Forms/tables/controls review found the icon migration from Phases 1–3 had
+not reached table row-actions or the three empty-states that render lazily
+on tab-open (missed by earlier phases since they don't exist in the DOM at
+boot): `positions.js`/`trades.js`/`journal.js`'s edit/delete buttons and
+`watchlist.js`'s Analyze/Trade Plan buttons were still emoji (`✏️ ✕ 📝 📓
+🎯 📋`) inside the already-`.btn-icon`-sprite-aware class; `app.js`'s
+Portfolio Heatmap, `performanceTimeline.js`, and `tradeReplay.js` empty
+states were still emoji (`🌡️ 📅 🎬`). Separately, `.empty-state` (and its
+`.empty-icon`/`.empty-title`/`.empty-sub` children) was defined **twice**
+— once at the original "Empty States" section, once ~300 lines later in
+a "premium upgrade" section — the same duplicate-block shape as the
+`.kpi` conflict Phase 4 found and fixed.
+
+**Verified via `getComputedStyle` before touching anything, not assumed:**
+unlike the Phase 4 `.kpi` case, this duplicate was **additive, not
+conflicting** — CSS cascade resolves per-property, not per-rule, so where
+the two blocks set *different* properties (first block: `color`,
+`animation: float`; second block: `display:flex` layout, `opacity:0.5`,
+`max-width:320px` on `.empty-sub`) both applied simultaneously the whole
+time. Only genuinely-overlapping properties had a real winner:
+`.empty-title`'s `margin-bottom` (8px, from the higher-specificity second
+block, not the first block's 6px) and `.empty-sub`'s `line-height` (1.5,
+not 1.6). Confirmed all of this live via a scratch element + `getComputedStyle`
+before writing the merge, then merged into one block preserving the exact
+existing computed appearance (icon still floats *and* sits at 0.5 opacity,
+title margin stays 8px, sub line-height stays 1.5/max-width 320px) — a
+correction to first-pass reading of the cascade, not a visual change.
+
+### What this phase did
+
+- **Three new sprite symbols** (`edit`, `x`, `note`) added to
+  `index.html`'s `<defs>` block, matching the existing 24x24/stroke-1.8
+  visual spec exactly. `book`/`target`/`clipboard`/`grid`/`calendar`/`film`
+  already existed and were reused where the semantic match was exact (e.g.
+  the Portfolio Heatmap's empty state now uses the same `grid` icon as its
+  own hub card; Trade Replay's empty state uses the same `film` icon as
+  its hub card) — no new symbol added where an existing one already meant
+  the same thing.
+- **Table row-action buttons migrated**: `trades.js` (note/journal/edit/
+  delete, 4 buttons), `positions.js` (edit/delete), `journal.js` (edit),
+  `watchlist.js` (Analyze/Trade Plan) — all via the existing `icon(name)`
+  helper (`js/utils.js`), zero new markup pattern introduced.
+- **Three empty-state emoji migrated** to the same helper (Portfolio
+  Heatmap → `grid`, Performance Timeline → `calendar`, Trade Replay →
+  `film`).
+- **`.empty-state` consolidated to one definition** at its original
+  location; the "premium upgrade" duplicate removed, with a comment
+  pointing to this section (same pattern as the Phase 4 `.kpi` comment).
+- **A harmless one-line cleanup in passing**: `trades.js`'s row-action
+  markup had a literal no-op ternary (`${t.notes?'':''}`, always empty
+  string) on the exact line being rewritten for icons — removed since it
+  was already being touched; zero behavior change (both branches were
+  empty).
+
+### Verified, not assumed
+
+Confirmed all three new symbol IDs exist in the DOM after load; confirmed
+row-action button `outerHTML` in Trades/Positions/Journal/Watchlist
+resolves to the correct `<use href="#icon-*">` per button, not leftover
+emoji; confirmed zero new console errors after a full service-worker/cache
+clear + reload; visually confirmed icons render correctly in both dark and
+light mode (color is `currentColor`, inherited, not hardcoded) via
+screenshot; confirmed the three empty states via a temporary
+`APP.trades = []` + direct render-function call (production data has real
+trades, so these don't naturally trigger) — screenshotted the Portfolio
+Heatmap empty state to confirm centered layout, floating+dimmed icon, and
+title render as expected; confirmed at both desktop (1400px) and mobile
+(375×812) viewports.
+
+### Deliberately deferred to later Phase 5 sub-phases (not forgotten)
+
+- **5b** — Trades modal's `f-buy-date`/`f-sell-date` free-text `DD/MM/YYYY`
+  inputs → native `type="date"` (matching Quick Trade/Position modal),
+  using the existing `toDD`/`ddToISO` helpers. Touches `Trades.submit()`/
+  `openEdit()` logic, not just markup, so kept out of this pure-icon slice.
+- **5c** — Unifying Settings' `.s-input`/`.s-input-num` with the global
+  `input, select, textarea` styling (same "parallel implementation of one
+  concept" shape as the Phase 4 KPI cards, scoped to Settings only).
+- **5d** — Replacing native `confirm()` (6 call sites: delete trade/
+  position/watchlist item, logout, import backup, load historical seed)
+  with a styled confirmation modal — a genuinely new shared component,
+  not a drive-by extension of something that already exists.
+- **5e** — Wiring up the dormant `.skeleton`/`.skeleton-text/-kpi/-card/
+  -row` classes (built, zero references anywhere) as real loading states
+  for Trades/Positions/Journal.
+- **5f** — Journal's filter bar reusing `.search-row` instead of its own
+  inline-styled div + hardcoded per-select `max-width`.
+- Mobile touch-target sizing for `.btn-icon` in tables
+  (`mobile.css`'s `padding:3px 5px`) — flagged, not addressed this phase.
+- Visible `:focus`/`:focus-visible` state for buttons (currently only
+  inputs/selects get a focus affordance) — flagged, not addressed.

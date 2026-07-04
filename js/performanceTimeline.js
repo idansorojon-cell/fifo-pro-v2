@@ -59,7 +59,7 @@ const PerformanceTimeline = (() => {
     if (!el) return;
 
     if (!APP.trades.length) {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">אין עסקאות</div><div class="empty-sub">הוסף עסקאות כדי לראות Timeline</div></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">${icon('calendar')}</div><div class="empty-title">אין עסקאות</div><div class="empty-sub">הוסף עסקאות כדי לראות Timeline</div></div>`;
       return;
     }
 
