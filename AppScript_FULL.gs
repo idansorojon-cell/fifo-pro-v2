@@ -2656,15 +2656,18 @@ function classifySentiment_(text) {
 //   G = הערות (optional)
 // ════════════════════════════════════════════════════════════
 
-function getOperationsSheet_() {
+function getOperationsSpreadsheet_() {
   const props   = PropertiesService.getScriptProperties();
   const sheetId = props.getProperty('OPERATIONS_SPREADSHEET_ID') || '14e80gt0rcc4DwH1j458kAT1Tz11s-4N8MlWSthF8v9g';
-  let ss;
   try {
-    ss = SpreadsheetApp.openById(sheetId);
+    return SpreadsheetApp.openById(sheetId);
   } catch(e) {
-    ss = SpreadsheetApp.getActiveSpreadsheet();
+    return SpreadsheetApp.getActiveSpreadsheet();
   }
+}
+
+function getOperationsSheet_() {
+  const ss = getOperationsSpreadsheet_();
   return ss ? ss.getSheetByName('פעולות') : null;
 }
 
@@ -2891,25 +2894,24 @@ function getOpenQtyForSymbol_(symbol) {
 // Deliberately strict: this writes to the trader's real financial ledger,
 // not an annotation sheet, so silent coercion of bad input is not
 // acceptable here the way it might be elsewhere.
-// Parses a plain "YYYY-MM-DD" date-only string (from a native
-// <input type="date">) as LOCAL midnight — never pass such a string
-// straight to `new Date(str)`. Per ECMA-262, a date-only ISO string is
-// parsed as UTC midnight, while every other date-consuming function in
-// this file (formatDateDDMMYYYY_, applyFIFO_'s sort, the month-key
-// generator) reads dates back using LOCAL getters. When the script's
-// configured timezone is behind UTC, that mismatch silently rolls the
-// date back to the previous calendar day (confirmed: a "2026-07-05" op
-// was appended to the sheet as "7/4/2026 17:00:00" — one day and a
-// nonzero time-of-day off from what was actually picked in the form).
-// Constructing the Date from explicit y/m/d components instead uses
-// LOCAL semantics — guaranteed local midnight on the intended calendar
-// day, matching how a human typing a date directly into the sheet, and
-// how every local-getter read path here, already behaves. Returns an
-// Invalid Date (NaN time) for anything that isn't parseable as y-m-d.
-function parseIsoDateOnlyLocal_(isoStr) {
-  const parts = String(isoStr || '').split('-').map(Number);
-  if (parts.length !== 3 || parts.some(function(n) { return isNaN(n); })) return new Date(NaN);
-  return new Date(parts[0], parts[1] - 1, parts[2]);
+//
+// A "YYYY-MM-DD" string from a native <input type="date"> is a CALENDAR
+// DATE, not a point in time — it should never become a JS `Date` object
+// on the write side at all. Two earlier attempts tried to fix this by
+// changing WHICH timezone a `Date` object was anchored to (UTC, then the
+// script's own timezone, then the spreadsheet's own timezone) and all
+// three produced a wrong result, because the real defect was creating a
+// `Date`/timestamp in the first place for something that is conceptually
+// a plain calendar date. The 110 pre-existing rows in "פעולות" were never
+// written this way — a human typed a date string directly into the cell
+// and Google Sheets' own native date recognition converted it, with zero
+// `Date` objects and zero timezone math anywhere in that path. This
+// validator (and the callers below) now do the same: validate the
+// "YYYY-MM-DD" shape and pass the STRING itself straight into
+// appendRow(), letting Sheets do exactly what it already does for every
+// hand-typed row. isValidIsoDateOnly_ returns a boolean, not a Date.
+function isValidIsoDateOnly_(isoStr) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(isoStr || ''));
 }
 
 function validateOperation_(op) {
@@ -2930,9 +2932,8 @@ function validateOperation_(op) {
 
   if (!op.date) {
     errors.push('תאריך חסר');
-  } else {
-    const d = parseIsoDateOnlyLocal_(op.date);
-    if (isNaN(d.getTime())) errors.push('תאריך לא תקין');
+  } else if (!isValidIsoDateOnly_(op.date)) {
+    errors.push('תאריך לא תקין');
   }
 
   return errors;
@@ -2943,10 +2944,8 @@ function validateOperation_(op) {
  * POST { action:'appendOperation', op:{ date, symbol, action, qty, price, commission?, notes? } }
  * Used by: New Position / Quick Trade Buy (action:'BUY'), Quick Trade Sell (action:'SELL').
  * date is expected as an ISO string (YYYY-MM-DD) from the frontend's native
- * <input type="date"> — parsed via parseIsoDateOnlyLocal_, never the raw
- * Date constructor, to avoid both the DD/MM vs MM/DD ambiguity of a
- * slash-separated string AND the UTC-vs-local-midnight day-shift a plain
- * ISO string triggers in new Date(str). See parseIsoDateOnlyLocal_ above.
+ * <input type="date"> and is written to the sheet AS THAT STRING — never
+ * converted to a JS Date object. See isValidIsoDateOnly_ above for why.
  */
 function handleAppendOperation_(op) {
   const errors = validateOperation_(op);
@@ -2958,7 +2957,7 @@ function handleAppendOperation_(op) {
   const price      = parseFloat(op.price);
   const commission = op.commission !== undefined ? (parseFloat(op.commission) || 0) : 0;
   const notes      = String(op.notes || '').trim();
-  const date       = parseIsoDateOnlyLocal_(op.date);
+  const date       = op.date; // plain "YYYY-MM-DD" string — see isValidIsoDateOnly_ above
 
   if (action === 'SELL') {
     const openQty = getOpenQtyForSymbol_(symbol);
@@ -3006,20 +3005,22 @@ function handleAddTradeOperation_(trade) {
   if (!buyPrice || isNaN(buyPrice) || buyPrice <= 0) errors.push('מחיר קנייה חייב להיות מספר חיובי');
   if (!sellPrice || isNaN(sellPrice) || sellPrice <= 0) errors.push('מחיר מכירה חייב להיות מספר חיובי');
 
-  let buyDate = null, sellDate = null;
+  // Both dates are written as plain "YYYY-MM-DD" strings — never converted
+  // to a JS Date object — same reasoning as isValidIsoDateOnly_ above.
+  // ISO 8601 date-only strings sort correctly with plain string
+  // comparison, so the buy-before-sell check below needs no Date objects
+  // either.
   if (!trade.buy_date) {
     errors.push('תאריך קנייה חסר');
-  } else {
-    buyDate = parseIsoDateOnlyLocal_(trade.buy_date);
-    if (isNaN(buyDate.getTime())) errors.push('תאריך קנייה לא תקין');
+  } else if (!isValidIsoDateOnly_(trade.buy_date)) {
+    errors.push('תאריך קנייה לא תקין');
   }
   if (!trade.sell_date) {
     errors.push('תאריך מכירה חסר');
-  } else {
-    sellDate = parseIsoDateOnlyLocal_(trade.sell_date);
-    if (isNaN(sellDate.getTime())) errors.push('תאריך מכירה לא תקין');
+  } else if (!isValidIsoDateOnly_(trade.sell_date)) {
+    errors.push('תאריך מכירה לא תקין');
   }
-  if (buyDate && sellDate && !isNaN(buyDate.getTime()) && !isNaN(sellDate.getTime()) && sellDate.getTime() < buyDate.getTime()) {
+  if (isValidIsoDateOnly_(trade.buy_date) && isValidIsoDateOnly_(trade.sell_date) && trade.sell_date < trade.buy_date) {
     errors.push('תאריך מכירה לא יכול להיות לפני תאריך קנייה');
   }
 
@@ -3028,8 +3029,8 @@ function handleAddTradeOperation_(trade) {
   const sh = getOperationsSheet_();
   if (!sh) return jsonOut_({ ok: false, error: 'לשונית "פעולות" לא נמצאה' });
 
-  sh.appendRow([buyDate, symbol, 'BUY', qty, buyPrice, 0, notes]);
-  sh.appendRow([sellDate, symbol, 'SELL', qty, sellPrice, 0, '']);
+  sh.appendRow([trade.buy_date, symbol, 'BUY', qty, buyPrice, 0, notes]);
+  sh.appendRow([trade.sell_date, symbol, 'SELL', qty, sellPrice, 0, '']);
   return jsonOut_({ ok: true });
 }
 
