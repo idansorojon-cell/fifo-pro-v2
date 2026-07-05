@@ -1431,6 +1431,7 @@ function doPost(e) {
       case 'updatePosition':     return handleUpdatePosition_(data.position);
       case 'deletePosition':     return handleDeletePosition_(data.id);
       case 'upsertPositionMeta': return handleUpsertPositionMeta_(data.position);
+      case 'upsertTradeMeta':    return handleUpsertTradeMeta_(data.trade);
       case 'aiChat':         return handleAiChat_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
@@ -1826,6 +1827,109 @@ function handleSeedAll_(trades) {
   ensureHeaders_(sh, TRADE_HEADERS);
   (trades || []).forEach(t => appendRow_(sh, TRADE_HEADERS, t));
   return jsonOut_({ ok: true, count: (trades || []).length });
+}
+
+// ── Trade metadata (Phase B: persistence-architecture fix) ─────────────
+// FIFO-derived trades (applyFIFO_) have no way to know about journal/notes
+// fields (entry_reason, exit_reason, respected_stop, followed_plan, lesson,
+// emotion, notes) — they aren't part of the raw "פעולות" BUY/SELL log.
+// Trades also have no stable id: applyFIFO_ hands out a synthetic,
+// recomputed-every-load id, so matching by id (the way handleUpdateTrade_
+// still does) only coincidentally lines up with the legacy Trades sheet's
+// rows. This generalizes the same fix already used for positions
+// (upsertPositionMeta, matched by symbol) to trades, matched by a
+// composite key built from fields that don't change: symbol + buy_date +
+// sell_date + qty + buy_price + sell_price. See mergeTradeMeta_ below for
+// the read side and docs/TECHNICAL_DEBT.md "Persistence architecture" for
+// the full audit.
+
+const TRADE_META_FIELDS = ['entry_reason','exit_reason','respected_stop','followed_plan','lesson','emotion','notes'];
+
+function tradeMetaDate_(v) {
+  if (v instanceof Date) return formatDateDDMMYYYY_(v);
+  const s = String(v || '').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? s : formatDateDDMMYYYY_(d);
+}
+
+function tradeMetaNum_(v) {
+  return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
+}
+
+function tradeMetaKey_(t) {
+  return [
+    String((t && t.symbol) || '').trim().toUpperCase(),
+    tradeMetaDate_(t && t.buy_date),
+    tradeMetaDate_(t && t.sell_date),
+    tradeMetaNum_(t && t.qty),
+    tradeMetaNum_(t && t.buy_price),
+    tradeMetaNum_(t && t.sell_price)
+  ].join('|');
+}
+
+function handleUpsertTradeMeta_(trade) {
+  if (!trade || !trade.symbol || !trade.sell_date) {
+    return jsonOut_({ ok: false, error: 'symbol and sell_date required' });
+  }
+
+  const sh = getSheet_('Trades');
+  ensureHeaders_(sh, TRADE_HEADERS);
+  const data    = sh.getDataRange().getValues();
+  const headers = data[0];
+  const key     = tradeMetaKey_(trade);
+
+  for (let i = 1; i < data.length; i++) {
+    const rowObj = {};
+    headers.forEach((h, c) => { rowObj[h] = data[i][c]; });
+    if (tradeMetaKey_(rowObj) === key) {
+      const rowArr = headers.map((h, c) =>
+        (TRADE_META_FIELDS.indexOf(h) !== -1 && trade[h] !== undefined) ? trade[h] : data[i][c]);
+      sh.getRange(i + 1, 1, 1, headers.length).setValues([rowArr]);
+      return jsonOut_({ ok: true });
+    }
+  }
+
+  // No existing row for this trade — create one so the annotation has
+  // somewhere to live. Include the identifying fields (needed to
+  // reconstruct the same key next time) plus whatever calc fields the
+  // client already has on hand, purely for a human skimming the sheet —
+  // none of them are read back by anything.
+  const { rows } = readRows_(sh);
+  const newRow = { id: nextId_(rows) };
+  ['symbol','buy_date','sell_date','qty','buy_price','sell_price','cost','gross','tax','net','pct','hold_days','month'].forEach(f => {
+    if (trade[f] !== undefined) newRow[f] = trade[f];
+  });
+  TRADE_META_FIELDS.forEach(f => { newRow[f] = trade[f] !== undefined ? trade[f] : ''; });
+  appendRow_(sh, TRADE_HEADERS, newRow);
+  return jsonOut_({ ok: true });
+}
+
+// Called from handleGetOperations_ right after applyFIFO_ — overlays the
+// 7 annotation fields onto each derived trade, matched by tradeMetaKey_.
+// `notes` is the one field with a real alternate source (the raw "פעולות"
+// row's own notes column, already populated by applyFIFO_) — only
+// overwritten if the legacy sheet's annotation is non-empty, so a note
+// that only ever existed directly in the transaction log isn't clobbered
+// by an always-present-but-empty meta value.
+function mergeTradeMeta_(trades) {
+  const sh = getSheet_('Trades');
+  ensureHeaders_(sh, TRADE_HEADERS);
+  const { rows } = readRows_(sh);
+  const byKey = {};
+  rows.forEach(r => { byKey[tradeMetaKey_(r)] = r; });
+  trades.forEach(t => {
+    const meta = byKey[tradeMetaKey_(t)];
+    if (!meta) return;
+    t.entry_reason   = meta.entry_reason   || '';
+    t.exit_reason    = meta.exit_reason    || '';
+    t.respected_stop = meta.respected_stop || '';
+    t.followed_plan  = meta.followed_plan  || '';
+    t.lesson         = meta.lesson         || '';
+    t.emotion        = meta.emotion        || '';
+    if (meta.notes) t.notes = meta.notes;
+  });
+  return trades;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2597,6 +2701,7 @@ function handleGetOperations_() {
 
     var result = applyFIFO_(ops);
     mergePositionMeta_(result.positions);
+    mergeTradeMeta_(result.trades);
     return jsonOut_({ ok: true, trades: result.trades, positions: result.positions });
   } catch (err) {
     return jsonOut_({ ok: false, error: err.message });

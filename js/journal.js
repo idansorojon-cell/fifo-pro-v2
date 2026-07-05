@@ -73,27 +73,25 @@ const Journal = (() => {
           ${t.emotion || '—'}
         </td>
         <td>
-          <button class="btn-icon action-disabled" onclick="Journal.openModal(${t.id})" title="מבוטל זמנית">${icon('edit')}</button>
+          <button class="btn-icon" onclick="Journal.openModal(${t.id})" title="ערוך">${icon('edit')}</button>
         </td>
       </tr>
     `).join('');
   }
 
   // ── Journal Modal ────────────────────────────────────────
-  // PHASE A (persistence-layer migration): entry/exit reason, respected
-  // stop, followed plan, lesson and emotion all wrote via updateTrade()
-  // to the legacy "Trades" sheet by id — but applyFIFO_ (the primary read
-  // path) hardcodes all six of these fields to '' on every derived trade,
-  // with no merge function to overlay them back (unlike positions'
-  // target/stop/notes). So a save here was *guaranteed* to be invisible
-  // after refresh, for every trade, every time — this is exactly why the
-  // Journal table always shows "—". Disabled at the entry point; see
-  // docs/TECHNICAL_DEBT.md "Persistence architecture" for the full audit.
-  // Original logic kept below, unreachable, as reference for Phase B.
+  // PHASE B (persistence-layer fix): saves via API.upsertTradeMeta, matched
+  // server-side by a composite key (symbol+buy_date+sell_date+qty+
+  // buy_price+sell_price) rather than the trade's synthetic per-load id —
+  // same fix already proven for positions (upsertPositionMeta, by symbol),
+  // generalized here since trades have no single stable field to key on.
+  // getOperations now calls mergeTradeMeta_ right after applyFIFO_, so
+  // these fields survive a reload. See AppScript_FULL.gs
+  // handleUpsertTradeMeta_/mergeTradeMeta_ and docs/TECHNICAL_DEBT.md
+  // "Persistence architecture" for the full audit that found this broken
+  // (Phase A disabled it; this re-enables it correctly).
 
   function openModal(id) {
-    API.setStatus('❌ יומן מסחר מבוטל זמנית — השדות לא היו נשמרים בפועל אחרי רענון', 'warn');
-    return;
     APP.journalId = id;
     const t = APP.trades.find(x => x.id === id);
     if (!t) return;
@@ -113,8 +111,6 @@ const Journal = (() => {
   }
 
   async function save() {
-    API.setStatus('❌ שמירת יומן מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
-    return;
     const t = APP.trades.find(x => x.id === APP.journalId);
     if (!t) { closeModal(); return; }
     const updated = {
@@ -128,7 +124,7 @@ const Journal = (() => {
     };
     closeModal();
     API.setStatus('שומר יומן...', 'info');
-    const res = await API.updateTrade(updated);
+    const res = await API.upsertTradeMeta(updated);
     if (res.ok) {
       APP.trades = APP.trades.map(x => x.id === updated.id ? updated : x);
       invalidateStats();
@@ -136,20 +132,14 @@ const Journal = (() => {
       render();
       Trades.render();
     } else {
-      API.setStatus('❌ שגיאה בשמירה', 'error');
+      API.setStatus('❌ ' + (res.error || 'שגיאה בשמירה'), 'error');
     }
   }
 
   // ── Notes Modal ──────────────────────────────────────────
-  // PHASE A: same root cause as the Journal modal above — notes written
-  // here go to the legacy "Trades" sheet, which is not what applyFIFO_
-  // reads for a trade's `notes` field (it reads the notes column on the
-  // raw "פעולות" row itself). Disabled at the entry point; see
-  // docs/TECHNICAL_DEBT.md "Persistence architecture".
+  // PHASE B: same fix as the Journal modal above.
 
   function openNote(id) {
-    API.setStatus('❌ הערות עסקה מבוטלות זמנית — לא היו נשמרות בפועל אחרי רענון', 'warn');
-    return;
     APP.noteId = id;
     const t = APP.trades.find(x => x.id === id);
     document.getElementById('note-text').value = t?.notes || '';
@@ -162,20 +152,18 @@ const Journal = (() => {
   }
 
   async function saveNote() {
-    API.setStatus('❌ שמירת הערה מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
-    return;
     const txt = document.getElementById('note-text').value.trim();
     const t   = APP.trades.find(x => x.id === APP.noteId);
     if (!t) { closeNote(); return; }
     closeNote();
     API.setStatus('שומר הערה...', 'info');
-    const res = await API.updateTrade({ ...t, notes: txt });
+    const res = await API.upsertTradeMeta({ ...t, notes: txt });
     if (res.ok) {
       APP.trades = APP.trades.map(x => x.id === t.id ? { ...x, notes: txt } : x);
       API.setStatus('✓ הערה נשמרה', 'ok');
       Trades.render();
     } else {
-      API.setStatus('❌ שגיאה', 'error');
+      API.setStatus('❌ ' + (res.error || 'שגיאה'), 'error');
     }
   }
 

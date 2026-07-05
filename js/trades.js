@@ -82,8 +82,8 @@ const Trades = (() => {
         <td style="color:var(--text-3)">${t.hold_days}י'</td>
         <td>
           <div class="actions" style="display:flex;gap:4px">
-            <button class="btn-icon action-disabled" onclick="Journal.openNote(${t.id})"   title="הערה — מבוטל זמנית">${icon('note')}</button>
-            <button class="btn-icon action-disabled" onclick="Journal.openModal(${t.id})"  title="יומן — מבוטל זמנית">${icon('book')}</button>
+            <button class="btn-icon" onclick="Journal.openNote(${t.id})"   title="הערה">${icon('note')}</button>
+            <button class="btn-icon" onclick="Journal.openModal(${t.id})"  title="יומן">${icon('book')}</button>
             <button class="btn-icon action-disabled" onclick="Trades.openEdit(${t.id})"    title="ערוך — מבוטל זמנית">${icon('edit')}</button>
             <button class="btn-icon danger action-disabled" onclick="Trades.remove(${t.id})" title="מחק — מבוטל זמנית">${icon('x')}</button>
           </div>

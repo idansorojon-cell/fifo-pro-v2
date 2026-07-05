@@ -188,6 +188,11 @@ const API = (() => {
   const deleteTrade = id     => post({ action:'delete', id });
   const seedAll     = trades => post({ action:'seedAll',trades });
   const setGoal     = goal   => post({ action:'setGoal', goal });
+  // Composite-key-keyed upsert for journal/notes fields — required when
+  // trades come from getOperations (FIFO-derived, synthetic per-load id,
+  // never a real row id in the Trades sheet). See AppScript_FULL.gs
+  // handleUpsertTradeMeta_.
+  const upsertTradeMeta = trade => post({ action:'upsertTradeMeta', trade });
 
   // ── Positions ──────────────────────────────────────────
 
@@ -439,7 +444,7 @@ const API = (() => {
   return {
     isConfigured, setStatus, showSpinner,
     loadAll,
-    addTrade, updateTrade, deleteTrade, seedAll, setGoal,
+    addTrade, updateTrade, deleteTrade, seedAll, setGoal, upsertTradeMeta,
     addPosition, updatePosition, deletePosition, upsertPositionMeta,
     addWatchlistItem, removeWatchlistItem, getWatchlist,
     getIndicators, getNews,
