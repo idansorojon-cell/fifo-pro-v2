@@ -16,12 +16,37 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       a standing guarantee** — re-verify again after any future manual
       redeploy, since the trader has redeployed from local disk ahead of
       git before (see TECHNICAL_DEBT.md).
-- [ ] **Trades' own add/edit/delete still disabled.** Needs the same fix
-      Journal/Notes already got: a composite-key-matched write/read. This
-      is genuinely different from Journal/Notes because it means *editing
-      derived facts*, not just annotations — only makes sense coupled to
-      fixing the source row in `"פעולות"` too (see Phase D). Needs a
-      product decision before implementation, not just a code fix.
+- [x] **New Position, Quick Trade Buy/Sell, and Add Trade — restored via
+      write-through create-only.** Root-cause investigation found these
+      were never designed around `"פעולות"` — they predate it entirely
+      (built against plain CRUD on `Trades`/`Positions`, which worked
+      correctly until `"פעולות"` was added later as a read-path fallback
+      that quietly became the only path, orphaning the old writes). Now
+      append real BUY/SELL rows directly to `"פעולות"` via new
+      `appendOperation`/`addTradeOperation` endpoints — `"פעולות"` stays
+      the single source of truth, nothing writes to the legacy sheets for
+      these new facts. SELL is rejected if it exceeds the real open FIFO
+      quantity. Verified live 2026-07-05 end-to-end (real UI, clearly-
+      marked test data, fresh cache-busted `getOperations` reloads,
+      cleaned up and reconfirmed absent). Committed `be930b9`, pushed and
+      confirmed deployed. See TECHNICAL_DEBT.md — "Write-through
+      create-only paths."
+- [x] **Date-handling bug in the new write-through paths — found and
+      fixed.** A `"YYYY-MM-DD"` date-picker value was being converted to
+      a JS `Date` object before writing, which is wrong for a calendar
+      date (two timezone-based fix attempts both failed for this reason).
+      Fixed by writing the plain string directly, matching how every
+      pre-existing hand-typed row in `"פעולות"` already works. Verified
+      live via 3 iterations of a real test. Committed `dc2dd81`, pushed
+      and confirmed deployed. See TECHNICAL_DEBT.md for the full trace.
+- [ ] **Trades' own edit/delete of an *already-recorded* trade still
+      disabled**, and **Delete Position still disabled.** Both are
+      deliberately out of scope for the write-through create-only phase
+      above — mutating a fact FIFO has already lot-matched against
+      others (trades), or a position that's re-derived fresh from
+      `"פעולות"` every load (positions), is a materially harder problem
+      than appending a new one. Needs its own product decision before
+      implementation, not just a code fix.
 - [ ] **`seedToSheets()`'s dormant `seedAll` path** — writes to the legacy
       `Trades` sheet only when zero trades exist (never fires against
       current production data, but is a latent instance of the same
@@ -86,9 +111,11 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       TECHNICAL_DEBT.md for the unusual deploy path (live backend already
       had this code before the commit existed; a sync commit reconciled
       git with production rather than deploying anything new).
-- [ ] **Phase C — Quick Trade's "buy" tab.** Point it at the already-
-      existing `upsertPositionMeta` instead of the old, id-keyed
-      `addPosition`. Frontend-only, no backend change needed.
+- [x] **Phase C — superseded by the write-through create-only phase
+      above.** Quick Trade's buy tab now appends a real BUY row to
+      `"פעולות"` via `appendOperation` (the same endpoint New Position
+      uses) rather than the originally-planned `upsertPositionMeta` —
+      a more complete fix than what Phase C had scoped.
 - [ ] **Identify the source of the recurring GitHub web-UI stale uploads**
       (see CURRENT_STATUS.md). Fought against git pushes at least 3 times
       this session.

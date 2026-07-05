@@ -95,53 +95,70 @@ set values for them yet, not because the merge is missing).
 position would likely just reappear on the next load since it's derived
 from the trade log), out of scope for this fix.
 
-## Persistence architecture — incomplete data-model migration (Phase A and Phase B shipped, confirmed live; Trades' own CRUD still pending)
+## Persistence architecture — incomplete data-model migration (Phase A, B, and the Stability Sprint write-through create-only phase shipped, confirmed live; Trades' own edit/delete and Delete Position still pending)
 
 ### The full picture
 
 FIFO PRO migrated its primary data model once, from plain CRUD sheets
 (`Trades`/`Positions`, edited by row id) to data **derived fresh on every
-load** from a raw transaction log (`"פעולות"`, via `applyFIFO_`). Exactly
-one write path was updated to bridge old and new: position
-`target`/`stop_loss`/`notes`, via `mergePositionMeta_`/`upsertPositionMeta`,
-matched by **symbol** (not id). Every other write path in the app still
-wrote into the pre-migration sheets, using pre-migration assumptions,
-and the new read path was never taught to look at any of them. A key
-supporting fact: **there is no handler anywhere in `AppScript_FULL.gs`
-that writes to `"פעולות"` itself** — `getOperationsSheet_()` is called
-exactly once, read-only, from `handleGetOperations_`. The one sheet the
-primary read path actually trusts can only be edited by hand.
+load** from a raw transaction log (`"פעולות"`, via `applyFIFO_`). At the
+time of the persistence audit, exactly one write path had been updated
+to bridge old and new: position `target`/`stop_loss`/`notes`, via
+`mergePositionMeta_`/`upsertPositionMeta`, matched by **symbol** (not
+id). Every other write path in the app wrote into the pre-migration
+sheets, using pre-migration assumptions, and the new read path was never
+taught to look at any of them. At that time, **there was no handler
+anywhere in `AppScript_FULL.gs` that wrote to `"פעולות"` itself** —
+`getOperationsSheet_()` was called exactly once, read-only, from
+`handleGetOperations_`.
+
+**This changed in the Stability Sprint session** (see "Write-through
+create-only paths" below): after investigating the *original* design of
+New Position / Add Trade / Quick Trade (they were never designed around
+`"פעולות"` — they were built when the app's only data model was plain
+CRUD on `Trades`/`Positions`, and worked correctly then; the migration
+to `"פעולות"`-derived reads simply never updated them), the decision was
+made to make `"פעולות"` genuinely writable for **new** facts only.
+`handleAppendOperation_`/`handleAddTradeOperation_` now append real
+BUY/SELL rows. Editing or deleting an *already-recorded* row is still
+out of scope — `"פעולות"` remains hand-edited-only for corrections.
 
 Full per-module trace (write path -> read path -> outcome):
 
 | Module | Write path | Read path | Outcome |
 |---|---|---|---|
-| Trades (add/edit) | `addTrade`/`updateTrade` -> legacy `Trades` sheet, **by id** — **disabled at the UI entry point since Phase A**, original logic kept behind an early `return` | `getOperations` -> `applyFIFO_`, never reads `Trades` | ⏸ Intentionally disabled, not silently broken — still needs its own composite-key fix + product decision (P0, unimplemented, see ROADMAP.md) |
-| Trades (delete) | `deleteTrade`, **by id** — **disabled at the UI entry point since Phase A** | same | ⏸ Intentionally disabled — was the one path with real corruption risk before being disabled |
+| Trades (add) — brand-new closed trade | `addTradeOperation` -> appends a matched **BUY+SELL pair straight to `"פעולות"`** — **Stability Sprint write-through** | `getOperations` -> `applyFIFO_`, derives it like any other trade | ✅ Fixed — confirmed live 2026-07-05, survives a full page refresh |
+| Trades (edit/delete of an *already-recorded* trade) | `updateTrade`/`deleteTrade` -> legacy `Trades` sheet, **by id** — **still disabled at the UI entry point**, original logic kept behind an early `return` | `getOperations` -> `applyFIFO_`, never reads `Trades` | ⏸ Intentionally disabled, not silently broken — deliberately out of scope for the write-through phase (mutating a fact FIFO has already lot-matched is a harder problem than appending a new one) — still needs its own product decision (P0, see ROADMAP.md) |
 | Journal (entry/exit reason, respected stop, followed plan, lesson, emotion) | `upsertTradeMeta` -> legacy `Trades` sheet, matched by a **composite key** (`symbol+buy_date+sell_date+qty+buy_price+sell_price`) — **Phase B** | `mergeTradeMeta_()` overlays all 6 fields by the same composite key | ✅ Fixed (Phase B) — confirmed live 2026-07-05 via direct API check; genuinely persists now |
 | Trade Notes | `upsertTradeMeta`, same composite key — **Phase B** | `mergeTradeMeta_()`, same overlay | ✅ Fixed (Phase B) — confirmed live 2026-07-05, same shape as Journal |
 | Positions — target/stop/notes on an *existing* derived position | `upsertPositionMeta`, **by symbol** | `mergePositionMeta_` overlays these 3 fields by symbol | ✅ Fully persistent — confirmed live 2026-07-05 via direct API check |
 | Positions — qty/avg_price on an *existing* position | **disabled at the UI since Phase A** — inputs are now `disabled`, can no longer be typed into | n/a | ⏸ Intentionally disabled — was silently discarding input before being disabled |
-| Positions — brand-new symbol, no FIFO lot | **disabled at the UI since Phase A** — creation blocked with an explanation | n/a | ⏸ Intentionally disabled — was the originally-reported "New Position" bug |
-| Positions — Quick Trade "buy" tab | **disabled at the UI since Phase A** — `QuickTrade.submit()`'s buy branch disabled entirely | n/a | ⏸ Intentionally disabled — was a second, unpatched id-collision risk; Phase C (point it at `upsertPositionMeta`) still pending |
-| Quick Trade "sell" tab | **disabled at the UI since Phase A** — `QuickTrade.submit()`'s sell branch disabled entirely | n/a | ⏸ Intentionally disabled — was a phantom-trade bug |
+| Positions — brand-new symbol, no FIFO lot ("New Position") | `appendOperation` -> appends a **BUY row straight to `"פעולות"`** — **Stability Sprint write-through** | `getOperations` -> `applyFIFO_`, derives it like any other position | ✅ Fixed — confirmed live 2026-07-05, survives a full page refresh; symbol/date/qty/price fields are only editable in the "new position" case, still read-only when editing an existing derived position |
+| Positions — delete | `deletePosition`, **by id** — **still disabled at the UI entry point** | n/a | ⏸ Intentionally disabled — deleting a `"פעולות"`-derived position would just reappear on next load since it's re-derived fresh every time; genuinely out of scope, not part of the write-through phase |
+| Quick Trade "buy" tab | `appendOperation` -> appends a **BUY row straight to `"פעולות"`**, same endpoint as New Position — **Stability Sprint write-through** | same as above | ✅ Fixed — confirmed live 2026-07-05 |
+| Quick Trade "sell" tab | `appendOperation` -> appends a **SELL row straight to `"פעולות"`**, matched against existing open lots by `applyFIFO_` server-side (no buy price/date needed from the form) — **Stability Sprint write-through** | `getOperations` -> `applyFIFO_` | ✅ Fixed — confirmed live 2026-07-05; rejects a SELL that exceeds the real open FIFO quantity for that symbol |
 | Watchlist | `addWatchlist`/`removeWatchlist` -> `Watchlist` sheet, by symbol | `getWatchlist` -> same sheet, same key | ✅ Fully persistent — never went through the migration, single sheet/key throughout |
 | Goals (monthly) | `setGoal` -> `Settings` sheet, key `goal` | `getGoal` -> same sheet, same key | ✅ Fully persistent |
 
-**Trades' edit/delete path is the one elevated to P0**, independent of the
-others: `findRowById_` matches by numeric id, the exact mechanism already
-proven risky and replaced for positions. The legacy `Trades` sheet (108
-rows, ids 1-108, a one-time mirror from the original `seedAll` import)
-currently aligns numerically with the FIFO-derived list's synthetic ids
-only because both were built from the same original chronological order —
-coincidental, not structural, and it has already partially drifted (the 2
-newest trades, ids 109-110, have no legacy row at all). Real financial
-data, silent-corruption potential, and the single most-used CRUD action in
-the app is a combination that outranks the "just invisible after refresh"
-bugs on its own. **Since Phase A, this path is disabled rather than
-silently live** — the corruption risk is neutralized for now, but the
-feature gap (no way to edit/delete a trade at all) remains open and is
-still the top P0 item; see ROADMAP.md.
+**Trades' edit/delete path (of an already-recorded trade) is the one
+elevated to P0**, independent of the others: `findRowById_` matches by
+numeric id, the exact mechanism already proven risky and replaced for
+positions. The legacy `Trades` sheet (108 rows, ids 1-108, a one-time
+mirror from the original `seedAll` import) currently aligns numerically
+with the FIFO-derived list's synthetic ids only because both were built
+from the same original chronological order — coincidental, not
+structural, and it has already partially drifted (the 2 newest trades,
+ids 109-110, have no legacy row at all). Real financial data, silent-
+corruption potential, and the single most-used CRUD action in the app is
+a combination that outranks the "just invisible after refresh" bugs on
+its own. **Since Phase A, this path is disabled rather than silently
+live** — the corruption risk is neutralized for now, but the feature gap
+(no way to edit/delete a trade at all) remains open and is still the top
+P0 item; see ROADMAP.md. **This is unaffected by the Stability Sprint
+write-through work below**, which deliberately only restored *creating*
+new facts (Add Trade, New Position, Quick Trade) — mutating an
+already-recorded row is a different, harder problem (see "The full
+picture" above) and still needs its own product decision.
 
 ### Unified fix strategy (agreed)
 
@@ -161,15 +178,20 @@ never a synthetic/regenerated id.
 Phases: **A** ✅ shipped, confirmed live (frontend-only, disable every
 fake-persistence path — see below) -> **B** ✅ shipped, confirmed live
 (backend, generalize the annotation pattern to trades: new
-`upsertTradeMeta` + `mergeTradeMeta_` — see below) -> **C** (not started,
-frontend-only, point Quick Trade's "buy" tab at the already-existing
-`upsertPositionMeta`) -> **D** (optional/future, writing real trades to
-`"פעולות"` itself — its own design conversation, not scheduled) -> **E**
+`upsertTradeMeta` + `mergeTradeMeta_` — see below) -> **Write-through
+create-only (Stability Sprint)** ✅ shipped, confirmed live — after
+investigating the *original* design of New Position/Add Trade/Quick
+Trade (they predate `"פעולות"` entirely and were never designed around
+it — see below), the decision was made to make `"פעולות"` genuinely
+writable for new facts: New Position and Quick Trade Buy append a BUY
+row, Quick Trade Sell appends a SELL row, Add Trade appends a matched
+BUY+SELL pair. This supersedes the originally-planned Phase C (Quick
+Trade's buy tab → `upsertPositionMeta`) with a more complete fix. **E**
 (Settings fake-controls cleanup, after persistence is safe, per explicit
 instruction) -> **F** (remaining Phase 5 UI polish). Trades' own
-add/edit/delete is intentionally not part of this phase list — it needs
-its own product decision (see ROADMAP.md P0) before it can be scheduled
-as a phase.
+edit/delete of an *already-recorded* trade, and Delete Position, are
+intentionally not part of this phase list — they need their own product
+decision (see ROADMAP.md P0) before they can be scheduled as a phase.
 
 ### Phase A — shipped, confirmed live
 
@@ -239,9 +261,109 @@ live Apps Script `exec` URL): `getOperations` returns `entry_reason`/
 every trade — the fields exist and are populated by the merge, just not
 yet filled in by the trader for historical trades.
 
-**Not yet done:** Trades' own add/edit/delete (still disabled per Phase
-A, pending its own composite-key fix and a product decision — see
-ROADMAP.md P0) and Phase C (Quick Trade's buy tab → `upsertPositionMeta`).
+**Not yet done (as of Phase B):** New Position, Quick Trade, and Add
+Trade were all still disabled per Phase A — fixed in the Stability
+Sprint session below. Trades' own edit/delete of an *already-recorded*
+trade remains disabled, pending a product decision — see ROADMAP.md P0.
+
+### Write-through create-only paths (Stability Sprint) — shipped, confirmed live
+
+**Investigated before implementing anything:** rather than assume New
+Position/Add Trade/Quick Trade needed a new architecture, their git
+history was traced back to the very first commit of `AppScript_FULL.gs`
+(2026-06-16, before `"פעולות"`/`applyFIFO_` existed in the web app at
+all). At that point `handleAddTrade_`/`handleGetTrades_` and
+`handleAddPosition_`/`handleGetPositions_` read and wrote the **same**
+sheet, matched by the **same** id — a genuinely closed, correct loop.
+`"פעולות"`/`applyFIFO_` was introduced later (commit `82d28ff`,
+2026-07-02) as an **additive, documented fallback** (`js/api.js`'s
+`loadAll()` comment: "Try getOperations first... Falls back to the
+legacy getTrades + getPositions endpoints if not available") — the old
+write endpoints were never removed or modified, they simply became
+orphaned once `"פעולות"` was permanently present and the fallback path
+stopped being exercised. **This was restoring an existing capability,
+not inventing a new one** — see HANDOFF.md for the full commit-by-commit
+trace.
+
+**Options considered:** (A) write-through to `"פעולות"` itself, keeping
+it the single source of truth; (B) keep the legacy sheets and show two
+visibly separate categories of trade/position (rejected — breaks FIFO
+correctness across the boundary, re-introduces two sources of truth);
+(C) a staged/pending queue requiring manual approval before promotion
+into `"פעולות"` (rejected — real new architecture, adds friction to
+Quick Trade's whole reason for existing). **Option A was chosen**,
+scoped to **create-only**: appending new facts is architecturally simple
+(`applyFIFO_` is fully stateless — it re-derives everything fresh from
+all rows on every call, so insertion order doesn't matter); editing or
+deleting an *already-recorded* row remains out of scope, since mutating
+a fact FIFO has already lot-matched against others is a materially
+harder problem.
+
+**Implemented:** `handleAppendOperation_` (single BUY/SELL row) and
+`handleAddTradeOperation_` (matched BUY+SELL pair), both in
+`AppScript_FULL.gs`, wired to new `appendOperation`/`addTradeOperation`
+POST actions. `validateOperation_` rejects malformed input; SELL is
+rejected if it exceeds the real open FIFO quantity for that symbol
+(`getOpenQtyForSymbol_`, which re-runs `applyFIFO_` for just that symbol
+off the current sheet contents — never a stale cached value). Frontend:
+`js/positions.js` (`openForm`/`submit` — New Position), `js/quicktrade.js`
+(`submit` — both branches), `js/trades.js` (`openAddForm`/`submit` — add
+only, edit/delete untouched) all call the new endpoints instead of the
+old, disabled legacy-sheet paths. The stale `.action-disabled` CSS class
+was removed from all three now-live buttons in `index.html` (a bug
+introduced and caught within the same session — the JS worked but the
+buttons still looked/behaved disabled).
+
+**Date-handling bug found during live verification, and its real root
+cause.** The first implementation constructed a JS `Date` object for the
+date picked in a native `<input type="date">` (a plain `"YYYY-MM-DD"`
+string). Verifying live, a `2026-07-05` pick showed up in the raw
+`"פעולות"` cell as `7/4/2026 17:00:00` — wrong day, plus a nonzero
+time-of-day. Two attempts to fix this by changing *which timezone* the
+`Date` object was anchored to both failed:
+1. `new Date(isoStr)` — parsed as UTC midnight per ECMA-262.
+2. `new Date(y, m-1, d)` — local midnight in the **Apps Script project's**
+   own configured Time Zone (a setting completely independent from the
+   destination **spreadsheet's own** file-level Time Zone). This
+   produced `7/4/2026 14:00:00` — a different, but still wrong, result.
+   The fact that switching the timezone reference frame produced a
+   *different* wrong answer (not the same one) was the clue that this
+   diagnosis, while internally consistent with the observed numbers, was
+   still solving the wrong layer of the problem.
+
+**The actual root cause:** a `"YYYY-MM-DD"` value from a date picker is
+a **calendar date, not a point in time**, and should never become a JS
+`Date` object on the write side at all. None of the 110 pre-existing
+rows in `"פעולות"` were ever written this way — a human types a date
+string directly into the cell, and Google Sheets' own native date
+recognition converts it, with zero `Date` objects and zero timezone math
+anywhere in that path. The fix: `isValidIsoDateOnly_()` validates the
+`"YYYY-MM-DD"` shape and the callers pass the **string itself** straight
+into `appendRow()`, exactly matching how every hand-typed row already
+works. Buy-before-sell date ordering in `handleAddTradeOperation_` now
+uses plain string comparison (valid for ISO 8601 date-only strings)
+instead of `Date.getTime()`.
+
+**Verified live** (2026-07-05) via three iterations of a real UI test
+(New Position, symbols `ZZDATE`/`ZZDATE2`/`ZZDATE3`): the first two
+showed the wrong day/time in the raw `"פעולות"` cell (confirmed by
+direct visual inspection of the sheet, not assumed), the third showed a
+clean `2026-07-05` with no time component. A fresh, cache-busted
+`getOperations` reload confirmed FIFO derivation, month grouping, and
+hold-day calculation are all unaffected, and that QBTX/ONDL/the real 110
+trades are byte-for-byte unchanged throughout. All test rows (5 from the
+create-path testing, 3 from the date-bug investigation) were cleaned up
+from `"פעולות"` and reconfirmed absent via fresh cache-busted reloads.
+One real gotcha hit during cleanup: the rows were initially deleted from
+the wrong spreadsheet (`"FIFO PRO - WEB"`, which has no `"פעולות"` tab at
+all) before the correct one (resolved via the `OPERATIONS_SPREADSHEET_ID`
+Script Property, or the hardcoded fallback ID if that property is unset)
+was identified.
+
+Committed as `be930b9` (create-path restoration) and `dc2dd81` (date-fix,
+after two earlier incorrect attempts), both pushed and confirmed live via
+the GitHub Deployments API and a cache-busted fetch of the live `sw.js`/
+`js/positions.js`.
 
 ## Security
 

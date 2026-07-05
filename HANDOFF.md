@@ -76,27 +76,48 @@ whichever screen was just opened. Prices poll every 15s via
 `APP.liveData` → re-renders positions grid + Mission Control.
 
 **⚠️ The persistence architecture — read this before touching any
-add/edit/delete flow.** This was the single biggest finding this session
-(§5/§6). `"פעולות"` (a raw BUY/SELL transaction log, possibly in a
-*different* spreadsheet via the `OPERATIONS_SPREADSHEET_ID` Script
-Property) is the **sole source of truth** for trades/positions, derived
-fresh on every `getOperations` call via `applyFIFO_()` (FIFO lot-matching).
-**Nothing in the app can write to `"פעולות"` itself** — it's edited by
-hand by the trader. Two legacy sheets (`Trades`, `Positions`) exist
-alongside it, and the app went through an *incomplete* migration from
-"CRUD these sheets directly" to "derive everything from `"פעולות"`": only
-ONE write path was ever updated to bridge old and new (position
-target/stop/notes, `upsertPositionMeta`, matched by symbol). Every other
-write path (Trades add/edit/delete, Journal, Trade Notes, Quick Trade's
-buy/sell) still wrote to the legacy sheets using pre-migration
-assumptions (matching by a synthetic, regenerated-every-load id), which
-the new read path never consulted — so those edits appeared to save, then
-silently reverted on refresh. **Golden rule going forward: never match
-derived data by a synthetic/regenerated id — always match by a stable,
-content-derived key** (symbol for positions; a composite
+add/edit/delete flow.** This was the single biggest finding of the
+persistence-audit session (§5/§6), and it evolved further in the
+**Stability Sprint** session. `"פעולות"` (a raw BUY/SELL transaction log,
+possibly in a *different* spreadsheet via the `OPERATIONS_SPREADSHEET_ID`
+Script Property) is the **sole source of truth** for trades/positions,
+derived fresh on every `getOperations` call via `applyFIFO_()` (FIFO
+lot-matching). Two legacy sheets (`Trades`, `Positions`) exist alongside
+it, and the app went through an *incomplete* migration from "CRUD these
+sheets directly" to "derive everything from `"פעולות"`": only ONE write
+path was ever updated to bridge old and new (position target/stop/notes,
+`upsertPositionMeta`, matched by symbol). Every other write path (Trades
+add/edit/delete, Journal, Trade Notes, Quick Trade's buy/sell) still
+wrote to the legacy sheets using pre-migration assumptions (matching by
+a synthetic, regenerated-every-load id), which the new read path never
+consulted — so those edits appeared to save, then silently reverted on
+refresh. **Golden rule going forward: never match derived data by a
+synthetic/regenerated id — always match by a stable, content-derived
+key** (symbol for positions; a composite
 `symbol+buy_date+sell_date+qty+buy_price+sell_price` key for trades,
-proven unique across the full historical dataset). See §5/§6 for exactly
-what's fixed and what's still pending.
+proven unique across the full historical dataset).
+
+**Update (Stability Sprint session): `"פעולות"` is no longer read-only
+from the app's perspective — for CREATING new facts only.** Investigating
+the *original* design of New Position/Add Trade/Quick Trade (git history
+traced back to the very first commit, before `"פעולות"` existed in the
+web app at all) showed they were never designed around `"פעולות"` — they
+were built against, and correctly round-tripped through, plain CRUD on
+`Trades`/`Positions`, and only became orphaned when `"פעולות"`-derived
+reads were added later as an additive fallback that quietly became the
+only path exercised. So restoring them was **not** inventing a new
+architecture — `handleAppendOperation_`/`handleAddTradeOperation_` now
+append real BUY/SELL rows to `"פעולות"` for New Position, Quick Trade
+Buy/Sell, and Add Trade. **Editing or deleting an already-recorded row
+in `"פעולות"` is still out of scope** — that's a materially harder
+problem (mutating a fact FIFO has already lot-matched against others),
+deliberately not part of this fix, and `"פעולות"` remains hand-edited-only
+for corrections. See §5/§6 for exactly what's fixed and what's still
+pending, and TECHNICAL_DEBT.md — "Write-through create-only paths" for
+the full trace including a real date-handling bug found and fixed along
+the way (never construct a JS `Date` object for a plain calendar-date
+string — write the `"YYYY-MM-DD"` string directly, exactly like every
+pre-existing hand-typed row already works).
 
 **Script Properties (Apps Script → Project Settings), not in git:**
 `LOGIN_PASSWORD`, `SESSION_TTL_HOURS` (dormant while auth disabled),
@@ -323,22 +344,34 @@ Full detail + evidence for every step above: `docs/TECHNICAL_DEBT.md` —
 
 ## 6. Outstanding Work
 
+**Done since this list was last written (Stability Sprint session):**
+New Position, Quick Trade Buy/Sell, and Add Trade are all restored via
+write-through create-only (`appendOperation`/`addTradeOperation`,
+committed `be930b9`), plus a date-handling fix (`dc2dd81`) — both pushed
+and confirmed deployed. See §1 and TECHNICAL_DEBT.md for full detail.
+
 **P0 (correctness, do next):**
-- **Trades' own add/edit/delete still disabled.** Needs the same fix
-  Journal/Notes already got: a composite-key-matched write/read (either
-  extend `handleUpsertTradeMeta_`'s pattern to cover the core trade
-  fields too, or design a separate mechanism) — this is genuinely
-  different from Journal/Notes because it would mean *editing derived
-  facts*, not just annotations, which only makes sense if it's coupled
-  to fixing the source row in `"פעולות"` too (see Phase D discussion,
-  §1/§5). Needs a product decision before implementation, not just a
-  code fix.
+- **Trades' own edit/delete of an already-recorded trade still
+  disabled, and Delete Position still disabled.** Deliberately out of
+  scope for the write-through create-only phase — mutating a fact FIFO
+  has already lot-matched against others (trades), or a position that's
+  re-derived fresh from `"פעולות"` every load (positions), is a
+  materially harder problem than appending a new one was. Needs a
+  product decision before implementation, not just a code fix.
 - **`seedToSheets()`'s dormant `seedAll` path** — writes to the legacy
   `Trades` sheet only when zero trades exist (never fires in current
   production data, but is a latent instance of the same bug class).
-- Confirm live Apps Script deployment matches git going forward — now
-  that a "sync commit" precedent exists, re-verify after any future
-  manual redeploy rather than assuming git is ahead.
+- Confirm live Apps Script deployment matches git going forward — a
+  "sync commit" precedent already exists from an earlier session, and
+  this session needed 4 separate manual redeploys (3 for the date-fix
+  iterations alone) before landing on the correct fix — re-verify after
+  any future manual redeploy rather than assuming git is ahead.
+- **When checking whether GitHub Pages actually deployed, always
+  cache-bust the URL** (e.g. `?bust=<timestamp>`) — a check without one
+  this session returned a stale `v17` service-worker version from
+  GitHub Pages' own CDN edge cache, even though the GitHub Deployments
+  API already reported `"state": "success"` for the correct commit sha.
+  Don't conclude a deploy failed from an uncached-busted fetch alone.
 
 **P1 (reliability):**
 - Switch service worker to network-first for `index.html`/`js/*.js`.
@@ -351,15 +384,20 @@ Full detail + evidence for every step above: `docs/TECHNICAL_DEBT.md` —
 **P2 (product, explicitly deferred until persistence work is settled):**
 - **Settings Functionality Audit → implementation.** Full classification
   already done (§3) — decide per-control: keep, wire up, hide, or remove.
-- Phase C (Quick Trade's buy tab → `upsertPositionMeta`, frontend-only,
-  endpoint already exists).
+  Note: some of this may already be partially done — `js/settings.js`
+  shows evidence of a "Sprint 0" pass (auto-refresh wiring, JSON-import
+  honesty fix, several controls hidden with explanatory comments) that
+  predates this Stability Sprint session and isn't yet reflected
+  elsewhere in these docs; verify current state directly before assuming
+  §3's classification still holds.
 - Phase 5 continuation (5c: `.s-input` unification; 5d: `confirm()` →
   styled modal; 5e: skeleton loading states; 5f: Journal filter bar).
 - Verify Polygon is fully unwired; decide its long-term fate.
 
 **P3 (deferred, explicitly out of scope unless asked):** automated tests;
-real-time price streaming; verify PWA icon assets exist; Phase D (writing
-real trades to `"פעולות"` from the app).
+real-time price streaming; verify PWA icon assets exist; editing/deleting
+an already-recorded row in `"פעולות"` from the app (would need its own
+design conversation, not scheduled).
 
 Full detail: `docs/ROADMAP.md`.
 
@@ -447,16 +485,24 @@ has passed:_
 - Repo: `idansorojon-cell/fifo-pro-v2`, remote `origin`, single branch
   `main`.
 - Working tree clean after the last push this session.
-- Recent commits (newest first): `89e6948` (sync repo with live Apps
-  Script Phase B backend), `21ab2b3` (Phase A: disable every
-  fake-persistence write path), `7fe934a` (Phase 5b: native date
-  fields), `0006fcc` (document Settings audit as future phase), `7a8eb53`
-  (fix tax calculation), `f4bcdbb` (Phase 5a: icon migration + empty-state
-  de-dup), plus earlier Phase 2–4 design-system commits from the prior
-  session.
-- Live production confirmed synced with `89e6948` — both frontend
-  (`sw.js` → `fifopro-v13`) and backend (Apps Script already had this
-  exact code before the commit existed, per §5 point 8–9).
+- Recent commits (newest first): `dc2dd81` (fix write-through date
+  handling: write plain date strings, not Date objects), `be930b9`
+  (Stability Sprint: write-through create-only paths — New Position,
+  Quick Trade, Add Trade), plus the FIFO PRO 2.0 Phase 1–3 commits
+  (Cockpit, Ledger, Coach) and a Sprint 0 Settings-integrity pass that
+  landed between the previous handoff and this session — see git log
+  directly for those, they predate this session's work and aren't
+  re-documented here.
+- Live production confirmed synced with `dc2dd81` — frontend confirmed
+  two ways: the GitHub Deployments API reports `"state": "success"` for
+  a deployment whose `sha` exactly matches `dc2dd81`, and a
+  **cache-busted** fetch (`?bust=<timestamp>`) of the live `sw.js`
+  returns `fifopro-v19` with `js/positions.js` containing the new
+  `WRITE-THROUGH` code. A fetch *without* cache-busting returned a stale
+  `v17` — that was GitHub Pages' own CDN edge cache, not a failed
+  deploy; always cache-bust when checking this going forward. Backend
+  (`AppScript_FULL.gs`) confirmed live via the real write/read/cleanup
+  cycle described in §1 and TECHNICAL_DEBT.md, not just a `curl` probe.
 
 ---
 
@@ -475,10 +521,28 @@ has passed:_
 - **Tax formula: `tax = gross × 0.25`, unconditionally** — a losing trade
   gets a *negative* tax (25% offset). Do not clamp to 0 on losses — that
   was a real, fixed bug (see §5) that silently understated every loss.
-- **Trades' own add/edit/delete are deliberately disabled right now** —
-  not a bug, don't silently re-enable without the composite-key fix.
-  Quick Trade's submit and brand-new-position creation are disabled for
-  the same reason.
+- **New Position, Quick Trade Buy/Sell, and Add Trade are now genuinely
+  live** (Stability Sprint session, commits `be930b9`/`dc2dd81`) — they
+  append real BUY/SELL rows to `"פעולות"` via `appendOperation`/
+  `addTradeOperation`. This is a fix, not new fragile behavior; don't
+  revert to the old disabled-with-a-toast state.
+- **Trades' own edit/delete of an *already-recorded* trade, and Delete
+  Position, remain deliberately disabled** — not a bug, don't silently
+  re-enable without a product decision (see §6 P0). This is a
+  fundamentally different, harder problem than the create-only paths
+  above: it means mutating a fact FIFO has already lot-matched against
+  others, not appending a new independent one.
+- **When writing a plain calendar-date string (e.g. from a native
+  `<input type="date">`) to `"פעולות"`, never construct a JS `Date`
+  object** — write the `"YYYY-MM-DD"` string directly and let Google
+  Sheets' own native date recognition handle it, exactly like every
+  pre-existing hand-typed row already works. Two different
+  timezone-based "fixes" (UTC-anchored, then script-timezone-anchored,
+  then spreadsheet-timezone-anchored) were all tried and all wrong this
+  session before landing on this — the underlying mistake was creating a
+  timestamp for something that is conceptually a calendar date, not a
+  point in time. See TECHNICAL_DEBT.md for the full trace before
+  reintroducing any `Date` object into this write path.
 - **Position editing IS supposed to work** for target/stop/notes on an
   *existing* FIFO-derived position — qty/avg_price/symbol/date are
   deliberately read-only there now, not a regression.
@@ -491,9 +555,17 @@ has passed:_
   (a read-only GET action) rather than assuming git HEAD matches
   production, in either direction.
 - **GitHub Pages can fail to deploy for no discoverable code-level
-  reason** (confirmed once this session, likely a build-rate-limit from
-  a burst of commits) — if a push doesn't show up live, check deployment
-  status before assuming the code is broken; a retry may just work.
+  reason** (confirmed once in an earlier session, likely a build-rate-
+  limit from a burst of commits) — if a push doesn't show up live, check
+  deployment status before assuming the code is broken; a retry may just
+  work.
+- **Always cache-bust when checking whether GitHub Pages actually
+  deployed** (append `?bust=<timestamp>` to the fetch URL) — this
+  session, checking the live `sw.js` without a cache-buster returned a
+  stale version even though the GitHub Deployments API already reported
+  `"state": "success"` for the correct commit. That was GitHub Pages'
+  own CDN edge cache, not a failed or slow deploy — don't conclude a
+  deploy is stuck from an un-cache-busted check alone.
 - **Settings' ~25 decorative controls are audited and documented, not a
   mystery to re-investigate** — see §3/§6, `docs/TECHNICAL_DEBT.md`.
   Deferred until persistence work is done, per explicit instruction.

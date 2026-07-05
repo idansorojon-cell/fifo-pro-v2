@@ -1,28 +1,37 @@
 # FIFO PRO — Current Status
 
-_Last updated: 2026-07-05, during a documentation-accuracy pass that
-re-verified live state directly (git, GitHub Pages, and the live Apps
-Script backend) rather than trusting prior notes. See `HANDOFF.md` for
-the full, current session narrative — this file is kept in sync with it
-and should be treated as a snapshot, not a standing guarantee._
+_Last updated: 2026-07-05, Stability Sprint session (write-through
+create-only paths). Re-verified live state directly (git, GitHub Pages
+deployment API, and the live Apps Script backend) rather than trusting
+prior notes. See `HANDOFF.md` for the full, current session narrative —
+this file is kept in sync with it and should be treated as a snapshot,
+not a standing guarantee._
 
-## What's deployed and stable (re-verified 2026-07-05)
+## What's deployed and stable (re-verified 2026-07-05, Stability Sprint)
 
 **Frontend** (GitHub Pages, `idansorojon-cell/fifo-pro-v2`, branch `main`,
-latest commit `445847c`): confirmed live via direct `curl` against
-`idansorojon-cell.github.io/fifo-pro-v2` — matches git exactly, no drift
-(`git fetch` showed zero commits of divergence in either direction).
+latest commit `dc2dd81`): confirmed live two ways — (1) the GitHub
+Deployments API shows a `"state": "success"` deployment whose `sha`
+exactly matches `dc2dd81`, and (2) a cache-busted direct fetch of the
+live `sw.js` returns `fifopro-v19` and the live `js/positions.js`
+contains the new `WRITE-THROUGH` code, not just the version bump. (A
+first check without a cache-busting query param still showed the old
+`v17` — that was GitHub Pages' own CDN edge cache, not stale code; always
+cache-bust when checking this.)
 
-- Service worker cache at `fifopro-v13` (confirmed via `curl` of the live
-  `sw.js` — matches the local file's cache version).
+- Service worker cache at `fifopro-v19`.
 - Login screen fully removed from `index.html`; `AUTH_DISABLED = true` in
   both `js/auth.js` and `js/api.js` — deliberate, accepted-for-now, not a
   bug (see TECHNICAL_DEBT.md — "Security").
 - Mission Control home screen live; lazy rendering confirmed — only it
   renders at boot, every other screen renders itself on first navigation.
-- **Phase A (disable every fake-persistence write path) confirmed live**
-  — the live Trades table's edit/delete buttons carry the
-  `action-disabled` CSS class and a "מבוטל זמנית" tooltip.
+- **Write-through create-only paths confirmed live** — New Position,
+  Quick Trade Buy, Quick Trade Sell, and Add Trade all append real
+  BUY/SELL rows directly to `"פעולות"` (see TECHNICAL_DEBT.md —
+  "Persistence architecture" for full detail). Verified via the real UI
+  with clearly-marked test data, confirmed via fresh cache-busted
+  `getOperations` reloads, cleaned up and reconfirmed absent. Trades'
+  own edit/delete and Delete Position remain intentionally disabled.
 - **Phase B (`upsertTradeMeta` / composite-key trade annotations)
   confirmed live** — the live `js/api.js` exposes `upsertTradeMeta`, and
   a live `getOperations` call returns `entry_reason`/`exit_reason`/
@@ -31,20 +40,40 @@ latest commit `445847c`): confirmed live via direct `curl` against
   missing or broken).
 
 **Backend** (`AppScript_FULL.gs`): **confirmed synced with git as of
-2026-07-05** via direct, read-only `curl` calls against the live Apps
-Script `exec` URL — not assumed from git alone, since Apps Script
-deployment is a manual step that does not happen on `git push`:
+2026-07-05** via direct, read-only calls against the live Apps Script
+`exec` URL — not assumed from git alone, since Apps Script deployment is
+a manual step that does not happen on `git push`:
 
-- `getOperations` returns 110 trades. A sampled losing trade (MU,
+- `getOperations` returns 110 trades (real data, confirmed unaffected by
+  this session's test writes/cleanup). A sampled losing trade (MU,
   `gross: -136.95`) shows `tax: -34.24` — the symmetric 25% tax fix
   (`tax = gross × 0.25`, no clamp on losses) is live, not just committed.
 - Both real open positions (QBTX, ONDL) return `target`/`stop_loss`/
   `notes` fields via `mergePositionMeta_` (empty because the trader
   hasn't set values for them yet — the merge path itself works).
+- New endpoints `appendOperation`/`addTradeOperation` (write-through
+  create-only) are live and confirmed working, including the SELL
+  quantity guard (rejects a SELL that exceeds the real open FIFO
+  quantity for that symbol) and correct date handling (see below).
 - `handleGetPrices_` calls `fetchFinnhubPrices_` as the sole price
   source; Polygon/Yahoo code remains present in the file but uncalled.
 - `AUTH_DISABLED = true` at the top of the Web API section — every
   request accepted, `validateToken_()` short-circuited.
+
+**Date-handling bug found and fixed this session:** the write-through
+paths originally constructed a JS `Date` object for the date picked in
+a native `<input type="date">`. Two attempts to fix a resulting
+day/time-of-day shift by changing which timezone the `Date` was anchored
+to (UTC, then the Apps Script project's own timezone, then the
+destination spreadsheet's own timezone) all failed — the real defect was
+constructing a `Date`/timestamp at all for something that's conceptually
+a calendar date, not a point in time. Fixed by writing the plain
+`"YYYY-MM-DD"` string directly into the cell, exactly like every one of
+the 110 pre-existing hand-typed rows already works (Google Sheets' own
+native date recognition, zero `Date` objects, zero timezone math
+anywhere). Verified live via three iterations of real UI tests; the
+final version showed a clean `2026-07-05` with no time component in the
+raw `"פעולות"` cell. See TECHNICAL_DEBT.md for the full trace.
 
 ⚠️ **This is a snapshot, not a guarantee.** The trader has previously
 redeployed Apps Script directly from local disk, ahead of any git
@@ -53,28 +82,37 @@ future manual redeploy rather than assuming this sync still holds.
 
 ## Recent history (most recent session first — see HANDOFF.md for full detail)
 
-1. Phase 5 UX audit → Phase 5a (icon/empty-state migration) and 5b
+1. **Stability Sprint — write-through create-only paths.** New Position,
+   Quick Trade Buy/Sell, and Add Trade restored by appending real
+   BUY/SELL rows to `"פעולות"` (commit `be930b9`) instead of the old
+   id-keyed legacy-sheet writes the read path never consulted. A
+   date-handling bug (JS `Date` object construction for what should have
+   been a plain calendar-date string) was found during live verification,
+   fixed after two incorrect timezone-based attempts, and confirmed live
+   (commit `dc2dd81`). Trades' own edit/delete and Delete Position remain
+   intentionally disabled pending a product decision (see ROADMAP.md P0).
+2. Phase 5 UX audit → Phase 5a (icon/empty-state migration) and 5b
    (native `type="date"` fields) shipped.
-2. User-reported $2,875 May-2026 discrepancy vs. a manual spreadsheet
+3. User-reported $2,875 May-2026 discrepancy vs. a manual spreadsheet
    traced to a systemic tax bug (`applyFIFO_` clamped tax to 0 on
    losses) — fixed, redeployed, confirmed live (28 of 108 historical
    trades affected, $9,585.78 total understatement).
-3. User-reported "New Position" and Trading Journal changes vanishing
+4. User-reported "New Position" and Trading Journal changes vanishing
    after refresh led to a full persistence audit: one incomplete
    data-model migration (legacy `Trades`/`Positions` sheets never read
    by the new `"פעולות"`-derived path), not four isolated bugs.
-4. **Phase A** shipped: every fake-persistence write path (Trades
+5. **Phase A** shipped: every fake-persistence write path (Trades
    add/edit/delete, Quick Trade submit, new-position creation) disabled
    at its UI entry point with an explanatory toast — original logic kept
    in place, not deleted.
-5. **Phase B** shipped: `upsertTradeMeta`/`mergeTradeMeta_` + a stable
+6. **Phase B** shipped: `upsertTradeMeta`/`mergeTradeMeta_` + a stable
    composite key, generalizing the position-meta pattern to trades —
    Journal and Trade Notes now genuinely persist.
-6. While verifying Phase B, the live Apps Script was found to already
+7. While verifying Phase B, the live Apps Script was found to already
    have this exact code — the trader had redeployed from local disk
    ahead of the commit. A sync commit (`89e6948`) brought git in line
    with production; it deployed nothing new.
-7. GitHub Pages failed to deploy once for an unconfirmed reason (leading
+8. GitHub Pages failed to deploy once for an unconfirmed reason (leading
    hypothesis: a soft build-rate-limit from a burst of ~8 commits in
    ~2.5 hours) — succeeded on the very next push with no code change.
 
