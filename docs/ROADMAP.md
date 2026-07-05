@@ -39,14 +39,27 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       pre-existing hand-typed row in `"פעולות"` already works. Verified
       live via 3 iterations of a real test. Committed `dc2dd81`, pushed
       and confirmed deployed. See TECHNICAL_DEBT.md for the full trace.
+- [x] **Delete Position — restored.** A mistaken open position is now
+      deleted by appending a SELL of its full remaining quantity at its
+      own `avg_price` (cost basis) via the existing `appendOperation`
+      endpoint — gross/tax/net land at exactly $0, zero P&L impact, zero
+      Apps Script changes. This works because an *open* position's lot
+      is still available in FIFO's bookkeeping. Verified live 2026-07-05
+      with clearly-marked test data (`ZZDEL`): resulting trade showed
+      `gross:0/tax:0/net:0` exactly, position gone on fresh reload, real
+      data (QBTX/ONDL/110 trades) unaffected throughout. Committed
+      `3c488c1`, pushed, confirmed deployed. See TECHNICAL_DEBT.md.
 - [ ] **Trades' own edit/delete of an *already-recorded* trade still
-      disabled**, and **Delete Position still disabled.** Both are
-      deliberately out of scope for the write-through create-only phase
-      above — mutating a fact FIFO has already lot-matched against
-      others (trades), or a position that's re-derived fresh from
-      `"פעולות"` every load (positions), is a materially harder problem
-      than appending a new one. Needs its own product decision before
-      implementation, not just a code fix.
+      disabled.** The same pure-addition trick used for Delete Position
+      does **not** work here: a closed trade's BUY lot is already fully
+      consumed by its matching SELL, so there's nothing left to sell
+      back to cancel it — appending more ops would just consume a
+      *different*, unrelated lot. The only correct fix requires backend
+      row-provenance tracking in `applyFIFO_` (trace a derived trade
+      back to its exact source row(s), only when unambiguous — no
+      partial-fill splitting) — a real Apps Script change, not attempted
+      yet. Needs its own product decision on whether it's worth building
+      before implementation, not just a code fix.
 - [ ] **`seedToSheets()`'s dormant `seedAll` path** — writes to the legacy
       `Trades` sheet only when zero trades exist (never fires against
       current production data, but is a latent instance of the same
@@ -153,18 +166,20 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       also account for proximity to stop-loss (currently purely P&L%-based
       via `Positions.riskStatus()`, which does already factor in stop
       distance — verify this still matches user expectations in practice).
-- [ ] **Settings Functionality Audit (future phase, not started).** The
-      Settings screen (`js/settings.js`) has grown to include many controls
-      (currency, date format, timezone, broker, preferred trading hours,
-      refresh interval, AI model, session timeout, and more via `.s-input`)
-      whose actual effect on the rest of the app hasn't been systematically
-      verified — some may be fully wired, some display-only/decorative,
-      some partially implemented. When this phase starts: audit every
-      control to determine whether it (a) actually does something, (b)
-      persists correctly (Google Sheets vs. localStorage), (c) is read by
-      any other module, and then decide per-control whether to keep as-is,
-      finish wiring it up, hide it, or remove it. Explicitly not started —
-      documentation only, per trader's request.
+- [x] **Settings Functionality Audit → implementation — done** (Functional
+      Cleanup session). Every visible control audited via full-codebase
+      grep of its `Settings.get()` key; every one now either does
+      something real or is hidden (commented out, not deleted). ~15
+      controls hidden (timezone, weeklyGoal/dailyGoal, maxConsecLosses,
+      commission, the entire AI section, alertGoal/alertDrawdown/
+      alertConsecLosses, sessionTimeout — all confirmed to have zero
+      consumers anywhere). `maxPositionSize` wired into Decision Engine's
+      exposure-risk coloring (was hardcoded to 30); `alertStop` wired
+      into positions.js's stop/warn alert gating (previously collected,
+      never consulted). Frontend-only, no Apps Script changes. Verified
+      live via a real Settings render plus direct function-level checks
+      of both wiring fixes. Committed `1f09aa7`, pushed, confirmed
+      deployed. See TECHNICAL_DEBT.md — "Settings audit."
 
 ## P3 — Nice to have / explicitly deferred
 

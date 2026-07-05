@@ -344,20 +344,30 @@ Full detail + evidence for every step above: `docs/TECHNICAL_DEBT.md` —
 
 ## 6. Outstanding Work
 
-**Done since this list was last written (Stability Sprint session):**
-New Position, Quick Trade Buy/Sell, and Add Trade are all restored via
-write-through create-only (`appendOperation`/`addTradeOperation`,
-committed `be930b9`), plus a date-handling fix (`dc2dd81`) — both pushed
-and confirmed deployed. See §1 and TECHNICAL_DEBT.md for full detail.
+**Done since this list was last written (Stability Sprint + Functional
+Cleanup sessions):** New Position, Quick Trade Buy/Sell, and Add Trade
+are all restored via write-through create-only
+(`appendOperation`/`addTradeOperation`, committed `be930b9`), plus a
+date-handling fix (`dc2dd81`). The Settings audit is complete — every
+visible control either does something real or is explicitly hidden,
+none left decorative (`1f09aa7`). **Delete Position is restored**
+(`3c488c1`) via a pure-addition SELL-at-cost-basis correction — see §1
+and TECHNICAL_DEBT.md for full detail on all of the above. All pushed
+and confirmed deployed.
 
 **P0 (correctness, do next):**
-- **Trades' own edit/delete of an already-recorded trade still
-  disabled, and Delete Position still disabled.** Deliberately out of
-  scope for the write-through create-only phase — mutating a fact FIFO
-  has already lot-matched against others (trades), or a position that's
-  re-derived fresh from `"פעולות"` every load (positions), is a
-  materially harder problem than appending a new one was. Needs a
-  product decision before implementation, not just a code fix.
+- **Trades' own edit/delete of an already-recorded trade is the one
+  remaining disabled write path.** Unlike Delete Position, the same
+  pure-addition trick doesn't work here: a closed trade's BUY lot is
+  already fully consumed by its matching SELL, so there's nothing left
+  to "sell back" to cancel it — appending more ops would just consume a
+  *different*, unrelated lot instead. The only correct fix would be
+  backend row-provenance tracking in `applyFIFO_` (trace a derived trade
+  back to its exact source row(s) in `"פעולות"`, only allowing edit/
+  delete when that mapping is unambiguous — no partial-fill splitting
+  across multiple trades). This is a real Apps Script change with real
+  edge cases, not attempted yet — needs a product decision on whether
+  it's worth building, not just a code fix.
 - **`seedToSheets()`'s dormant `seedAll` path** — writes to the legacy
   `Trades` sheet only when zero trades exist (never fires in current
   production data, but is a latent instance of the same bug class).
@@ -381,15 +391,17 @@ and confirmed deployed. See §1 and TECHNICAL_DEBT.md for full detail.
   definitively if it recurs (only a hypothesis was confirmed useful —
   rate-limiting — not a certain root cause).
 
-**P2 (product, explicitly deferred until persistence work is settled):**
-- **Settings Functionality Audit → implementation.** Full classification
-  already done (§3) — decide per-control: keep, wire up, hide, or remove.
-  Note: some of this may already be partially done — `js/settings.js`
-  shows evidence of a "Sprint 0" pass (auto-refresh wiring, JSON-import
-  honesty fix, several controls hidden with explanatory comments) that
-  predates this Stability Sprint session and isn't yet reflected
-  elsewhere in these docs; verify current state directly before assuming
-  §3's classification still holds.
+**P2 (product):**
+- [x] **Settings Functionality Audit → implementation — done** (Functional
+  Cleanup session, `1f09aa7`). Every visible control now either does
+  something real or is explicitly hidden (commented out, not deleted).
+  Hidden: timezone, weeklyGoal/dailyGoal, maxConsecLosses, commission,
+  the entire AI section, alertGoal/alertDrawdown/alertConsecLosses,
+  sessionTimeout — all confirmed via full-codebase grep to be read by
+  nothing outside `settings.js`. Wired up: `maxPositionSize` now drives
+  Decision Engine's exposure-risk coloring (was hardcoded to 30);
+  `alertStop` now actually gates positions.js's stop/warn alerts (used
+  to be collected and ignored). Frontend-only, no Apps Script changes.
 - Phase 5 continuation (5c: `.s-input` unification; 5d: `confirm()` →
   styled modal; 5e: skeleton loading states; 5f: Journal filter bar).
 - Verify Polygon is fully unwired; decide its long-term fate.
@@ -526,12 +538,22 @@ has passed:_
   append real BUY/SELL rows to `"פעולות"` via `appendOperation`/
   `addTradeOperation`. This is a fix, not new fragile behavior; don't
   revert to the old disabled-with-a-toast state.
-- **Trades' own edit/delete of an *already-recorded* trade, and Delete
-  Position, remain deliberately disabled** — not a bug, don't silently
-  re-enable without a product decision (see §6 P0). This is a
-  fundamentally different, harder problem than the create-only paths
-  above: it means mutating a fact FIFO has already lot-matched against
-  others, not appending a new independent one.
+- **Delete Position is now live** (functional cleanup session) — a
+  mistaken open position is deleted by appending a SELL of its full
+  remaining quantity at its own `avg_price` (cost basis) via the
+  existing `appendOperation` endpoint, closing it out with exactly $0
+  P&L impact. Pure addition, no backend change, no mutation of any
+  existing row — this works specifically because an *open* lot is still
+  available in FIFO's bookkeeping.
+- **Trades' own edit/delete of an *already-recorded* trade remains
+  deliberately disabled** — not a bug, don't silently re-enable without
+  a product decision (see §6 P0). Unlike Delete Position, this can't use
+  the same pure-addition trick: a closed trade's lot is already fully
+  consumed by its matching sell, so there's nothing left to sell back to
+  cancel it. The only correct fix would require backend row-provenance
+  tracking in `applyFIFO_` (trace a derived trade back to its exact
+  source row(s), only when unambiguous) — a real Apps Script change,
+  not attempted yet.
 - **When writing a plain calendar-date string (e.g. from a native
   `<input type="date">`) to `"פעולות"`, never construct a JS `Date`
   object** — write the `"YYYY-MM-DD"` string directly and let Google

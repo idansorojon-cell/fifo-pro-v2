@@ -95,7 +95,7 @@ set values for them yet, not because the merge is missing).
 position would likely just reappear on the next load since it's derived
 from the trade log), out of scope for this fix.
 
-## Persistence architecture — incomplete data-model migration (Phase A, B, and the Stability Sprint write-through create-only phase shipped, confirmed live; Trades' own edit/delete and Delete Position still pending)
+## Persistence architecture — incomplete data-model migration (Phase A, B, Stability Sprint write-through create-only, and Delete Position all shipped, confirmed live; only Trades' own edit/delete still pending)
 
 ### The full picture
 
@@ -134,7 +134,7 @@ Full per-module trace (write path -> read path -> outcome):
 | Positions — target/stop/notes on an *existing* derived position | `upsertPositionMeta`, **by symbol** | `mergePositionMeta_` overlays these 3 fields by symbol | ✅ Fully persistent — confirmed live 2026-07-05 via direct API check |
 | Positions — qty/avg_price on an *existing* position | **disabled at the UI since Phase A** — inputs are now `disabled`, can no longer be typed into | n/a | ⏸ Intentionally disabled — was silently discarding input before being disabled |
 | Positions — brand-new symbol, no FIFO lot ("New Position") | `appendOperation` -> appends a **BUY row straight to `"פעולות"`** — **Stability Sprint write-through** | `getOperations` -> `applyFIFO_`, derives it like any other position | ✅ Fixed — confirmed live 2026-07-05, survives a full page refresh; symbol/date/qty/price fields are only editable in the "new position" case, still read-only when editing an existing derived position |
-| Positions — delete | `deletePosition`, **by id** — **still disabled at the UI entry point** | n/a | ⏸ Intentionally disabled — deleting a `"פעולות"`-derived position would just reappear on next load since it's re-derived fresh every time; genuinely out of scope, not part of the write-through phase |
+| Positions — delete | `appendOperation` -> appends a **SELL of the full remaining quantity at the position's own `avg_price`** (cost basis) straight to `"פעולות"` — **Functional Cleanup, pure-addition correction** | `getOperations` -> `applyFIFO_`, the position closes out naturally since its lot is now fully consumed | ✅ Fixed — confirmed live 2026-07-05; gross/tax/net land at exactly $0 since sell price equals buy price; works because an *open* position's lot is still available in FIFO's bookkeeping (unlike a closed trade's lot, already consumed by its own matching sell — see "Trades' own edit/delete" below for why this same trick doesn't extend there) |
 | Quick Trade "buy" tab | `appendOperation` -> appends a **BUY row straight to `"פעולות"`**, same endpoint as New Position — **Stability Sprint write-through** | same as above | ✅ Fixed — confirmed live 2026-07-05 |
 | Quick Trade "sell" tab | `appendOperation` -> appends a **SELL row straight to `"פעולות"`**, matched against existing open lots by `applyFIFO_` server-side (no buy price/date needed from the form) — **Stability Sprint write-through** | `getOperations` -> `applyFIFO_` | ✅ Fixed — confirmed live 2026-07-05; rejects a SELL that exceeds the real open FIFO quantity for that symbol |
 | Watchlist | `addWatchlist`/`removeWatchlist` -> `Watchlist` sheet, by symbol | `getWatchlist` -> same sheet, same key | ✅ Fully persistent — never went through the migration, single sheet/key throughout |
@@ -364,6 +364,86 @@ Committed as `be930b9` (create-path restoration) and `dc2dd81` (date-fix,
 after two earlier incorrect attempts), both pushed and confirmed live via
 the GitHub Deployments API and a cache-busted fetch of the live `sw.js`/
 `js/positions.js`.
+
+### Delete Position (Functional Cleanup) — shipped, confirmed live
+
+A position is derived from an **open** BUY lot — the shares are still
+"available" in `applyFIFO_`'s bookkeeping, unlike an already-closed
+trade's lot, which is fully consumed by its own matching sell. This
+asymmetry is why Delete Position could be fixed with the exact same
+pure-addition pattern as the create-only write-through work (no backend
+changes needed), while Trades' own edit/delete cannot (see below).
+
+**Design considered and rejected before implementing:** offsetting a
+closed trade by appending new ops doesn't work, because by the time a
+correction is written, the original BUY lot has already been fully
+matched against the original SELL — there's no remaining quantity left
+to "sell back." Appending a new SELL at that point would incorrectly
+consume a *different*, unrelated lot (e.g. a real currently-open
+position for the same symbol), not cancel the historical trade. This
+ruled out using the same technique for Trades' edit/delete, and confirms
+Delete Position and Trades' edit/delete are not variations of the same
+problem — they're genuinely different in kind.
+
+**Implemented:** `Positions.remove(id)` now appends a SELL of the
+position's full remaining quantity at its own `avg_price` (cost basis)
+via the existing `appendOperation` endpoint. Since sell price equals buy
+price, `gross`/`tax`/`net` all land at exactly $0 — the position closes
+out with zero P&L impact, a real confirmation dialog explains this
+before anything is written, and the result is verified via a fresh
+`getOperations` reload (never assumed). One known, accepted cosmetic
+side effect: if a position's `avg_price` blends multiple separate buy
+lots at different individual prices, this correction shows up as a
+handful of small offsetting trades that net to exactly $0 in total,
+rather than one single $0 trade — economically correct, slightly noisy
+in the raw ledger.
+
+**Verified live** (2026-07-05) with clearly-marked test data (`ZZDEL`,
+qty 6 @ $4.25): resulting trade showed `gross:0/tax:0/net:0/pct:0`
+exactly, the position disappeared from a fresh cache-busted
+`getOperations` reload, and QBTX/ONDL/the real 110 trades were confirmed
+byte-for-byte unchanged. Test rows cleaned up from `"פעולות"` and
+reconfirmed absent. Committed `3c488c1`, pushed, confirmed deployed.
+Frontend-only — no Apps Script changes.
+
+## Settings audit (Functional Cleanup) — shipped, confirmed live
+
+Every visible Settings control now either does something real or is
+explicitly hidden (commented out, not deleted) — confirmed via a
+full-codebase grep of every `Settings.get()` key to see what, if
+anything, outside `settings.js` actually consumes it.
+
+**Hidden (zero consumers found anywhere):** `timezone` (no trading-hours
+feature exists to use it — that feature is itself already hidden, see
+the SPRINT 0 note in `js/settings.js`), `weeklyGoal`/`dailyGoal` (only
+`monthlyGoal` has a real display surface, via `APP.monthGoal` on
+Dashboard — building week/day equivalents would be new UI, not a wiring
+fix), `maxConsecLosses` (no consecutive-loss-streak detection exists to
+gate), `commission` (no trade-entry form collects a commission value —
+Add Trade/Quick Trade/New Position all hardcode it to 0), the entire
+`AI` section — `aiDetailLevel`/`aiAfterTrade`/`aiDailyReview`/
+`aiWeeklyReview` (no scheduled/triggered AI review exists, and AI Chat
+doesn't consult a detail-level preference), `alertGoal`/`alertDrawdown`/
+`alertConsecLosses` (no real alert-firing code for these categories —
+positions.js's alert system only ever checked target/stop/warn
+thresholds), `sessionTimeout` (the real session TTL is server-side via
+Script Property `SESSION_TTL_HOURS`, this local dropdown was fully
+disconnected from it, and moot anyway while `AUTH_DISABLED = true`).
+
+**Wired up (previously collected, silently ignored):**
+- `maxPositionSize` now drives the "total exposure" risk-coloring
+  threshold in Decision Engine's pre-trade discipline score
+  (`js/decisionEngine.js`'s `buildDisciplineScore` — was hardcoded to
+  `30`). Verified: the same 25% exposure shows `gold` at
+  `maxPositionSize=20` and `muted` at `maxPositionSize=50`.
+- `alertStop` now actually gates `positions.js`'s stop-hit and
+  approaching-stop alerts in `_computeActiveAlerts()` — toggling it off
+  previously had no effect at all. Verified: with it off, the alert
+  badge disappears entirely (`style.display` becomes `'none'`); with it
+  on, a triggered stop alert shows as before.
+
+Frontend-only, no Apps Script changes. Committed `1f09aa7`, pushed,
+confirmed deployed.
 
 ## Security
 

@@ -1,25 +1,24 @@
 # FIFO PRO — Current Status
 
-_Last updated: 2026-07-05, Stability Sprint session (write-through
-create-only paths). Re-verified live state directly (git, GitHub Pages
+_Last updated: 2026-07-05, Functional Cleanup session (Settings audit +
+Delete Position). Re-verified live state directly (git, GitHub Pages
 deployment API, and the live Apps Script backend) rather than trusting
 prior notes. See `HANDOFF.md` for the full, current session narrative —
 this file is kept in sync with it and should be treated as a snapshot,
 not a standing guarantee._
 
-## What's deployed and stable (re-verified 2026-07-05, Stability Sprint)
+## What's deployed and stable (re-verified 2026-07-05, Functional Cleanup)
 
 **Frontend** (GitHub Pages, `idansorojon-cell/fifo-pro-v2`, branch `main`,
-latest commit `dc2dd81`): confirmed live two ways — (1) the GitHub
+latest commit `3c488c1`): confirmed live two ways — (1) the GitHub
 Deployments API shows a `"state": "success"` deployment whose `sha`
-exactly matches `dc2dd81`, and (2) a cache-busted direct fetch of the
-live `sw.js` returns `fifopro-v19` and the live `js/positions.js`
-contains the new `WRITE-THROUGH` code, not just the version bump. (A
-first check without a cache-busting query param still showed the old
-`v17` — that was GitHub Pages' own CDN edge cache, not stale code; always
+exactly matches `3c488c1`, and (2) a cache-busted direct fetch of the
+live `sw.js` returns `fifopro-v21`. (A first check without a
+cache-busting query param earlier this session showed a stale version —
+that's GitHub Pages' own CDN edge cache, not stale code; always
 cache-bust when checking this.)
 
-- Service worker cache at `fifopro-v19`.
+- Service worker cache at `fifopro-v21`.
 - Login screen fully removed from `index.html`; `AUTH_DISABLED = true` in
   both `js/auth.js` and `js/api.js` — deliberate, accepted-for-now, not a
   bug (see TECHNICAL_DEBT.md — "Security").
@@ -30,8 +29,24 @@ cache-bust when checking this.)
   BUY/SELL rows directly to `"פעולות"` (see TECHNICAL_DEBT.md —
   "Persistence architecture" for full detail). Verified via the real UI
   with clearly-marked test data, confirmed via fresh cache-busted
-  `getOperations` reloads, cleaned up and reconfirmed absent. Trades'
-  own edit/delete and Delete Position remain intentionally disabled.
+  `getOperations` reloads, cleaned up and reconfirmed absent.
+- **Delete Position confirmed live** — a mistaken open position is
+  deleted via a pure-addition SELL-at-cost-basis correction (appends a
+  SELL of the full remaining quantity at the position's own `avg_price`,
+  so gross/tax/net all land at exactly $0). Reuses the existing
+  `appendOperation` endpoint — no Apps Script changes. Verified
+  end-to-end with test data (`ZZDEL`): resulting trade showed
+  `gross:0/tax:0/net:0` exactly, position disappeared on a fresh reload,
+  real data unaffected.
+- **Settings audit confirmed live** — every visible control now either
+  does something real or is explicitly hidden; none left decorative.
+  `maxPositionSize` and `alertStop` were wired to real existing
+  calculations (Decision Engine's exposure coloring, positions.js's
+  alert gating) that previously ignored them entirely.
+- **Trades' own edit/delete of an already-recorded trade remains the
+  one intentionally disabled write path** — see TECHNICAL_DEBT.md for
+  why the same pure-addition trick used for Delete Position doesn't
+  apply to closed trades.
 - **Phase B (`upsertTradeMeta` / composite-key trade annotations)
   confirmed live** — the live `js/api.js` exposes `upsertTradeMeta`, and
   a live `getOperations` call returns `entry_reason`/`exit_reason`/
@@ -82,37 +97,49 @@ future manual redeploy rather than assuming this sync still holds.
 
 ## Recent history (most recent session first — see HANDOFF.md for full detail)
 
-1. **Stability Sprint — write-through create-only paths.** New Position,
+1. **Functional Cleanup — Settings audit + Delete Position.** Every
+   visible Settings control now either does something real or is
+   explicitly hidden — ~15 decorative ones hidden (never read anywhere,
+   confirmed via full-codebase grep), `maxPositionSize` and `alertStop`
+   wired into existing calculations that previously ignored them
+   (commit `1f09aa7`). Delete Position restored via a pure-addition
+   SELL-at-cost-basis correction — zero P&L impact, zero Apps Script
+   changes, reuses the existing `appendOperation` endpoint (commit
+   `3c488c1`). Trades' own edit/delete of an already-recorded trade
+   remains the one intentionally disabled write path — the same
+   pure-addition trick doesn't work for a closed trade's already-
+   consumed lot; fixing it would need backend row-provenance tracking,
+   a real Apps Script change not yet attempted (see ROADMAP.md P0).
+2. **Stability Sprint — write-through create-only paths.** New Position,
    Quick Trade Buy/Sell, and Add Trade restored by appending real
    BUY/SELL rows to `"פעולות"` (commit `be930b9`) instead of the old
    id-keyed legacy-sheet writes the read path never consulted. A
    date-handling bug (JS `Date` object construction for what should have
    been a plain calendar-date string) was found during live verification,
    fixed after two incorrect timezone-based attempts, and confirmed live
-   (commit `dc2dd81`). Trades' own edit/delete and Delete Position remain
-   intentionally disabled pending a product decision (see ROADMAP.md P0).
-2. Phase 5 UX audit → Phase 5a (icon/empty-state migration) and 5b
+   (commit `dc2dd81`).
+3. Phase 5 UX audit → Phase 5a (icon/empty-state migration) and 5b
    (native `type="date"` fields) shipped.
-3. User-reported $2,875 May-2026 discrepancy vs. a manual spreadsheet
+4. User-reported $2,875 May-2026 discrepancy vs. a manual spreadsheet
    traced to a systemic tax bug (`applyFIFO_` clamped tax to 0 on
    losses) — fixed, redeployed, confirmed live (28 of 108 historical
    trades affected, $9,585.78 total understatement).
-4. User-reported "New Position" and Trading Journal changes vanishing
+5. User-reported "New Position" and Trading Journal changes vanishing
    after refresh led to a full persistence audit: one incomplete
    data-model migration (legacy `Trades`/`Positions` sheets never read
    by the new `"פעולות"`-derived path), not four isolated bugs.
-5. **Phase A** shipped: every fake-persistence write path (Trades
+6. **Phase A** shipped: every fake-persistence write path (Trades
    add/edit/delete, Quick Trade submit, new-position creation) disabled
    at its UI entry point with an explanatory toast — original logic kept
    in place, not deleted.
-6. **Phase B** shipped: `upsertTradeMeta`/`mergeTradeMeta_` + a stable
+7. **Phase B** shipped: `upsertTradeMeta`/`mergeTradeMeta_` + a stable
    composite key, generalizing the position-meta pattern to trades —
    Journal and Trade Notes now genuinely persist.
-7. While verifying Phase B, the live Apps Script was found to already
+8. While verifying Phase B, the live Apps Script was found to already
    have this exact code — the trader had redeployed from local disk
    ahead of the commit. A sync commit (`89e6948`) brought git in line
    with production; it deployed nothing new.
-8. GitHub Pages failed to deploy once for an unconfirmed reason (leading
+9. GitHub Pages failed to deploy once for an unconfirmed reason (leading
    hypothesis: a soft build-rate-limit from a burst of ~8 commits in
    ~2.5 hours) — succeeded on the very next push with no code change.
 
