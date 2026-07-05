@@ -334,6 +334,12 @@
         <span class="hub-card-desc">רשומות, מחשבות, לקחים</span>
         <span class="hub-card-arrow">←</span>
       </button>
+      <button class="hub-card" onclick="switchTab('ledger')">
+        <span class="hub-card-icon"><svg class="icon"><use href="#icon-list"/></svg></span>
+        <span class="hub-card-label">Ledger</span>
+        <span class="hub-card-desc">מעקב, פוזיציה, היסטוריה — לפי סימבול</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
     </div>
   </div>
 
@@ -650,6 +656,9 @@
     </div>
   </div>
 
+  <!-- LEDGER (FIFO PRO 2.0, Phase 2) — renders entirely via Ledger.render() -->
+  <div id="tab-ledger" class="panel"></div>
+
   <!-- WATCHLIST -->
   <div id="tab-watchlist" class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -955,6 +964,7 @@
 <script src="js/dashboard.js"></script>
 <script src="js/positions.js"></script>
 <script src="js/cockpit.js"></script>
+<script src="js/ledger.js"></script>
 <script src="js/watchlist.js"></script>
 <script src="js/journal.js"></script>
 <script src="js/analytics.js"></script>

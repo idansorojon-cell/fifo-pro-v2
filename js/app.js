@@ -282,7 +282,7 @@ const TAB_LABELS = {
   dashboard:'דשבורד ראשי', brief:'סיכום יומי', goals:'יעדים',
   progress:'התקדמות', ptimeline:'ציר זמן', grade:'ציון מסחר',
   positions:'פוזיציות', trades:'עסקאות', quicktrade:'כניסה מהירה',
-  watchlist:'רשימת מעקב', journal:'יומן',
+  watchlist:'רשימת מעקב', journal:'יומן', ledger:'Ledger',
   analysis:'ניתוח גרפי', performance:'ביצועים', insights:'תובנות',
   replay:'Trade Replay', portheatmap:'Heatmap תיק',
   heatmap:'לוח שנה', symnotes:'לפי סימבול',
@@ -373,6 +373,9 @@ function switchTab(name, btn) {
     case 'watchlist':
       Watchlist.render();
       if (APP.watchlist.length > 0) Watchlist.refresh();
+      break;
+    case 'ledger':
+      Ledger.render();
       break;
     case 'decision':
       DecisionEngine.renderStarter();

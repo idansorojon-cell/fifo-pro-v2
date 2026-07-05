@@ -1527,6 +1527,26 @@ body.light .nav-cat.active {
 .cockpit-action--ok     { border-right-color: var(--green); color: var(--text-2); }
 .cockpit-action .icon   { flex-shrink: 0; width: 18px; height: 18px; }
 
+/* ── Ledger (FIFO PRO 2.0, Phase 2) ───────────────────────────
+   Read-only unified symbol view. Base <table>/<th>/<td> styling is
+   already generic and applies automatically — only the row-click
+   affordance, filter segmented control, and expand-detail panel needed
+   new classes. */
+.ledger-header  { margin-bottom: 14px; }
+.ledger-filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.ledger-row     { cursor: pointer; }
+.ledger-detail-block { padding: 10px 0; }
+.ledger-detail-block + .ledger-detail-block { border-top: 1px solid var(--border); margin-top: 8px; }
+.ledger-detail-title {
+  font-size: 11px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px;
+}
+.ledger-detail-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px; font-size: 13px;
+}
+.ledger-detail-notes { margin-top: 8px; font-size: 13px; font-style: italic; color: var(--text-2); }
+
 .hub-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
