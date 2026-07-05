@@ -152,7 +152,7 @@ const Positions = (() => {
 
         <div style="display:flex;gap:6px;margin-top:12px">
           <button class="btn-icon" onclick="Positions.openEdit(${p.id})" title="ערוך יעד/סטופ/הערות">${icon('edit')}</button>
-          <button class="btn-icon danger action-disabled" onclick="Positions.remove(${p.id})" title="מבוטל זמנית">${icon('x')}</button>
+          <button class="btn-icon danger" onclick="Positions.remove(${p.id})" title="מחק פוזיציה — נכתב כמכירה במחיר עלות ביומן הפעולות">${icon('x')}</button>
         </div>
       </div>
     `;
@@ -594,23 +594,58 @@ const Positions = (() => {
     }
   }
 
-  // PHASE A: deletePosition matches the legacy "Positions" sheet by
-  // numeric id (not symbol), and even if it "succeeds" there, the position
-  // reappears next load since it's re-derived fresh from the "פעולות" log
-  // every time — deleting a row nothing reads back doesn't remove the
-  // position. Also found in passing: the old code showed a green "✓ נמחק
-  // מקומית" success message even when res.ok was false — exactly the
-  // fake-success pattern this phase eliminates. Disabled at the entry
-  // point; original logic kept below, unreachable, as reference.
+  // Delete Position (write-through correction, create-only): a position is
+  // an OPEN lot — the shares are still available in FIFO's bookkeeping —
+  // so a mistaken one is deleted by appending a SELL of the full
+  // remaining quantity at the exact same price as its cost basis
+  // (avg_price), via the same appendOperation endpoint everything else in
+  // this file already uses. Since sell price == buy price, gross/tax/net
+  // all land at $0 — the position closes out with zero P&L impact. Pure
+  // addition, no mutation of any existing row, no new backend logic. If
+  // avg_price blends multiple separate buy lots, this may show up as a
+  // few small offsetting trades that net to exactly $0 in total rather
+  // than one single $0 trade — cosmetically noisy, economically correct.
+  // This does NOT extend to closed trades (Edit/Delete Trade, still
+  // disabled) — a closed trade's lot is already fully consumed by its
+  // matching sell, so there's nothing left to sell back; that remains a
+  // separate, harder, deliberately deferred problem (would need backend
+  // row-provenance tracking, out of scope here).
   async function remove(id) {
-    API.setStatus('❌ מחיקת פוזיציה מבוטלת זמנית — היא תחזור אחרי רענון כי היא נגזרת מיומן הפעולות', 'warn');
-    return;
-    if (!confirm('למחוק פוזיציה זו?')) return;
-    const res = await API.deletePosition(id);
-    APP.positions = APP.positions.filter(p => p.id !== id);
-    LS.set('fifo_positions_backup', APP.positions);
-    render();
-    API.setStatus(res.ok ? '✓ פוזיציה נמחקה' : '✓ נמחק מקומית', 'ok');
+    const p = APP.positions.find(x => x.id === id);
+    if (!p) return;
+    if (!confirm(`למחוק את הפוזיציה ${p.symbol}? הפעולה תיכתב כמכירה מלאה של ${fnum(p.qty)} מניות במחיר העלות (${fprice(p.avg_price)}) ביומן הפעולות — ללא השפעה על הרווח/הפסד.`)) return;
+
+    API.setStatus('מוחק פוזיציה — נכתב כפעולת SELL במחיר עלות ביומן הפעולות...', 'info');
+    API.showSpinner(true);
+
+    const today = new Date().toISOString().split('T')[0];
+    const res = await API.appendOperation({ date: today, symbol: p.symbol, action: 'SELL', qty: p.qty, price: p.avg_price, notes: '' });
+    if (!res.ok) {
+      API.showSpinner(false);
+      API.setStatus('❌ ' + (res.error || 'מחיקת הפוזיציה נכשלה'), 'error');
+      return;
+    }
+
+    // Verify by reloading real data from getOperations — never assume the
+    // append landed correctly, same discipline as every other write-through
+    // path in this file.
+    const loaded = await load();
+    API.showSpinner(false);
+
+    if (!loaded) {
+      API.setStatus('⚠️ הפעולה נכתבה, אך הרענון מהשרת נכשל — רענן ידנית כדי לוודא', 'warn');
+      return;
+    }
+
+    if (APP.positions.some(x => x.symbol === p.symbol)) {
+      API.setStatus('⚠️ הפוזיציה עדיין מופיעה כפתוחה — ייתכן שהייתה כמות נוספת שלא נלקחה בחשבון', 'warn');
+      renderAll();
+      return;
+    }
+
+    invalidateStats();
+    API.setStatus('✓ הפוזיציה נמחקה (ללא השפעה על רווח/הפסד)', 'ok');
+    renderAll();
   }
 
   return {

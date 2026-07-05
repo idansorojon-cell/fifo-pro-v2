@@ -53,8 +53,15 @@
 // alertStop into positions.js's stop/warn alert gating, both previously
 // collected but never consulted) — js/settings.js, js/decisionEngine.js,
 // js/positions.js.
-const CACHE_NAME   = 'fifopro-v20';
-const STATIC_CACHE = 'fifopro-static-v20';
+// Bumped v20 -> v21: Delete Position restored — a mistaken open position
+// is now deleted by appending a SELL of the full remaining quantity at
+// its own avg_price (cost basis) via the existing appendOperation
+// endpoint, closing it out with zero P&L impact. Pure addition, no
+// backend changes, no mutation of any existing row. Edit/Delete Trade
+// remain disabled — a closed trade's lot is already consumed, so this
+// same pure-addition approach doesn't apply there — js/positions.js.
+const CACHE_NAME   = 'fifopro-v21';
+const STATIC_CACHE = 'fifopro-static-v21';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
