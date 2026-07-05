@@ -416,9 +416,23 @@ function switchTab(name, btn) {
 // ── Polling fallback ────────────────────────────────────────
 function startPolling() {
   if (APP.pollingInterval) return;
+  if (Settings.get('autoRefresh') === false) return;
+  const intervalMs = (Settings.get('refreshInterval') || 15) * 1000;
   APP.pollingInterval = setInterval(() => {
     if (APP.positions.length > 0) Positions.refreshPrices();
-  }, 15000);
+  }, intervalMs);
+}
+
+function stopPolling() {
+  if (APP.pollingInterval) { clearInterval(APP.pollingInterval); APP.pollingInterval = null; }
+}
+
+// Re-applies the current autoRefresh/refreshInterval settings immediately —
+// called from Settings' own controls so a change takes effect live instead
+// of silently waiting for the next full page load.
+function restartPolling() {
+  stopPolling();
+  startPolling();
 }
 
 // ── Export CSV ──────────────────────────────────────────────

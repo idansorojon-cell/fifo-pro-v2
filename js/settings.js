@@ -32,7 +32,8 @@ const Settings = (() => {
     broker: '',
     // Live data
     autoRefresh: true,
-    refreshInterval: 30,
+    refreshInterval: 15, // matches the app's actual historical polling cadence — do not
+                         // change this default without updating startPolling() in app.js
     // AI
     aiModel: 'claude-sonnet-4-6',
     aiDetailLevel: 'medium',
@@ -104,6 +105,10 @@ const Settings = (() => {
             </div>
           </div>
 
+          <!-- SPRINT 0: hidden from UI — decorative, never read anywhere in the
+               app (confirmed via full-codebase grep during the Sprint 0 audit).
+               Not deleted: row markup + Settings.get/set('currency'/'dateFormat')
+               remain fully intact for possible 2.0 use. See docs/TECHNICAL_DEBT.md.
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">מטבע</span>
@@ -127,6 +132,8 @@ const Settings = (() => {
               <option value="YYYY-MM-DD" ${p.dateFormat==='YYYY-MM-DD'?'selected':''}>YYYY-MM-DD</option>
             </select>
           </div>
+          -->
+
 
           <div class="settings-row">
             <div class="settings-row-info">
@@ -159,13 +166,23 @@ const Settings = (() => {
         <div class="settings-section-title"><span class="ss-icon">🛡️</span> ניהול סיכון</div>
         <div class="settings-card">
           ${_numRow('riskPct','% סיכון לעסקה','אחוז מקסימלי מהתיק לסיכון',p.riskPct,'%',0.1,5,0.1)}
+          <!-- SPRINT 0: hidden — stopLossPct/takeProfitPct/defaultRR/taxPct encode
+               a percentage-based-stop / fixed-R:R model that doesn't match a
+               supply-and-demand, zone-based methodology; taxPct specifically is
+               never read by the real tax formula (hardcoded 25% in utils.js and
+               AppScript_FULL.gs) so leaving it editable implied a control over
+               real numbers it never actually had. Not deleted, kept for 2.0.
           ${_numRow('stopLossPct','% ברירת מחדל Stop Loss','ברירת מחדל בכניסה לפוזיציה',p.stopLossPct,'%',0.5,20,0.5)}
           ${_numRow('takeProfitPct','% ברירת מחדל Take Profit','ברירת מחדל ליעד רווח',p.takeProfitPct,'%',0.5,50,0.5)}
           ${_numRow('defaultRR','יחס Risk/Reward ברירת מחדל','למשל 2 = מחפש 2:1',p.defaultRR,'',0.5,10,0.5)}
+          -->
           ${_numRow('maxPositionSize','גודל פוזיציה מקסימלי (% תיק)','הגבלת ריכוז',p.maxPositionSize,'%',1,100,1)}
           ${_numRow('maxConsecLosses','עצור לאחר X הפסדים רצופים','0 = ללא הגבלה',p.maxConsecLosses,'',0,20,1)}
           ${_numRow('commission','עמלת ברוקר ($)','לעסקה',p.commission,'$',0,100,0.5)}
+          <!-- SPRINT 0: hidden, see note above about taxPct
           ${_numRow('taxPct','% מס רווח הון','ישראל = 25%',p.taxPct,'%',0,50,1)}
+          -->
+          <!--
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">ברוקר</span>
@@ -173,10 +190,16 @@ const Settings = (() => {
             </div>
             <input class="s-input" type="text" value="${p.broker||''}" placeholder="Interactive Brokers, TradeStation..." onchange="Settings.set('broker',this.value)">
           </div>
+          -->
         </div>
       </div>
 
-      <!-- ════ 4. שעות מסחר ════ -->
+      <!-- SPRINT 0: entire "preferred trading hours" section hidden — defaults
+           (09:30-16:00) are literally US market hours as if viewed in the
+           user's own local time, which is wrong for an Israeli trader of US
+           stocks (real session is evening/night, Israel time). A real,
+           session-aware version belongs in FIFO PRO 2.0's Cockpit, not this
+           generic HH:MM picker. Not deleted, kept intact below.
       <div class="settings-section">
         <div class="settings-section-title"><span class="ss-icon">🕐</span> שעות מסחר מועדפות</div>
         <div class="settings-card">
@@ -196,6 +219,8 @@ const Settings = (() => {
           </div>
         </div>
       </div>
+      -->
+
 
       <!-- ════ 5. נתוני שוק חיים ════ -->
       <div class="settings-section">
@@ -224,7 +249,7 @@ const Settings = (() => {
               <span class="settings-row-sub">מחירים חיים כל 30 שניות</span>
             </div>
             <label class="switch">
-              <input type="checkbox" ${p.autoRefresh?'checked':''} onchange="Settings.set('autoRefresh',this.checked)">
+              <input type="checkbox" ${p.autoRefresh?'checked':''} onchange="Settings.set('autoRefresh',this.checked);restartPolling()">
               <span class="switch-slider"></span>
             </label>
           </div>
@@ -234,8 +259,8 @@ const Settings = (() => {
               <span class="settings-row-label">מרווח רענון (שניות)</span>
               <span class="settings-row-sub">כל כמה שניות לרענן מחירים</span>
             </div>
-            <select class="s-input" onchange="Settings.set('refreshInterval',+this.value)">
-              ${[15,30,60,120].map(v=>`<option value="${v}" ${(p.refreshInterval||30)===v?'selected':''}>${v}s</option>`).join('')}
+            <select class="s-input" onchange="Settings.set('refreshInterval',+this.value);restartPolling()">
+              ${[15,30,60,120].map(v=>`<option value="${v}" ${(p.refreshInterval||15)===v?'selected':''}>${v}s</option>`).join('')}
             </select>
           </div>
 
@@ -255,6 +280,9 @@ const Settings = (() => {
         <div class="settings-section-title"><span class="ss-icon">🤖</span> בינה מלאכותית</div>
         <div class="settings-card">
 
+          <!-- SPRINT 0: hidden — never read anywhere; low expected value for a
+               single-user tool (this isn't a multi-tenant product where
+               per-user model cost/quality tradeoffs matter). Not deleted.
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">מודל AI</span>
@@ -266,6 +294,7 @@ const Settings = (() => {
               <option value="claude-opus-4-8" ${p.aiModel==='claude-opus-4-8'?'selected':''}>Claude Opus 4.8 (חכם)</option>
             </select>
           </div>
+          -->
 
           <div class="settings-row">
             <div class="settings-row-info">
@@ -293,13 +322,21 @@ const Settings = (() => {
           <div class="settings-note">התראות מוצגות בתוך האפליקציה. Push Notifications דורשות הגדרה נפרדת.</div>
           ${_toggleRow('alertGoal','התראת יעד חודשי','הגעה ל-100% מהיעד',p.alertGoal)}
           ${_toggleRow('alertStop','התראת Stop Loss','פוזיציה קרובה לסטופ',p.alertStop)}
+          <!-- SPRINT 0: hidden — duplicates the monthly goal already visible
+               on Mission Control with no added insight. Not deleted.
           ${_toggleRow('alertDailyProfit','התראת רווח יומי','הגעה ליעד יומי',p.alertDailyProfit)}
+          -->
           ${_toggleRow('alertDrawdown','התראת Drawdown','ירידה חדה מהשיא',p.alertDrawdown)}
           ${_toggleRow('alertConsecLosses','התראת הפסדים רצופים','לאחר ' + (p.maxConsecLosses||3) + ' הפסדים ברצף',p.alertConsecLosses)}
         </div>
       </div>
 
-      <!-- ════ 8. מודולים ════ -->
+      <!-- SPRINT 0: entire "modules" section hidden — none of these 5 toggles
+           are read anywhere; every module already renders unconditionally
+           regardless of state. Building real show/hide for a screen structure
+           that's being redesigned in FIFO PRO 2.0 would be throwaway effort.
+           Not deleted — section title, card, and all 5 _moduleToggle calls
+           remain intact below.
       <div class="settings-section">
         <div class="settings-section-title"><span class="ss-icon">🧩</span> מודולים</div>
         <div class="settings-card">
@@ -310,6 +347,8 @@ const Settings = (() => {
           ${_moduleToggle('learning','Learning Engine','מנוע למידה אישי',p)}
         </div>
       </div>
+      -->
+
 
       <!-- ════ 9. גיבוי ונתונים ════ -->
       <div class="settings-section">
@@ -335,7 +374,7 @@ const Settings = (() => {
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">ייבוא גיבוי JSON</span>
-              <span class="settings-row-sub">שחזור מקובץ גיבוי</span>
+              <span class="settings-row-sub">משחזר הגדרות בלבד — עסקאות/פוזיציות/Watchlist תמיד מגיעות מ-Google Sheets</span>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="Settings.triggerImport()">⬆️ ייבא JSON</button>
             <input type="file" id="s-import-file" accept=".json" style="display:none" onchange="Settings.importJSON(this)">
@@ -605,9 +644,9 @@ const Settings = (() => {
       try {
         const data = JSON.parse(e.target.result);
         if (!data.trades) throw new Error('קובץ לא תקין — חסר trades');
-        if (!confirm(`ייבוא ${data.trades.length} עסקאות מ-${data.exportDate?.split('T')[0] || 'גיבוי'}?\nהנתונים הנוכחיים ישמרו.`)) return;
+        if (!confirm(`הקובץ מ-${data.exportDate?.split('T')[0] || 'גיבוי'} מכיל ${data.trades.length} עסקאות, אך רק ההגדרות (${'prefs' in data ? 'קיימות' : 'לא קיימות'} בקובץ) ישוחזרו — עסקאות/פוזיציות/Watchlist תמיד נטענות מ-Google Sheets ולא ישתנו. להמשיך?`)) return;
         if (data.prefs) savePrefs(data.prefs);
-        API.setStatus('✓ הגדרות יובאו. רענן לטעינת עסקאות.', 'ok');
+        API.setStatus('✓ הגדרות יובאו (עסקאות/פוזיציות לא הושפעו — הן תמיד מגיעות מ-Google Sheets)', 'ok');
       } catch(err) {
         alert('שגיאה בייבוא: ' + err.message);
       }
