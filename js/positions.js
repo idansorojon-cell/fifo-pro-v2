@@ -276,6 +276,10 @@ const Positions = (() => {
 
   function _computeActiveAlerts() {
     const alerts = [];
+    // Settings' "התראת Stop Loss" (alertStop) gates the two stop-related
+    // categories below (hit + approaching) — previously collected but never
+    // actually consulted, so turning this toggle off had no effect.
+    const stopAlertsEnabled = Settings.get('alertStop') !== false;
     APP.positions.forEach(p => {
       const live = APP.liveData[p.symbol];
       if (!live?.price) return;
@@ -285,11 +289,11 @@ const Positions = (() => {
         alerts.push({ id: _alertId('target', p.symbol, p.target), type: 'target', symbol: p.symbol,
           msg: `${icon('target')} ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
       }
-      if (p.stop_loss && price <= p.stop_loss) {
+      if (stopAlertsEnabled && p.stop_loss && price <= p.stop_loss) {
         alerts.push({ id: _alertId('stop', p.symbol, p.stop_loss), type: 'stop', symbol: p.symbol,
           msg: `${icon('octagon')} ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
       }
-      if (pct <= WARN_THRESHOLD_PCT && (!p.stop_loss || price > p.stop_loss)) {
+      if (stopAlertsEnabled && pct <= WARN_THRESHOLD_PCT && (!p.stop_loss || price > p.stop_loss)) {
         alerts.push({ id: _alertId('warn', p.symbol, WARN_THRESHOLD_PCT), type: 'warn', symbol: p.symbol,
           msg: `${icon('alert-triangle')} ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
       }

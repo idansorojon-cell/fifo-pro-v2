@@ -254,7 +254,10 @@ const DecisionEngine = (() => {
 
       const exposure = entry * qty;
       const exposurePct = exposure / portfolio * 100;
-      details.push({ label:'חשיפה כוללת', val: `${f$(Math.round(exposure))} (${exposurePct.toFixed(0)}% מהתיק)`, color: exposurePct>30?'gold':'muted', points:0 });
+      // Threshold comes from Settings' "גודל פוזיציה מקסימלי" (maxPositionSize) —
+      // was hardcoded to 30 before this was wired up.
+      const maxPositionPct = Settings.get('maxPositionSize');
+      details.push({ label:'חשיפה כוללת', val: `${f$(Math.round(exposure))} (${exposurePct.toFixed(0)}% מהתיק)`, color: exposurePct>maxPositionPct?'gold':'muted', points:0 });
     } else {
       details.push({ label:'גודל פוזיציה / חשיפה', val:'הזן כמות וגודל תיק לחישוב', color:'muted', points:0 });
     }

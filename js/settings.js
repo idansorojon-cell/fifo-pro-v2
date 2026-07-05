@@ -135,6 +135,10 @@ const Settings = (() => {
           -->
 
 
+          <!-- FUNCTIONAL CLEANUP: hidden — never read anywhere (confirmed via
+               full-codebase grep); the "preferred trading hours" feature this
+               would have supported is itself already hidden (see SPRINT 0 note
+               below). Not deleted, kept for possible 2.0 use.
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">אזור זמן</span>
@@ -146,6 +150,7 @@ const Settings = (() => {
               <option value="Europe/London" ${p.timezone==='Europe/London'?'selected':''}>London (GMT)</option>
             </select>
           </div>
+          -->
 
         </div>
       </div>
@@ -155,8 +160,14 @@ const Settings = (() => {
         <div class="settings-section-title"><span class="ss-icon">🎯</span> יעדים מסחריים</div>
         <div class="settings-card">
           ${_numRow('monthlyGoal','יעד חודשי ($)','יעד הרווח החודשי שלך',p.monthlyGoal,'$')}
+          <!-- FUNCTIONAL CLEANUP: hidden — weeklyGoal/dailyGoal are never read
+               anywhere; only monthlyGoal has a real display surface (Dashboard's
+               goal-progress ring/bar, via APP.monthGoal). A week/day equivalent
+               would need new UI, not just wiring an existing one — out of scope
+               for this cleanup pass. Not deleted, kept for possible 2.0 use.
           ${_numRow('weeklyGoal','יעד שבועי ($)','יעד הרווח השבועי',p.weeklyGoal,'$')}
           ${_numRow('dailyGoal','יעד יומי ($)','יעד הרווח היומי',p.dailyGoal,'$')}
+          -->
           ${_numRow('portfolioSize','גודל תיק ($)','סך ההון המנוהל',p.portfolioSize,'$')}
         </div>
       </div>
@@ -176,9 +187,17 @@ const Settings = (() => {
           ${_numRow('takeProfitPct','% ברירת מחדל Take Profit','ברירת מחדל ליעד רווח',p.takeProfitPct,'%',0.5,50,0.5)}
           ${_numRow('defaultRR','יחס Risk/Reward ברירת מחדל','למשל 2 = מחפש 2:1',p.defaultRR,'',0.5,10,0.5)}
           -->
-          ${_numRow('maxPositionSize','גודל פוזיציה מקסימלי (% תיק)','הגבלת ריכוז',p.maxPositionSize,'%',1,100,1)}
+          ${_numRow('maxPositionSize','גודל פוזיציה מקסימלי (% תיק)','הגבלת ריכוז — משפיע על צביעת "חשיפה כוללת" ב-Decision Engine',p.maxPositionSize,'%',1,100,1)}
+          <!-- FUNCTIONAL CLEANUP: hidden — maxConsecLosses is never read anywhere
+               (no consecutive-loss-streak detection exists yet to gate); building
+               that detection is new logic, not a wiring fix, so out of scope for
+               this cleanup pass. commission is never read anywhere either — no
+               trade-entry form (Add Trade/Quick Trade/New Position) collects a
+               commission value, so this had no real number to control. Not
+               deleted, kept for possible 2.0 use.
           ${_numRow('maxConsecLosses','עצור לאחר X הפסדים רצופים','0 = ללא הגבלה',p.maxConsecLosses,'',0,20,1)}
           ${_numRow('commission','עמלת ברוקר ($)','לעסקה',p.commission,'$',0,100,0.5)}
+          -->
           <!-- SPRINT 0: hidden, see note above about taxPct
           ${_numRow('taxPct','% מס רווח הון','ישראל = 25%',p.taxPct,'%',0,50,1)}
           -->
@@ -275,14 +294,16 @@ const Settings = (() => {
         </div>
       </div>
 
-      <!-- ════ 6. בינה מלאכותית ════ -->
+      <!-- FUNCTIONAL CLEANUP: entire "6. בינה מלאכותית" section hidden —
+           aiModel was already hidden (SPRINT 0); aiDetailLevel/aiAfterTrade/
+           aiDailyReview/aiWeeklyReview are never read anywhere (confirmed via
+           full-codebase grep) — no scheduled/triggered AI review exists to gate,
+           and AI Chat doesn't consult a detail-level preference. Building that
+           is new feature work, not a wiring fix. Not deleted, kept for 2.0.
       <div class="settings-section">
         <div class="settings-section-title"><span class="ss-icon">🤖</span> בינה מלאכותית</div>
         <div class="settings-card">
 
-          <!-- SPRINT 0: hidden — never read anywhere; low expected value for a
-               single-user tool (this isn't a multi-tenant product where
-               per-user model cost/quality tradeoffs matter). Not deleted.
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">מודל AI</span>
@@ -294,7 +315,6 @@ const Settings = (() => {
               <option value="claude-opus-4-8" ${p.aiModel==='claude-opus-4-8'?'selected':''}>Claude Opus 4.8 (חכם)</option>
             </select>
           </div>
-          -->
 
           <div class="settings-row">
             <div class="settings-row-info">
@@ -314,20 +334,31 @@ const Settings = (() => {
 
         </div>
       </div>
+      -->
 
       <!-- ════ 7. התראות ════ -->
       <div class="settings-section">
         <div class="settings-section-title"><span class="ss-icon">🔔</span> התראות</div>
         <div class="settings-card">
           <div class="settings-note">התראות מוצגות בתוך האפליקציה. Push Notifications דורשות הגדרה נפרדת.</div>
+          ${_toggleRow('alertStop','התראת Stop Loss','פוזיציה קרובה לסטופ או פגיעה בו — משפיע בפועל על מערכת ההתראות',p.alertStop)}
+          <!-- FUNCTIONAL CLEANUP: hidden — alertGoal/alertDrawdown/
+               alertConsecLosses are never consulted by any real alert-firing
+               code (positions.js's alert system only checks target/stop/warn
+               thresholds, gated now by alertStop above). Wiring these up would
+               mean building new alert categories from scratch (a monthly-goal
+               toast, a drawdown-from-peak toast, a consecutive-loss-streak
+               detector), not a small fix. Not deleted, kept for 2.0.
           ${_toggleRow('alertGoal','התראת יעד חודשי','הגעה ל-100% מהיעד',p.alertGoal)}
-          ${_toggleRow('alertStop','התראת Stop Loss','פוזיציה קרובה לסטופ',p.alertStop)}
+          -->
           <!-- SPRINT 0: hidden — duplicates the monthly goal already visible
                on Mission Control with no added insight. Not deleted.
           ${_toggleRow('alertDailyProfit','התראת רווח יומי','הגעה ליעד יומי',p.alertDailyProfit)}
           -->
+          <!-- FUNCTIONAL CLEANUP: see note above alertGoal
           ${_toggleRow('alertDrawdown','התראת Drawdown','ירידה חדה מהשיא',p.alertDrawdown)}
           ${_toggleRow('alertConsecLosses','התראת הפסדים רצופים','לאחר ' + (p.maxConsecLosses||3) + ' הפסדים ברצף',p.alertConsecLosses)}
+          -->
         </div>
       </div>
 
@@ -436,6 +467,11 @@ const Settings = (() => {
             <div id="pw-change-msg" style="margin-top:8px;font-size:12px"></div>
           </div>
 
+          <!-- FUNCTIONAL CLEANUP: hidden — never read anywhere; the real
+               session TTL is server-side (Script Property SESSION_TTL_HOURS,
+               consulted by handleLogin_/handleChangePassword_), completely
+               independent of this local dropdown. Also currently moot while
+               AUTH_DISABLED=true. Not deleted, kept for when auth is restored.
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">פסק זמן Session (דקות)</span>
@@ -445,6 +481,7 @@ const Settings = (() => {
               ${[0,15,30,60,120].map(v=>`<option value="${v}" ${(p.sessionTimeout||0)===v?'selected':''}>${v===0?'ללא':v+' דקות'}</option>`).join('')}
             </select>
           </div>
+          -->
 
           <div class="settings-row">
             <div class="settings-row-info">

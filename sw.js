@@ -45,8 +45,16 @@
 // stale .action-disabled class from all three now-live buttons in
 // index.html (Add Trade, New Position, Quick Trade submit) — index.html,
 // js/quicktrade.js, js/trades.js.
-const CACHE_NAME   = 'fifopro-v19';
-const STATIC_CACHE = 'fifopro-static-v19';
+// Bumped v19 -> v20: Functional cleanup — Settings audit (hid ~15
+// decorative controls never read anywhere: timezone, weeklyGoal/
+// dailyGoal, maxConsecLosses, commission, the whole AI section,
+// alertGoal/alertDrawdown/alertConsecLosses, sessionTimeout; wired up
+// maxPositionSize into Decision Engine's exposure-risk coloring and
+// alertStop into positions.js's stop/warn alert gating, both previously
+// collected but never consulted) — js/settings.js, js/decisionEngine.js,
+// js/positions.js.
+const CACHE_NAME   = 'fifopro-v20';
+const STATIC_CACHE = 'fifopro-static-v20';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
