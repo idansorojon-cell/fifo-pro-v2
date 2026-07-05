@@ -165,7 +165,7 @@
 
   <!-- ── Header ──────────────────────────────────────── -->
   <div class="header">
-    <div class="header-logo">
+    <div class="header-logo" onclick="showCockpit()" style="cursor:pointer" title="חזרה ל-Cockpit">
       <div>
         <h1>FIFO <span>PRO</span>
           <span id="sync-spinner" style="display:none" class="spinner" style="width:12px;height:12px;margin-right:6px"></span>
@@ -227,6 +227,15 @@
     <span class="bc-sep">/</span>
     <span id="breadcrumb-tab-label" class="bc-current"></span>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       FIFO PRO 2.0, Phase 1 — Cockpit (new default landing screen).
+       Built additively: renders entirely via Cockpit.render() (js/cockpit.js).
+       Mission Control below (tab-hub-dashboard) is completely unchanged and
+       still fully reachable via the "דשבורד" nav category — nothing here
+       replaces or hides it.
+  ═══════════════════════════════════════════════════ -->
+  <div id="tab-cockpit" class="panel"></div>
 
   <!-- ═══════════════════════════════════════════════════
        HUB PANELS — Section landing pages
@@ -945,6 +954,7 @@
 <script src="js/charts.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/positions.js"></script>
+<script src="js/cockpit.js"></script>
 <script src="js/watchlist.js"></script>
 <script src="js/journal.js"></script>
 <script src="js/analytics.js"></script>

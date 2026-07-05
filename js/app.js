@@ -306,6 +306,22 @@ function switchCategory(cat, btn, fromBottomNav) {
   APP.lastTab[cat] = 'hub-' + cat;
 }
 
+// ── Cockpit (FIFO PRO 2.0, Phase 1) ──────────────────────────
+// Cockpit sits outside the 5 existing nav categories — it's the new
+// default landing screen, reachable at any time via the header logo.
+// Reuses the exact same generic "hide every .panel, show one" pattern
+// switchCategory already uses, so it needs no change to that function.
+function showCockpit() {
+  APP.currentCategory = null;
+  document.querySelectorAll('.nav-cat').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById('tab-cockpit');
+  if (el) el.classList.add('active');
+  _hideBreadcrumb();
+  if (typeof Cockpit !== 'undefined') Cockpit.render();
+}
+
 // ── Breadcrumb helpers ──────────────────────────────────────
 function _showBreadcrumb(tabName) {
   const bc    = document.getElementById('breadcrumb');
@@ -880,7 +896,11 @@ async function _initApp() {
   updateSeedBanner();
   renderAll();
 
-  switchCategory('dashboard', document.querySelector('.nav-cat[data-cat="dashboard"]'));
+  // FIFO PRO 2.0, Phase 1: Cockpit is now the default landing screen
+  // (previously switchCategory('dashboard', ...), i.e. Mission Control).
+  // Mission Control is unchanged and one click away via the "דשבורד" nav
+  // category, exactly as before.
+  showCockpit();
 
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();

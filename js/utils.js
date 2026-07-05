@@ -274,6 +274,33 @@ function calcStats(trades = window.APP?.trades || []) {
   };
 }
 
+// ── Mark-to-market (FIFO PRO 2.0 — Cockpit) ─────────────────
+// Additive only: calls calcStats() unmodified for the realized side, and
+// reuses the exact same open-P&L formula already proven correct in
+// renderMissionControl() (app.js) / positions.js's posCard() for the
+// unrealized side, so this can never silently drift from what Positions/
+// Mission Control already show. calcStats() itself is never touched —
+// this is a new, separate function, not a change to existing behavior.
+function calcLiveStats(trades, positions, liveData) {
+  const realizedNet = calcStats(trades).totalNet;
+
+  let unrealizedNet = 0, unrealizedCost = 0, liveCount = 0;
+  (positions || []).forEach(p => {
+    const live = (liveData || {})[p.symbol];
+    unrealizedCost += p.avg_price * p.qty;
+    if (live?.price) { unrealizedNet += (live.price - p.avg_price) * p.qty; liveCount++; }
+  });
+
+  return {
+    realizedNet,
+    unrealizedNet,
+    unrealizedCost,
+    combinedNet: realizedNet + unrealizedNet,
+    liveCount,
+    positionsCount: (positions || []).length,
+  };
+}
+
 // ── DOM helpers ────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
@@ -420,7 +447,7 @@ window.Utils = {
   f$, fILS, fpct, fnum, fprice, icon,
   parseDD, toDD, isoToDD, ddToISO, monthLabel, currentMonthKey,
   rateForMonth, usdToIls, tradesNetIls,
-  normalizeTrade, calcStats, detectMistakes,
+  normalizeTrade, calcStats, calcLiveStats, detectMistakes,
   $, $$, setHTML, show, hide, LS, debounce,
   chartDefaults, scoreColor, scoreLabel, scoreLabelHE, finalRecommendation
 };

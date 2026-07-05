@@ -212,6 +212,11 @@ const Positions = (() => {
       // else. app.js loads after positions.js but this only ever runs at
       // runtime (after boot), so the function is guaranteed to exist by then.
       if (typeof renderMissionControl === 'function') renderMissionControl();
+      // Same reasoning for Cockpit (FIFO PRO 2.0, Phase 1) — its
+      // mark-to-market number and action list are only ever as fresh as
+      // the last render() call, so it needs the same live-price hook.
+      // cockpit.js is guarded the same way (checks #tab-cockpit exists).
+      if (typeof Cockpit !== 'undefined') Cockpit.render();
 
       if (loadedCount > 0) {
         API.reportPriceSuccess();
