@@ -45,7 +45,7 @@ took effect **retroactively across all history** the moment it was
 redeployed — every past month's displayed total shifted upward, with no
 data migration needed.
 
-## Data integrity — position target/stop/notes silently dropped (FIXED, pending backend redeploy)
+## Data integrity — position target/stop/notes silently dropped (FIXED, redeployed, confirmed live)
 
 **Confirmed live via direct API calls against production** (`curl`'ing
 `getOperations` and `getPositions` on the live Apps Script URL): the
@@ -83,20 +83,19 @@ invisible by design, not just by omission.
   the app now correctly shows `❌ Unknown action: upsertPositionMeta`
   instead of a false green checkmark.
 
-**Status:** frontend fix ships automatically on `git push`. **Backend fix
-requires a manual Apps Script redeploy** (paste `AppScript_FULL.gs` into
-script.google.com, new deployment version) before target/stop/notes
-actually save in production — until then, the app will correctly show the
-`Unknown action` error above rather than silently losing data, which is a
-strict improvement over the previous silent-failure state even
-pre-redeploy.
+**Status:** both the frontend fix (shipped on `git push`) and the backend
+fix (`AppScript_FULL.gs`, manually redeployed) are live. **Confirmed live
+2026-07-05** via a direct, read-only API call: both real open positions
+(QBTX, ONDL) return `target`/`stop_loss`/`notes` fields from the
+`mergePositionMeta_` overlay (currently empty because the trader hasn't
+set values for them yet, not because the merge is missing).
 
 **Deliberately not touched:** deleting a position that came from
 `getOperations` — that's a separate, pre-existing UX question (the
 position would likely just reappear on the next load since it's derived
 from the trade log), out of scope for this fix.
 
-## Persistence architecture — incomplete data-model migration (Phase A shipped, Phase B next)
+## Persistence architecture — incomplete data-model migration (Phase A and Phase B shipped, confirmed live; Trades' own CRUD still pending)
 
 ### The full picture
 
@@ -117,15 +116,15 @@ Full per-module trace (write path -> read path -> outcome):
 
 | Module | Write path | Read path | Outcome |
 |---|---|---|---|
-| Trades (add/edit) | `addTrade`/`updateTrade` -> legacy `Trades` sheet, **by id** | `getOperations` -> `applyFIFO_`, never reads `Trades` | ❌ Broken — invisible after refresh |
-| Trades (delete) | `deleteTrade`, **by id** | same | ❌ Broken, **and the one with real corruption risk** — see below |
-| Journal (entry/exit reason, respected stop, followed plan, lesson, emotion) | `updateTrade` -> legacy `Trades` sheet, by id | `applyFIFO_` **hardcodes all 6 fields to `''`** — no merge function exists for them at all | ❌ Broken, deterministically, for every trade — this is why the Journal table always shows "—" |
-| Trade Notes | `updateTrade` -> legacy `Trades` sheet | `applyFIFO_` populates `notes` from the raw `"פעולות"` row's own notes column, **not** the legacy `Trades` sheet | ❌ Broken, same shape as Journal |
-| Positions — target/stop/notes on an *existing* derived position | `upsertPositionMeta`, **by symbol** | `mergePositionMeta_` overlays these 3 fields by symbol | ✅ Fully persistent — the one path already fixed |
-| Positions — qty/avg_price on an *existing* position | `upsertPositionMeta` writes them too | `mergePositionMeta_` **deliberately never reads them back** | ❌ Broken, silently — fake success, input discarded on reload |
-| Positions — brand-new symbol, no FIFO lot | `upsertPositionMeta`, new row | never derived, never merged | ❌ Broken — the originally-reported "New Position" bug |
-| Positions — Quick Trade "buy" tab | `addPosition` (the **old**, id-keyed endpoint, not the fixed one) | same as above | ❌ Broken, and a **second, still-unpatched** id-collision risk |
-| Quick Trade "sell" tab | `addTrade` -> legacy `Trades` sheet | same as Trades add | ❌ Broken — phantom trade |
+| Trades (add/edit) | `addTrade`/`updateTrade` -> legacy `Trades` sheet, **by id** — **disabled at the UI entry point since Phase A**, original logic kept behind an early `return` | `getOperations` -> `applyFIFO_`, never reads `Trades` | ⏸ Intentionally disabled, not silently broken — still needs its own composite-key fix + product decision (P0, unimplemented, see ROADMAP.md) |
+| Trades (delete) | `deleteTrade`, **by id** — **disabled at the UI entry point since Phase A** | same | ⏸ Intentionally disabled — was the one path with real corruption risk before being disabled |
+| Journal (entry/exit reason, respected stop, followed plan, lesson, emotion) | `upsertTradeMeta` -> legacy `Trades` sheet, matched by a **composite key** (`symbol+buy_date+sell_date+qty+buy_price+sell_price`) — **Phase B** | `mergeTradeMeta_()` overlays all 6 fields by the same composite key | ✅ Fixed (Phase B) — confirmed live 2026-07-05 via direct API check; genuinely persists now |
+| Trade Notes | `upsertTradeMeta`, same composite key — **Phase B** | `mergeTradeMeta_()`, same overlay | ✅ Fixed (Phase B) — confirmed live 2026-07-05, same shape as Journal |
+| Positions — target/stop/notes on an *existing* derived position | `upsertPositionMeta`, **by symbol** | `mergePositionMeta_` overlays these 3 fields by symbol | ✅ Fully persistent — confirmed live 2026-07-05 via direct API check |
+| Positions — qty/avg_price on an *existing* position | **disabled at the UI since Phase A** — inputs are now `disabled`, can no longer be typed into | n/a | ⏸ Intentionally disabled — was silently discarding input before being disabled |
+| Positions — brand-new symbol, no FIFO lot | **disabled at the UI since Phase A** — creation blocked with an explanation | n/a | ⏸ Intentionally disabled — was the originally-reported "New Position" bug |
+| Positions — Quick Trade "buy" tab | **disabled at the UI since Phase A** — `QuickTrade.submit()`'s buy branch disabled entirely | n/a | ⏸ Intentionally disabled — was a second, unpatched id-collision risk; Phase C (point it at `upsertPositionMeta`) still pending |
+| Quick Trade "sell" tab | **disabled at the UI since Phase A** — `QuickTrade.submit()`'s sell branch disabled entirely | n/a | ⏸ Intentionally disabled — was a phantom-trade bug |
 | Watchlist | `addWatchlist`/`removeWatchlist` -> `Watchlist` sheet, by symbol | `getWatchlist` -> same sheet, same key | ✅ Fully persistent — never went through the migration, single sheet/key throughout |
 | Goals (monthly) | `setGoal` -> `Settings` sheet, key `goal` | `getGoal` -> same sheet, same key | ✅ Fully persistent |
 
@@ -139,7 +138,10 @@ coincidental, not structural, and it has already partially drifted (the 2
 newest trades, ids 109-110, have no legacy row at all). Real financial
 data, silent-corruption potential, and the single most-used CRUD action in
 the app is a combination that outranks the "just invisible after refresh"
-bugs on its own.
+bugs on its own. **Since Phase A, this path is disabled rather than
+silently live** — the corruption risk is neutralized for now, but the
+feature gap (no way to edit/delete a trade at all) remains open and is
+still the top P0 item; see ROADMAP.md.
 
 ### Unified fix strategy (agreed)
 
@@ -156,16 +158,20 @@ derived key** (symbol for positions; a composite
 proven unique across the full 108-trade history during the tax audit),
 never a synthetic/regenerated id.
 
-Phases: **A** (frontend-only, disable every fake-persistence path — this
-section) -> **B** (backend, generalize the annotation pattern to trades:
-new `upsertTradeMeta` + `mergeTradeMeta_`) -> **C** (frontend-only, point
-Quick Trade's "buy" tab at the already-existing `upsertPositionMeta`) ->
-**D** (optional/future, writing real trades to `"פעולות"` itself — its own
-design conversation, not scheduled) -> **E** (Settings fake-controls
-cleanup, after persistence is safe, per explicit instruction) -> **F**
-(remaining Phase 5 UI polish).
+Phases: **A** ✅ shipped, confirmed live (frontend-only, disable every
+fake-persistence path — see below) -> **B** ✅ shipped, confirmed live
+(backend, generalize the annotation pattern to trades: new
+`upsertTradeMeta` + `mergeTradeMeta_` — see below) -> **C** (not started,
+frontend-only, point Quick Trade's "buy" tab at the already-existing
+`upsertPositionMeta`) -> **D** (optional/future, writing real trades to
+`"פעולות"` itself — its own design conversation, not scheduled) -> **E**
+(Settings fake-controls cleanup, after persistence is safe, per explicit
+instruction) -> **F** (remaining Phase 5 UI polish). Trades' own
+add/edit/delete is intentionally not part of this phase list — it needs
+its own product decision (see ROADMAP.md P0) before it can be scheduled
+as a phase.
 
-### Phase A — shipped this commit
+### Phase A — shipped, confirmed live
 
 Every fake-persistence path disabled at its UI entry point (not deleted —
 original logic kept in place behind an early `return`, as a reference for
@@ -201,8 +207,41 @@ can't do anything useful. Editing an *existing* position's target/stop/
 notes was separately confirmed still fully functional. Checked at both
 desktop and mobile (375x812).
 
-**Not yet done:** Phase B (real trade/journal/notes persistence via
-`upsertTradeMeta`/`mergeTradeMeta_`) — see ROADMAP.md.
+**Followed immediately by:** Phase B, below — also confirmed live.
+
+### Phase B — shipped, confirmed live
+
+New `upsertTradeMeta` endpoint (`AppScript_FULL.gs`) and
+`mergeTradeMeta_()` read-side merge, generalizing the position-meta
+pattern to trades via the same kind of stable, content-derived key:
+`symbol+buy_date+sell_date+qty+buy_price+sell_price`, proven unique
+across the full 108-trade history during the tax audit.
+`js/api.js`/`js/journal.js` redirected to the new endpoint.
+
+**The deployment path here was unusual and is worth recording.** While
+verifying Phase B against the live backend, the live Apps Script was
+found to **already have this exact code** — traced to the trader copying
+`AppScript_FULL.gs` directly off local disk (not via git) and
+redeploying, ahead of any commit for it. Implementation was paused
+immediately per explicit instruction, a test write (`lesson:
+'TEST-VERIFY'` on a real trade) was reverted via the same endpoint, and
+nothing further was redeployed. The trader then provided the live Apps
+Script source directly; it was compared byte-for-byte against the local
+working tree (which still had the uncommitted Phase B edits) on every
+checked marker (dispatcher, tax-fix comment, all Phase B functions) —
+confirmed identical. A sync commit (`89e6948`, "Sync repo with live Apps
+Script Phase B backend") was made to bring git in line with what was
+already live; **it deployed nothing new.**
+
+**Verified live** (2026-07-05, via a direct read-only `curl` against the
+live Apps Script `exec` URL): `getOperations` returns `entry_reason`/
+`exit_reason`/`respected_stop`/`followed_plan`/`lesson`/`emotion` on
+every trade — the fields exist and are populated by the merge, just not
+yet filled in by the trader for historical trades.
+
+**Not yet done:** Trades' own add/edit/delete (still disabled per Phase
+A, pending its own composite-key fix and a product decision — see
+ROADMAP.md P0) and Phase C (Quick Trade's buy tab → `upsertPositionMeta`).
 
 ## Security
 

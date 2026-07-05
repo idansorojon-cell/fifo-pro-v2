@@ -6,9 +6,26 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 
 - [ ] **Restore authentication** (see TECHNICAL_DEBT.md — "Restoring
       authentication"). Currently fully open.
-- [ ] **Confirm live Apps Script deployment matches `AppScript_FULL.gs` in
-      git.** Backend deploys are manual; verify with `testAuth_()` and
-      `testFinnhub_()` run directly in the Apps Script editor.
+- [x] **Confirm live Apps Script deployment matches `AppScript_FULL.gs` in
+      git.** Re-verified 2026-07-05 via direct, read-only `curl` calls
+      against the live Apps Script `exec` URL (not just `testAuth_()`/
+      `testFinnhub_()` in the editor): `getOperations` returns the
+      symmetric tax fix, the Phase B journal-annotation fields, and the
+      position-meta overlay, all live. Git, GitHub Pages, and the live
+      backend are all in sync as of this check. **This is a snapshot, not
+      a standing guarantee** — re-verify again after any future manual
+      redeploy, since the trader has redeployed from local disk ahead of
+      git before (see TECHNICAL_DEBT.md).
+- [ ] **Trades' own add/edit/delete still disabled.** Needs the same fix
+      Journal/Notes already got: a composite-key-matched write/read. This
+      is genuinely different from Journal/Notes because it means *editing
+      derived facts*, not just annotations — only makes sense coupled to
+      fixing the source row in `"פעולות"` too (see Phase D). Needs a
+      product decision before implementation, not just a code fix.
+- [ ] **`seedToSheets()`'s dormant `seedAll` path** — writes to the legacy
+      `Trades` sheet only when zero trades exist (never fires against
+      current production data, but is a latent instance of the same
+      synthetic-id bug class).
 - [x] **Position target/stop-loss/notes silent data-loss — fixed in code,
       redeployed.** Confirmed live (via direct API calls) that the
       primary data path was hardcoding these fields blank and the edit
@@ -58,11 +75,17 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
       app (not just read in source) that every disabled path leaves
       `APP.trades`/`APP.positions` unchanged and shows a clear warning
       toast, at both desktop and mobile. See TECHNICAL_DEBT.md.
-- [ ] **Phase B (next) — real Trade/Journal/Notes persistence.** New
+- [x] **Phase B — real Trade/Journal/Notes persistence.** New
       `upsertTradeMeta` endpoint + `mergeTradeMeta_()` read-side merge,
       generalizing the position-meta pattern to trades via a stable
       composite key (`symbol+buy_date+sell_date+qty+buy_price+sell_price`).
-      Requires Apps Script redeploy. See TECHNICAL_DEBT.md.
+      **Confirmed live 2026-07-05** via direct API check — `getOperations`
+      returns populated journal-field slots (`entry_reason`/`exit_reason`/
+      `respected_stop`/`followed_plan`/`lesson`/`emotion`) merged by
+      composite key. Journal and Trade Notes now genuinely persist. See
+      TECHNICAL_DEBT.md for the unusual deploy path (live backend already
+      had this code before the commit existed; a sync commit reconciled
+      git with production rather than deploying anything new).
 - [ ] **Phase C — Quick Trade's "buy" tab.** Point it at the already-
       existing `upsertPositionMeta` instead of the old, id-keyed
       `addPosition`. Frontend-only, no backend change needed.
