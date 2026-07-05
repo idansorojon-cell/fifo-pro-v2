@@ -287,6 +287,7 @@ const TAB_LABELS = {
   replay:'Trade Replay', portheatmap:'Heatmap תיק',
   heatmap:'לוח שנה', symnotes:'לפי סימבול',
   decision:'מנוע החלטות', coach:'מאמן AI', aichat:'שיחה עם AI',
+  'coach-evidence':'Coach — מבוסס עדויות',
   settings:'הגדרות מערכת'
 };
 
@@ -382,6 +383,9 @@ function switchTab(name, btn) {
       break;
     case 'coach':
       AICoach.render();
+      break;
+    case 'coach-evidence':
+      Coach.render();
       break;
     case 'aichat':
       AIChat.init();

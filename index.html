@@ -426,6 +426,12 @@
         <span class="hub-card-desc">שאל כל שאלה על המסחר שלך</span>
         <span class="hub-card-arrow">←</span>
       </button>
+      <button class="hub-card hub-card-ai" onclick="switchTab('coach-evidence')">
+        <span class="hub-card-icon"><svg class="icon"><use href="#icon-search"/></svg></span>
+        <span class="hub-card-label">Coach — מבוסס עדויות</span>
+        <span class="hub-card-desc">תוכנית מול מציאות מול היסטוריה — בלי ניחושים</span>
+        <span class="hub-card-arrow">←</span>
+      </button>
     </div>
   </div>
 
@@ -813,6 +819,10 @@
     </div>
   </div>
 
+  <!-- COACH — evidence-based (FIFO PRO 2.0, Phase 3). Renders entirely via
+       Coach.render() (js/coach.js). AI Coach above is unchanged. -->
+  <div id="tab-coach-evidence" class="panel"></div>
+
   <!-- AI CHAT -->
   <div id="tab-aichat" class="panel">
     <div style="margin-bottom:12px">
@@ -965,6 +975,7 @@
 <script src="js/positions.js"></script>
 <script src="js/cockpit.js"></script>
 <script src="js/ledger.js"></script>
+<script src="js/coach.js"></script>
 <script src="js/watchlist.js"></script>
 <script src="js/journal.js"></script>
 <script src="js/analytics.js"></script>
