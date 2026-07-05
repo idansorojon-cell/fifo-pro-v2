@@ -18,13 +18,18 @@ const API = (() => {
 
   // ── Status bar ─────────────────────────────────────────
 
+  let statusTimer = null;
   function setStatus(msg, type='info') {
     const bar = document.getElementById('sync-bar');
     if (!bar) return;
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
     bar.textContent = msg;
     bar.className = `sync-bar sync-bar--${type}`;
     bar.style.display = msg ? 'flex' : 'none';
-    if (type === 'ok') setTimeout(() => setStatus(''), 3000);
+    bar.style.cursor = msg ? 'pointer' : '';
+    bar.onclick = msg ? () => setStatus('') : null;
+    if (type === 'ok')      statusTimer = setTimeout(() => setStatus(''), 3000);
+    else if (msg)           statusTimer = setTimeout(() => setStatus(''), 8000);
   }
 
   function showSpinner(show) {
@@ -321,6 +326,7 @@ const API = (() => {
     updateWsDot('ok', 'עודכן לאחרונה: ' + now);
     const lu = document.getElementById('last-updated');
     if (lu) lu.textContent = 'עודכן: ' + now;
+    Utils.LS.set('fifo_last_price_update', now);
   }
 
   function reportPriceError(msg, manual) {
