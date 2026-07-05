@@ -114,20 +114,17 @@ const Trades = (() => {
   }
 
   // ── Add/Edit Modal ────────────────────────────────────────
-  // PHASE A (persistence-layer migration): adding/editing/deleting a trade
-  // here writes to the legacy "Trades" sheet by id, which the primary read
-  // path (getOperations -> applyFIFO_, deriving trades fresh from the
-  // "פעולות" transaction log) never reads — the edit appeared to save but
-  // silently reverted on refresh, and worse, the numeric id only
-  // coincidentally aligns with the derived list today (see
-  // docs/TECHNICAL_DEBT.md "Persistence architecture"). Disabled at the
-  // entry point rather than at submit() so the trader isn't invited to
-  // fill out a form that can't actually save. Original logic kept below,
-  // unreachable, as reference for Phase B/D — not deleted.
+  // WRITE-THROUGH (create-only): adding a brand-new closed trade now
+  // appends a matched BUY+SELL pair straight to "פעולות" (see
+  // API.addTradeOperation / AppScript_FULL.gs handleAddTradeOperation_) —
+  // "פעולות" stays the single source of truth, nothing writes to the
+  // legacy Trades sheet. Editing/deleting an ALREADY-RECORDED historical
+  // trade remains out of scope (openEdit/remove below, still disabled) —
+  // mutating a row FIFO has already lot-matched against others is a much
+  // harder problem than appending a new, self-contained pair. See
+  // docs/TECHNICAL_DEBT.md "Persistence architecture".
 
   function openAddForm() {
-    API.setStatus('❌ הוספת עסקאות מבוטלת זמנית — עסקאות מגיעות רק מיומן הפעולות ב-Google Sheets', 'warn');
-    return;
     APP.editId = null;
     document.getElementById('modal-title').textContent = 'עסקה חדשה';
     ['symbol','buy-date','sell-date','qty','buy-price','sell-price','notes'].forEach(f => {
@@ -178,69 +175,53 @@ const Trades = (() => {
   }
 
   async function submit() {
-    // PHASE A guard: defense-in-depth in case this is ever reached without
-    // going through the now-disabled openAddForm()/openEdit() — same
-    // reasoning as those two, see the comment above them.
-    API.setStatus('❌ שמירת עסקאות מבוטלת זמנית — לא הייתה נשמרת בפועל אחרי רענון', 'warn');
-    return;
+    if (APP.editId !== null) {
+      // Editing an already-recorded historical trade is still out of
+      // scope — openEdit() is disabled at its own entry point so this
+      // should be unreachable, but keep a defense-in-depth guard here too,
+      // same reasoning as before. See docs/TECHNICAL_DEBT.md P0.
+      API.setStatus('❌ עריכת עסקאות מבוטלת זמנית — יש לתקן ישירות ביומן הפעולות', 'warn');
+      closeForm();
+      return;
+    }
+
     const sym = (document.getElementById('f-symbol').value || '').trim().toUpperCase();
-    const bd  = isoToDD(document.getElementById('f-buy-date').value.trim());
-    const sd  = isoToDD(document.getElementById('f-sell-date').value.trim());
+    const bd  = document.getElementById('f-buy-date').value;  // ISO, native <input type="date">
+    const sd  = document.getElementById('f-sell-date').value; // ISO
     const qty = +document.getElementById('f-qty').value;
     const bp  = +document.getElementById('f-buy-price').value;
     const sp  = +document.getElementById('f-sell-price').value;
     const notes = document.getElementById('f-notes').value.trim();
 
-    if (!sym || !sd || !qty || !bp || !sp) {
-      alert('נא למלא: סימבול, תאריך מכירה, כמות, מחיר קנייה, מחיר מכירה');
+    if (!sym || !bd || !sd || !qty || !bp || !sp) {
+      alert('נא למלא: סימבול, תאריך קנייה, תאריך מכירה, כמות, מחיר קנייה, מחיר מכירה');
       return;
     }
 
-    const cost      = +(qty * bp).toFixed(2);
-    const gross     = +(qty * (sp - bp)).toFixed(2);
-    const tax       = +(gross * TAX).toFixed(2);
-    const net       = +(gross - tax).toFixed(2);
-    const pct       = +((sp - bp) / bp * 100).toFixed(2);
-    const hold_days = bd && sd ? Math.round(Math.abs(parseDD(sd) - parseDD(bd)) / 86400000) : 0;
-    const [d,m,y]   = sd.split('/');
-    const month     = y && m ? `${y}-${m.padStart(2,'0')}` : '';
-
-    const trade = { symbol:sym, buy_date:bd, sell_date:sd, qty, buy_price:bp, sell_price:sp,
-                    cost, gross, tax, net, pct, hold_days, month, notes };
-
     closeForm();
-    API.setStatus('שומר עסקה...', 'info');
+    API.setStatus('שומר עסקה — נכתב כזוג BUY+SELL ביומן הפעולות...', 'info');
     API.showSpinner(true);
 
-    if (APP.editId !== null) {
-      trade.id = APP.editId;
-      const cur = APP.trades.find(x => x.id === APP.editId) || {};
-      ['entry_reason','exit_reason','respected_stop','followed_plan','lesson','emotion'].forEach(k => {
-        trade[k] = cur[k] || '';
-      });
-      const res = await API.updateTrade(trade);
-      if (res.ok) {
-        APP.trades = APP.trades.map(x => x.id === APP.editId ? trade : x);
-        invalidateStats();
-        API.setStatus('✓ עסקה עודכנה', 'ok');
-        render(); Journal.render(); renderAll();
-      } else {
-        API.setStatus('❌ ' + (res.error||'שגיאה'), 'error');
-      }
-    } else {
-      const res = await API.addTrade(trade);
-      if (res.ok) {
-        trade.id = res.trade.id;
-        APP.trades.push(trade);
-        invalidateStats();
-        API.setStatus('✓ עסקה נוספה', 'ok');
-        render(); Journal.render(); renderAll();
-      } else {
-        API.setStatus('❌ ' + (res.error||'שגיאה'), 'error');
-      }
+    const res = await API.addTradeOperation({ symbol: sym, buy_date: bd, sell_date: sd, qty, buy_price: bp, sell_price: sp, notes });
+    if (!res.ok) {
+      API.showSpinner(false);
+      API.setStatus('❌ ' + (res.error || 'שגיאה'), 'error');
+      return;
     }
 
+    // Verify by reloading real data from getOperations — never assume the
+    // append landed correctly, same discipline as New Position/Quick Trade.
+    const loaded = await load();
     API.showSpinner(false);
+
+    if (!loaded) {
+      API.setStatus('⚠️ העסקה נכתבה, אך הרענון מהשרת נכשל — רענן ידנית כדי לוודא', 'warn');
+      return;
+    }
+
+    invalidateStats();
+    API.setStatus('✓ עסקה נוספה', 'ok');
+    render(); Journal.render(); renderAll();
   }
 
   async function remove(id) {

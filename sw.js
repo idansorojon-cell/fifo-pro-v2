@@ -34,8 +34,19 @@
 // list-card (.card--flush) differentiation, removed confirmed-dead CSS
 // (.kpi-v3, .card-glass, .kpi-trend, .prog-kpi-val) — css/style.css,
 // css/mobile.css, index.html, js/dashboard.js.
-const CACHE_NAME   = 'fifopro-v17';
-const STATIC_CACHE = 'fifopro-static-v17';
+// Bumped v17 -> v18: Stability Sprint, write-through create-only Phase 1 —
+// New Position now appends a real BUY row to "פעולות" (AppScript_FULL.gs
+// handleAppendOperation_/handleAddTradeOperation_, js/api.js
+// appendOperation/addTradeOperation, js/positions.js openForm/openEdit/
+// submit) — index.html, js/api.js, js/positions.js, AppScript_FULL.gs.
+// Bumped v18 -> v19: write-through create-only Phase 2 — Quick Trade
+// Buy/Sell and Add Trade now also append real ops to "פעולות" (js/
+// quicktrade.js submit, js/trades.js openAddForm/submit); removed the
+// stale .action-disabled class from all three now-live buttons in
+// index.html (Add Trade, New Position, Quick Trade submit) — index.html,
+// js/quicktrade.js, js/trades.js.
+const CACHE_NAME   = 'fifopro-v19';
+const STATIC_CACHE = 'fifopro-static-v19';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

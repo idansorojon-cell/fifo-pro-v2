@@ -405,19 +405,16 @@ const Positions = (() => {
   }
 
   // ── CRUD ────────────────────────────────────────────────
-  // PHASE A (persistence-layer migration): a brand-new position (a symbol
-  // with no open FIFO lot in the "פעולות" transaction log) saves to the
-  // legacy "Positions" sheet, but the primary read path only overlays
-  // target/stop/notes onto positions that already survived FIFO
-  // derivation — it never adds one for a symbol with none. The position
-  // appeared to save, then was invisible after refresh. Disabled at the
-  // entry point; editing an *existing* derived position's target/stop/
-  // notes (openEdit below) is unaffected — that path is already correct.
-  // See docs/TECHNICAL_DEBT.md "Persistence architecture".
+  // WRITE-THROUGH (create-only): a brand-new position (a symbol with no
+  // open FIFO lot yet) now appends a real BUY row to "פעולות" itself —
+  // see API.appendOperation / AppScript_FULL.gs handleAppendOperation_.
+  // "פעולות" stays the single source of truth; nothing here writes to the
+  // legacy Positions sheet. Editing an *existing* derived position's
+  // target/stop/notes (openEdit below) is unchanged — that already-correct
+  // path still uses upsertPositionMeta, matched by symbol. See
+  // docs/TECHNICAL_DEBT.md "Persistence architecture".
 
   function openForm() {
-    API.setStatus('❌ פוזיציה חדשה שאינה מגובה בעסקה קיימת ביומן אינה נתמכת — תעדו את הקנייה בפעולות', 'warn');
-    return;
     APP.posEditId = null;
     document.getElementById('pos-modal-title').textContent = 'פוזיציה חדשה';
     ['symbol','qty','price','target','stop','notes'].forEach(f => {
@@ -425,6 +422,15 @@ const Positions = (() => {
       if (el) el.value = '';
     });
     document.getElementById('pf-date').value = new Date().toISOString().split('T')[0];
+    // Symbol/date/qty/price are read-only only when editing an *existing*
+    // FIFO-derived position (openEdit below) — for a brand-new position
+    // they ARE the fact being written (a BUY row), so they're editable here.
+    ['pf-symbol','pf-date','pf-qty','pf-price'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = false;
+    });
+    const note = document.getElementById('pos-modal-note');
+    if (note) note.textContent = 'פוזיציה חדשה נכתבת כפעולת קנייה (BUY) אמיתית ביומן הפעולות. יעד/סטופ/הערות נשמרים בנפרד ואפשר לערוך אותם בכל עת אחר כך.';
     const rrBox = document.getElementById('rr-box');
     if (rrBox) rrBox.style.display = 'none';
     document.getElementById('modal-pos').style.display = 'flex';
@@ -435,6 +441,15 @@ const Positions = (() => {
     const p = APP.positions.find(x => x.id === id);
     if (!p) return;
     document.getElementById('pos-modal-title').textContent = 'עריכת פוזיציה';
+    // Existing FIFO-derived position: symbol/date/qty/avg-price always come
+    // from "פעולות" — read-only here (a new BUY/SELL op is the only way to
+    // change them, not this modal).
+    ['pf-symbol','pf-date','pf-qty','pf-price'].forEach(id2 => {
+      const el = document.getElementById(id2);
+      if (el) el.disabled = true;
+    });
+    const note = document.getElementById('pos-modal-note');
+    if (note) note.textContent = 'סימבול, תאריך, כמות ומחיר קנייה ממוצע מגיעים מיומן העסקאות (FIFO) ואינם ניתנים לעריכה ידנית. ניתן לערוך יעד, סטופ לוס והערות בלבד.';
     document.getElementById('pf-symbol').value = p.symbol;
     document.getElementById('pf-qty').value    = p.qty;
     document.getElementById('pf-price').value  = p.avg_price;
@@ -457,15 +472,8 @@ const Positions = (() => {
   }
 
   async function submit() {
-    // PHASE A guard: defense-in-depth in case "new position" mode is ever
-    // reached without going through the now-disabled openForm() — editing
-    // an existing FIFO-derived position (posEditId set) is unaffected and
-    // continues to use the already-correct upsertPositionMeta path below.
-    if (APP.posEditId === null) {
-      API.setStatus('❌ פוזיציה חדשה שאינה מגובה בעסקה קיימת ביומן אינה נתמכת', 'warn');
-      closeForm();
-      return;
-    }
+    if (APP.posEditId === null) return _submitNewPosition();
+
     const sym   = (document.getElementById('pf-symbol').value || '').trim().toUpperCase();
     const qty   = +document.getElementById('pf-qty').value;
     const price = +document.getElementById('pf-price').value;
@@ -504,14 +512,77 @@ const Positions = (() => {
       return;
     }
 
-    if (editingId !== null) {
-      APP.positions = APP.positions.map(p => p.id === editingId ? { ...p, ...pos } : p);
-    } else {
-      APP.positions.push({ ...pos, id: Date.now() });
-    }
+    APP.positions = APP.positions.map(p => p.id === editingId ? { ...p, ...pos } : p);
     LS.set('fifo_positions_backup', APP.positions);
-    API.setStatus(editingId !== null ? '✓ פוזיציה עודכנה' : '✓ פוזיציה נוספה', 'ok');
+    API.setStatus('✓ פוזיציה עודכנה', 'ok');
     render();
+
+    if (!APP.liveData[sym]) {
+      const d = await API.fetchPrice(sym);
+      if (d) { APP.liveData[sym] = d; render(); }
+    }
+  }
+
+  // New position = a real BUY fact appended to "פעולות" (write-through,
+  // create-only — see AppScript_FULL.gs handleAppendOperation_), followed
+  // by a full reload from getOperations so the new position is only ever
+  // shown once the backend itself confirms it via real FIFO derivation
+  // (never optimistically inserted into APP.positions client-side). If
+  // target/stop/notes were also filled in, they're attached afterward via
+  // the already-correct, symbol-keyed upsertPositionMeta — same call
+  // openEdit's submit() above uses for an existing position.
+  async function _submitNewPosition() {
+    const sym   = (document.getElementById('pf-symbol').value || '').trim().toUpperCase();
+    const qty   = +document.getElementById('pf-qty').value;
+    const price = +document.getElementById('pf-price').value;
+    const rawDate = document.getElementById('pf-date').value; // ISO, native <input type="date">
+    if (!sym || !qty || !price || !rawDate) {
+      alert('נא למלא סימבול, תאריך, כמות ומחיר קנייה');
+      return;
+    }
+
+    const target   = +document.getElementById('pf-target').value || 0;
+    const stopLoss = +document.getElementById('pf-stop').value   || 0;
+    const notes    = document.getElementById('pf-notes').value.trim();
+
+    closeForm();
+    API.setStatus('יוצר פוזיציה חדשה — נכתב כפעולת BUY ביומן הפעולות...', 'info');
+    API.showSpinner(true);
+
+    const res = await API.appendOperation({ date: rawDate, symbol: sym, action: 'BUY', qty, price, notes: '' });
+    if (!res.ok) {
+      API.showSpinner(false);
+      API.setStatus('❌ ' + (res.error || 'כתיבת הפוזיציה נכשלה'), 'error');
+      return;
+    }
+
+    // Verify by reloading real data from getOperations — never assume the
+    // append landed correctly, and never optimistically fabricate a local
+    // position row the way the old (broken) path used to.
+    const loaded = await load();
+    API.showSpinner(false);
+
+    if (!loaded) {
+      API.setStatus('⚠️ הפוזיציה נכתבה, אך הרענון מהשרת נכשל — רענן ידנית כדי לוודא', 'warn');
+      return;
+    }
+
+    const created = APP.positions.find(p => p.symbol === sym);
+    if (!created) {
+      API.setStatus('⚠️ הפוזיציה נכתבה ביומן הפעולות אך לא הופיעה כפוזיציה פתוחה — בדוק את הנתונים', 'warn');
+      renderAll();
+      return;
+    }
+
+    if (target || stopLoss || notes) {
+      const metaRes = await API.upsertPositionMeta({ symbol: sym, target, stop_loss: stopLoss, notes });
+      if (metaRes.ok) await load();
+      else API.setStatus('✓ פוזיציה נוספה, אך שמירת יעד/סטופ/הערות נכשלה: ' + (metaRes.error || ''), 'warn');
+    }
+
+    invalidateStats();
+    API.setStatus('✓ פוזיציה נוספה', 'ok');
+    renderAll();
 
     if (!APP.liveData[sym]) {
       const d = await API.fetchPrice(sym);

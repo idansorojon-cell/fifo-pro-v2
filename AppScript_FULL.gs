@@ -1432,6 +1432,8 @@ function doPost(e) {
       case 'deletePosition':     return handleDeletePosition_(data.id);
       case 'upsertPositionMeta': return handleUpsertPositionMeta_(data.position);
       case 'upsertTradeMeta':    return handleUpsertTradeMeta_(data.trade);
+      case 'appendOperation':    return handleAppendOperation_(data.op);
+      case 'addTradeOperation':  return handleAddTradeOperation_(data.trade);
       case 'aiChat':         return handleAiChat_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
@@ -2835,6 +2837,200 @@ function formatDateDDMMYYYY_(date) {
   var d = date.getDate().toString().padStart(2, '0');
   var m = (date.getMonth() + 1).toString().padStart(2, '0');
   return d + '/' + m + '/' + date.getFullYear();
+}
+
+// ════════════════════════════════════════════════════════════
+// WRITE-THROUGH TO "פעולות" (create-only)
+// ════════════════════════════════════════════════════════════
+//
+// New facts (a new position/buy, a quick-trade sell, a brand-new closed
+// trade) are appended directly to "פעולות" — the same sheet applyFIFO_
+// already treats as sole source of truth for reads. This is deliberately
+// scoped to CREATE only: editing or deleting an already-recorded op is
+// out of scope (mutating a row FIFO has already lot-matched against
+// others is a much harder problem — see docs/TECHNICAL_DEBT.md). Nothing
+// here writes to the legacy Trades/Positions sheets, and mergeTradeMeta_/
+// mergePositionMeta_ (Journal/Notes/target/stop annotations) are untouched.
+//
+// Reads applyFIFO_ over the CURRENT sheet contents (not the derived
+// result already computed for this request) so validation always
+// reflects what's actually on the sheet right now, not a stale in-memory
+// copy — appendRow_ below is the only thing that can change that between
+// two calls to this file within the same request.
+
+// Re-parses "פעולות" for a single symbol and runs it through the same
+// applyFIFO_ used for reads, so "how much of X is currently open" can
+// never disagree between validation here and what the app displays.
+function getOpenQtyForSymbol_(symbol) {
+  const sh = getOperationsSheet_();
+  if (!sh) return 0;
+  const data = sh.getDataRange().getValues();
+  const ops = [];
+  for (var i = 1; i < data.length; i++) {
+    const row = data[i];
+    const sym = String(row[1] || '').trim().toUpperCase();
+    if (sym !== symbol) continue;
+    const action = String(row[2] || '').trim().toUpperCase();
+    const qty    = parseFloat(row[3]) || 0;
+    const price  = parseFloat(row[4]) || 0;
+    if (!action || qty <= 0 || price <= 0) continue;
+    if (action !== 'BUY' && action !== 'SELL') continue;
+    const dateVal = row[0];
+    const date = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+    if (isNaN(date.getTime())) continue;
+    ops.push({ date: date, symbol: sym, action: action, qty: qty, price: price,
+               commission: parseFloat(row[5]) || 0, notes: String(row[6] || '') });
+  }
+  const result = applyFIFO_(ops);
+  const pos = result.positions.find(function(p) { return p.symbol === symbol; });
+  return pos ? pos.qty : 0;
+}
+
+// Shared validation for a single BUY/SELL op. Returns an array of
+// human-readable (Hebrew) error strings — empty array means valid.
+// Deliberately strict: this writes to the trader's real financial ledger,
+// not an annotation sheet, so silent coercion of bad input is not
+// acceptable here the way it might be elsewhere.
+// Parses a plain "YYYY-MM-DD" date-only string (from a native
+// <input type="date">) as LOCAL midnight — never pass such a string
+// straight to `new Date(str)`. Per ECMA-262, a date-only ISO string is
+// parsed as UTC midnight, while every other date-consuming function in
+// this file (formatDateDDMMYYYY_, applyFIFO_'s sort, the month-key
+// generator) reads dates back using LOCAL getters. When the script's
+// configured timezone is behind UTC, that mismatch silently rolls the
+// date back to the previous calendar day (confirmed: a "2026-07-05" op
+// was appended to the sheet as "7/4/2026 17:00:00" — one day and a
+// nonzero time-of-day off from what was actually picked in the form).
+// Constructing the Date from explicit y/m/d components instead uses
+// LOCAL semantics — guaranteed local midnight on the intended calendar
+// day, matching how a human typing a date directly into the sheet, and
+// how every local-getter read path here, already behaves. Returns an
+// Invalid Date (NaN time) for anything that isn't parseable as y-m-d.
+function parseIsoDateOnlyLocal_(isoStr) {
+  const parts = String(isoStr || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(function(n) { return isNaN(n); })) return new Date(NaN);
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function validateOperation_(op) {
+  const errors = [];
+  if (!op || typeof op !== 'object') { errors.push('לא התקבל אובייקט פעולה'); return errors; }
+
+  const symbol = String(op.symbol || '').trim().toUpperCase();
+  const action = String(op.action || '').trim().toUpperCase();
+  const qty    = parseFloat(op.qty);
+  const price  = parseFloat(op.price);
+  const commission = op.commission !== undefined ? parseFloat(op.commission) : 0;
+
+  if (!symbol) errors.push('סימבול חסר');
+  if (action !== 'BUY' && action !== 'SELL') errors.push('פעולה חייבת להיות BUY או SELL');
+  if (!qty || isNaN(qty) || qty <= 0) errors.push('כמות חייבת להיות מספר חיובי');
+  if (!price || isNaN(price) || price <= 0) errors.push('מחיר חייב להיות מספר חיובי');
+  if (isNaN(commission) || commission < 0) errors.push('עמלה לא תקינה');
+
+  if (!op.date) {
+    errors.push('תאריך חסר');
+  } else {
+    const d = parseIsoDateOnlyLocal_(op.date);
+    if (isNaN(d.getTime())) errors.push('תאריך לא תקין');
+  }
+
+  return errors;
+}
+
+/**
+ * Append a single BUY or SELL row to "פעולות".
+ * POST { action:'appendOperation', op:{ date, symbol, action, qty, price, commission?, notes? } }
+ * Used by: New Position / Quick Trade Buy (action:'BUY'), Quick Trade Sell (action:'SELL').
+ * date is expected as an ISO string (YYYY-MM-DD) from the frontend's native
+ * <input type="date"> — parsed via parseIsoDateOnlyLocal_, never the raw
+ * Date constructor, to avoid both the DD/MM vs MM/DD ambiguity of a
+ * slash-separated string AND the UTC-vs-local-midnight day-shift a plain
+ * ISO string triggers in new Date(str). See parseIsoDateOnlyLocal_ above.
+ */
+function handleAppendOperation_(op) {
+  const errors = validateOperation_(op);
+  if (errors.length) return jsonOut_({ ok: false, error: errors.join('; ') });
+
+  const symbol     = String(op.symbol).trim().toUpperCase();
+  const action     = String(op.action).trim().toUpperCase();
+  const qty        = parseFloat(op.qty);
+  const price      = parseFloat(op.price);
+  const commission = op.commission !== undefined ? (parseFloat(op.commission) || 0) : 0;
+  const notes      = String(op.notes || '').trim();
+  const date       = parseIsoDateOnlyLocal_(op.date);
+
+  if (action === 'SELL') {
+    const openQty = getOpenQtyForSymbol_(symbol);
+    if (qty > openQty) {
+      return jsonOut_({
+        ok: false,
+        error: 'כמות המכירה (' + qty + ') עולה על הכמות הפתוחה ב-' + symbol + ' (' + openQty + ')'
+      });
+    }
+  }
+
+  const sh = getOperationsSheet_();
+  if (!sh) return jsonOut_({ ok: false, error: 'לשונית "פעולות" לא נמצאה' });
+
+  sh.appendRow([date, symbol, action, qty, price, commission, notes]);
+  return jsonOut_({ ok: true });
+}
+
+/**
+ * Append a matched BUY+SELL pair to "פעולות" in one call — a brand-new
+ * closed trade entered directly (not derived from an existing open lot).
+ * POST { action:'addTradeOperation', trade:{ symbol, buy_date, sell_date,
+ *        qty, buy_price, sell_price, notes? } }
+ * A self-contained pair always sells exactly what it just bought, so
+ * (unlike handleAppendOperation_'s SELL case) there is no existing-lot
+ * quantity to check against — this trade doesn't depend on anything else
+ * already in the sheet. Commission is not collected by the Add Trade
+ * form today, so both legs are written with commission 0, matching what
+ * the legacy addTrade/updateTrade path always did for this form.
+ */
+function handleAddTradeOperation_(trade) {
+  if (!trade || typeof trade !== 'object') {
+    return jsonOut_({ ok: false, error: 'לא התקבל אובייקט עסקה' });
+  }
+
+  const symbol    = String(trade.symbol || '').trim().toUpperCase();
+  const qty       = parseFloat(trade.qty);
+  const buyPrice  = parseFloat(trade.buy_price);
+  const sellPrice = parseFloat(trade.sell_price);
+  const notes     = String(trade.notes || '').trim();
+
+  const errors = [];
+  if (!symbol) errors.push('סימבול חסר');
+  if (!qty || isNaN(qty) || qty <= 0) errors.push('כמות חייבת להיות מספר חיובי');
+  if (!buyPrice || isNaN(buyPrice) || buyPrice <= 0) errors.push('מחיר קנייה חייב להיות מספר חיובי');
+  if (!sellPrice || isNaN(sellPrice) || sellPrice <= 0) errors.push('מחיר מכירה חייב להיות מספר חיובי');
+
+  let buyDate = null, sellDate = null;
+  if (!trade.buy_date) {
+    errors.push('תאריך קנייה חסר');
+  } else {
+    buyDate = parseIsoDateOnlyLocal_(trade.buy_date);
+    if (isNaN(buyDate.getTime())) errors.push('תאריך קנייה לא תקין');
+  }
+  if (!trade.sell_date) {
+    errors.push('תאריך מכירה חסר');
+  } else {
+    sellDate = parseIsoDateOnlyLocal_(trade.sell_date);
+    if (isNaN(sellDate.getTime())) errors.push('תאריך מכירה לא תקין');
+  }
+  if (buyDate && sellDate && !isNaN(buyDate.getTime()) && !isNaN(sellDate.getTime()) && sellDate.getTime() < buyDate.getTime()) {
+    errors.push('תאריך מכירה לא יכול להיות לפני תאריך קנייה');
+  }
+
+  if (errors.length) return jsonOut_({ ok: false, error: errors.join('; ') });
+
+  const sh = getOperationsSheet_();
+  if (!sh) return jsonOut_({ ok: false, error: 'לשונית "פעולות" לא נמצאה' });
+
+  sh.appendRow([buyDate, symbol, 'BUY', qty, buyPrice, 0, notes]);
+  sh.appendRow([sellDate, symbol, 'SELL', qty, sellPrice, 0, '']);
+  return jsonOut_({ ok: true });
 }
 
 // ════════════════════════════════════════════════════════════

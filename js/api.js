@@ -209,6 +209,16 @@ const API = (() => {
   // real row id in the Positions sheet). See AppScript_FULL.gs handleUpsertPositionMeta_.
   const upsertPositionMeta = pos => post({ action:'upsertPositionMeta', position:pos });
 
+  // ── Write-through to "פעולות" (create-only) ─────────────
+  // Appends real BUY/SELL rows to the same sheet applyFIFO_ already treats
+  // as sole source of truth — not the legacy Trades/Positions sheets.
+  // op.date must be an ISO string (native <input type="date"> .value) to
+  // avoid DD/MM vs MM/DD ambiguity on the backend. See AppScript_FULL.gs
+  // handleAppendOperation_/handleAddTradeOperation_ and
+  // docs/TECHNICAL_DEBT.md "Persistence architecture".
+  const appendOperation   = op    => post({ action:'appendOperation',   op });
+  const addTradeOperation = trade => post({ action:'addTradeOperation', trade });
+
   // ── Watchlist ──────────────────────────────────────────
 
   async function addWatchlistItem(symbol, note) {
@@ -452,6 +462,7 @@ const API = (() => {
     loadAll,
     addTrade, updateTrade, deleteTrade, seedAll, setGoal, upsertTradeMeta,
     addPosition, updatePosition, deletePosition, upsertPositionMeta,
+    appendOperation, addTradeOperation,
     addWatchlistItem, removeWatchlistItem, getWatchlist,
     getIndicators, getNews,
     fetchPrices, fetchPrice,

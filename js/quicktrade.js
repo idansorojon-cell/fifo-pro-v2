@@ -77,77 +77,85 @@ const QuickTrade = (() => {
     }
   }
 
-  // PHASE A (persistence-layer migration): the "buy" branch calls the old,
-  // id-keyed addPosition endpoint (not the fixed, symbol-keyed
-  // upsertPositionMeta that the main Position modal uses) — a second,
-  // still-unpatched position-write path with the original id-collision
-  // risk. The "sell" branch calls addTrade, the same legacy "Trades"
-  // sheet write that Trades.submit() uses — invisible after refresh,
-  // same as everywhere else. Both disabled at the entry point; the
-  // calculator/preview above (calc()) is unaffected, it never persists
-  // anything. See docs/TECHNICAL_DEBT.md "Persistence architecture".
+  // WRITE-THROUGH (create-only): both branches append a real op to
+  // "פעולות" via API.appendOperation — the "buy" branch a BUY row (the
+  // exact same write New Position uses), the "sell" branch a SELL row,
+  // which applyFIFO_ matches against whatever open lots already exist for
+  // this symbol server-side — no need to know/send the original buy price
+  // or date here, "פעולות" already has that. Neither branch writes to the
+  // legacy Trades/Positions sheets. After each write, the full APP state
+  // is reloaded from a real getOperations call (never an optimistic local
+  // insert) before reporting success. The calculator/preview above
+  // (calc()) is unaffected — it never persisted anything. See
+  // docs/TECHNICAL_DEBT.md "Persistence architecture".
   async function submit() {
-    API.setStatus('❌ שמירה מ-Quick Trade מבוטלת זמנית — ראו הסבר בתיעוד', 'warn');
-    return;
     const sym       = (document.getElementById('qt-symbol')?.value || '').trim().toUpperCase();
     const action    = document.getElementById('qt-action')?.value;
     const qty       = +document.getElementById('qt-qty')?.value;
     const price     = +document.getElementById('qt-price')?.value;
-    const sellDate  = document.getElementById('qt-sell-date')?.value;
-    const buyDate   = document.getElementById('qt-buy-date')?.value;
-    const buyPrice  = +document.getElementById('qt-buy-price')?.value;
+    const sellDate  = document.getElementById('qt-sell-date')?.value; // ISO, native <input type="date">
+    const buyDate   = document.getElementById('qt-buy-date')?.value;  // ISO
     const stopPrice = +document.getElementById('qt-stop-price')?.value || 0;
 
     if (!sym || !qty || !price) { alert('נא למלא סימבול, כמות ומחיר'); return; }
 
     if (action === 'buy') {
-      const bdStr = buyDate ? isoToDD(buyDate) : Utils.toDD(new Date());
-      const pos = { symbol:sym, qty, avg_price:price, stop_loss:stopPrice, notes:'', added_date:bdStr };
-      API.setStatus('שומר פוזיציה...', 'info');
-      const res = await API.addPosition(pos);
-      if (res.ok) {
-        APP.positions.push(res.position || { ...pos, id: Date.now() });
-        Utils.LS.set('fifo_positions_backup', APP.positions);
-        API.setStatus('✓ פוזיציה נוספה', 'ok');
-        reset();
-        Positions.render();
-      } else {
-        API.setStatus('❌ ' + (res.error||'שגיאה'), 'error');
+      const dateStr = buyDate || new Date().toISOString().split('T')[0];
+      API.setStatus('שומר פוזיציה — נכתב כפעולת BUY ביומן הפעולות...', 'info');
+      API.showSpinner(true);
+
+      const res = await API.appendOperation({ date: dateStr, symbol: sym, action: 'BUY', qty, price, notes: '' });
+      if (!res.ok) {
+        API.showSpinner(false);
+        API.setStatus('❌ ' + (res.error || 'שגיאה'), 'error');
+        return;
       }
+
+      const loaded = await load();
+      if (!loaded) {
+        API.showSpinner(false);
+        API.setStatus('⚠️ הפוזיציה נכתבה, אך הרענון מהשרת נכשל — רענן ידנית כדי לוודא', 'warn');
+        return;
+      }
+
+      // Optional stop-loss, attached the same way New Position does it —
+      // the annotation-overlay path, never part of the BUY fact itself.
+      if (stopPrice) {
+        const metaRes = await API.upsertPositionMeta({ symbol: sym, target: 0, stop_loss: stopPrice, notes: '' });
+        if (metaRes.ok) await load();
+      }
+      API.showSpinner(false);
+
+      invalidateStats();
+      API.setStatus('✓ פוזיציה נוספה', 'ok');
+      reset();
+      renderAll();
       return;
     }
 
-    // Sell → add trade
-    if (!sellDate || !buyPrice) { alert('נא למלא תאריך מכירה ומחיר קנייה'); return; }
-    const sdStr = isoToDD(sellDate);
-    const bdStr = buyDate ? isoToDD(buyDate) : sdStr;
-    const cost  = +(qty * buyPrice).toFixed(2);
-    const gross = +(qty * (price - buyPrice)).toFixed(2);
-    const tax   = +(gross * TAX).toFixed(2);
-    const net   = +(gross - tax).toFixed(2);
-    const pct   = +((price - buyPrice) / buyPrice * 100).toFixed(2);
-    const hold  = buyDate ? Math.round(Math.abs(parseDD(sdStr) - parseDD(bdStr)) / 86400000) : 0;
-    const [d,m,y] = sdStr.split('/');
-    const month   = `${y}-${m}`;
-    const trade   = { symbol:sym, buy_date:bdStr, sell_date:sdStr, qty, buy_price:buyPrice,
-                      sell_price:price, cost, gross, tax, net, pct, hold_days:hold, month, notes:'' };
-
-    API.setStatus('שומר עסקה...', 'info');
+    // Sell → append a SELL op for the existing open lot(s).
+    if (!sellDate) { alert('נא למלא תאריך מכירה'); return; }
+    API.setStatus('שומר עסקה — נכתב כפעולת SELL ביומן הפעולות...', 'info');
     API.showSpinner(true);
-    const res = await API.addTrade(trade);
-    if (res.ok) {
-      trade.id = res.trade.id;
-      APP.trades.push(trade);
-      invalidateStats();
-      API.setStatus('✓ עסקה נוספה', 'ok');
-      reset();
-      Trades.render();
-      Trades.updateFilters();
-      renderAll();
-    } else {
-      API.setStatus('❌ ' + (res.error||'שגיאה'), 'error');
+
+    const res = await API.appendOperation({ date: sellDate, symbol: sym, action: 'SELL', qty, price, notes: '' });
+    if (!res.ok) {
+      API.showSpinner(false);
+      API.setStatus('❌ ' + (res.error || 'שגיאה'), 'error');
+      return;
     }
+
+    const loaded = await load();
     API.showSpinner(false);
+    if (!loaded) {
+      API.setStatus('⚠️ העסקה נכתבה, אך הרענון מהשרת נכשל — רענן ידנית כדי לוודא', 'warn');
+      return;
+    }
+
+    invalidateStats();
+    API.setStatus('✓ עסקה נוספה', 'ok');
+    reset();
+    renderAll();
   }
 
   function reset() {
