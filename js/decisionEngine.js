@@ -41,7 +41,7 @@ const DecisionEngine = (() => {
     const stop      = +document.getElementById('de-stop')?.value   || 0;
     const target    = +document.getElementById('de-target')?.value || 0;
     const qty       = +document.getElementById('de-qty')?.value || 0;
-    const portfolio = +document.getElementById('de-portfolio')?.value || 67000;
+    const portfolio = +document.getElementById('de-portfolio')?.value || Settings.get('portfolioSize');
     if (!sym) { alert('הזן סימבול'); return; }
     await analyzeSymbol(sym, entry, stop, target, qty, portfolio);
   }
@@ -684,6 +684,8 @@ const DecisionEngine = (() => {
   function renderStarter() {
     const result = document.getElementById('decision-result');
     const memory = document.getElementById('trade-memory');
+    const portfolioEl = document.getElementById('de-portfolio');
+    if (portfolioEl) portfolioEl.value = Settings.get('portfolioSize');
     if (result && !result.innerHTML.trim()) {
       result.innerHTML = `
         <div class="card" style="text-align:center;padding:30px;color:var(--text-3)">

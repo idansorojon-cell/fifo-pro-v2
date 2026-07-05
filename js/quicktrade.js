@@ -33,8 +33,8 @@ const QuickTrade = (() => {
     const buyPrice  = +document.getElementById('qt-buy-price')?.value || 0;
     const qty       = +document.getElementById('qt-qty')?.value || 0;
     const action    = document.getElementById('qt-action')?.value;
-    const portfolio = +document.getElementById('qt-portfolio')?.value || 67000;
-    const riskPct   = +document.getElementById('qt-risk-pct')?.value || 1;
+    const portfolio = +document.getElementById('qt-portfolio')?.value || Settings.get('portfolioSize');
+    const riskPct   = +document.getElementById('qt-risk-pct')?.value || Settings.get('riskPct');
     const stopPrice = +document.getElementById('qt-stop-price')?.value || 0;
 
     // Position Sizer
@@ -155,6 +155,10 @@ const QuickTrade = (() => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
+    const portfolioEl = document.getElementById('qt-portfolio');
+    if (portfolioEl) portfolioEl.value = Settings.get('portfolioSize');
+    const riskEl = document.getElementById('qt-risk-pct');
+    if (riskEl) riskEl.value = Settings.get('riskPct');
     const lp = document.getElementById('qt-live-price');
     if (lp) { lp.textContent = '—'; lp.style.color = 'var(--green)'; }
     const prev = document.getElementById('qt-preview');
