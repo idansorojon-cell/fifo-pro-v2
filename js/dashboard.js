@@ -47,8 +47,7 @@ const Dashboard = (() => {
       return s + (live?.price ? (live.price - p.avg_price) * p.qty : 0);
     }, 0);
 
-    const hr = now.getHours();
-    const greeting = hr < 12 ? 'בוקר טוב' : hr < 17 ? 'צהריים טובים' : 'ערב טוב';
+    const greeting = timeGreeting() + ' ' + Auth.getDisplayName();
     const dayName  = now.toLocaleDateString('he-IL', { weekday:'long', month:'long', day:'numeric' });
 
     const _pill = (val, label) => {

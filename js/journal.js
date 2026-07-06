@@ -73,7 +73,7 @@ const Journal = (() => {
           ${t.emotion || '—'}
         </td>
         <td>
-          <button class="btn-icon" onclick="Journal.openModal(${t.id})" title="ערוך">${icon('edit')}</button>
+          ${Auth.isViewer() ? '—' : `<button class="btn-icon" onclick="Journal.openModal(${t.id})" title="ערוך">${icon('edit')}</button>`}
         </td>
       </tr>
     `).join('');

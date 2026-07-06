@@ -83,10 +83,13 @@ const Auth = (() => {
   // role defaults to 'owner' — every Phase 1 session (before the viewer
   // role existed) is an owner session, and this keeps an already-logged-in
   // browser working without forcing a re-login after this Phase 2 update.
-  function saveToken(token, role) {
+  // username/displayName (Phase 3) are UI-only — see getDisplayName().
+  function saveToken(token, role, displayName, username) {
     localStorage.setItem(TOKEN_KEY, JSON.stringify({
       token,
       role: role || 'owner',
+      displayName: displayName || '',
+      username: username || '',
       expiry: Date.now() + EXPIRY_DAYS * 86400000
     }));
   }
@@ -117,6 +120,24 @@ const Auth = (() => {
     } catch { return 'owner'; }
   }
 
+  function isViewer() { return getRole() === 'viewer'; }
+  function isOwner()  { return getRole() === 'owner'; }
+
+  // Phase 3 personal greeting — display name is purely cosmetic (see
+  // saveToken/handleLogin_ comments), never used for any permission
+  // decision. Fallback chain: display name -> username typed at login ->
+  // a role-based default, exactly as specified.
+  function getDisplayName() {
+    try {
+      const raw = localStorage.getItem(TOKEN_KEY);
+      if (!raw) return 'Owner';
+      const data = JSON.parse(raw);
+      if (data && data.displayName) return data.displayName;
+      if (data && data.username) return data.username;
+      return (data && data.role === 'viewer') ? 'Viewer' : 'Owner';
+    } catch { return 'Owner'; }
+  }
+
   // ── Last-visit tracking ─────────────────────────────────
   function getLastVisit() {
     try { return JSON.parse(localStorage.getItem(LAST_VISIT)); } catch { return null; }
@@ -145,7 +166,7 @@ const Auth = (() => {
       try {
         const res = await API.verifyLogin(user, hash);
         if (res.ok && res.token) {
-          saveToken(res.token, res.role);
+          saveToken(res.token, res.role, res.displayName, user);
           return { ok: true };
         }
         if (res.authDisabled) {
@@ -172,11 +193,11 @@ const Auth = (() => {
       // First time, nothing set — allow any username/password and save both
       localStorage.setItem('fifo_local_username', user);
       localStorage.setItem('fifo_local_pw_hash', hash);
-      saveToken('local-' + hash.slice(0,8) + '-' + Date.now());
+      saveToken('local-' + hash.slice(0,8) + '-' + Date.now(), 'owner', '', user);
       return { ok: true, firstTime: true };
     }
     if (user === storedUser && hash === storedHash) {
-      saveToken('local-' + hash.slice(0,8) + '-' + Date.now());
+      saveToken('local-' + hash.slice(0,8) + '-' + Date.now(), 'owner', '', user);
       return { ok: true };
     }
     return { ok: false, error: 'שם משתמש או סיסמה שגויים' };
@@ -290,7 +311,7 @@ const Auth = (() => {
   }
 
   return {
-    init, login, logout, isLoggedIn, getToken, getRole,
+    init, login, logout, isLoggedIn, getToken, getRole, isViewer, isOwner, getDisplayName,
     handleLoginSubmit, showLoginScreen, hideLoginScreen,
     sha256, changePasswordLocal, saveLastVisit, getLastVisit,
     handle401, clearPrivateCache

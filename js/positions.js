@@ -156,10 +156,11 @@ const Positions = (() => {
 
         ${p.notes ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;font-style:italic">${p.notes}</div>` : ''}
 
+        ${Auth.isViewer() ? '' : `
         <div style="display:flex;gap:6px;margin-top:12px">
           <button class="btn-icon" onclick="Positions.openEdit(${p.id})" title="ערוך יעד/סטופ/הערות">${icon('edit')}</button>
           <button class="btn-icon danger" onclick="Positions.remove(${p.id})" title="מחק פוזיציה — נכתב כמכירה במחיר עלות ביומן הפעולות">${icon('x')}</button>
-        </div>
+        </div>`}
       </div>
     `;
   }

@@ -90,6 +90,17 @@ function currentMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
+/**
+ * Time-of-day greeting text — single source of truth, same boundaries
+ * dashboard.js's dh-greeting already used before this was extracted
+ * (hr<12 morning, hr<17 afternoon, else evening). Used by cockpit.js and
+ * dashboard.js for the Phase 3 personal greeting.
+ */
+function timeGreeting() {
+  const hr = new Date().getHours();
+  return hr < 12 ? 'בוקר טוב' : hr < 17 ? 'צהריים טובים' : 'ערב טוב';
+}
+
 // ── מטבע ───────────────────────────────────────────────────
 
 function rateForMonth(month) {
@@ -445,7 +456,7 @@ function finalRecommendation(score) {
 window.Utils = {
   TAX, DEFAULT_ILS, MONTHLY_ILS, GREEN, RED, BLUE, GOLD,
   f$, fILS, fpct, fnum, fprice, icon,
-  parseDD, toDD, isoToDD, ddToISO, monthLabel, currentMonthKey,
+  parseDD, toDD, isoToDD, ddToISO, monthLabel, currentMonthKey, timeGreeting,
   rateForMonth, usdToIls, tradesNetIls,
   normalizeTrade, calcStats, calcLiveStats, detectMistakes,
   $, $$, setHTML, show, hide, LS, debounce,

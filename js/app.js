@@ -877,6 +877,19 @@ function renderMissionControl() {
   `;
 }
 
+// ── Phase 3: hide/show static owner-only controls ─────────────
+// Covers markup that's already in index.html at boot (as opposed to
+// content rendered per-item in a loop, e.g. position/trade/watchlist
+// rows — those are handled at template-build time in their own render()
+// functions via Auth.isViewer(), since they rebuild from scratch anyway).
+// Called once per successful load — role can't change mid-session
+// without a fresh login, so no need to re-run this beyond that.
+function applyRoleUI() {
+  const isViewer = Auth.isViewer();
+  document.querySelectorAll('[data-owner-only]').forEach(el => { el.style.display = isViewer ? 'none' : ''; });
+  document.querySelectorAll('[data-viewer-only]').forEach(el => { el.style.display = isViewer ? '' : 'none'; });
+}
+
 // ── Seed banner — hide when trades exist ─────────────────────
 function updateSeedBanner() {
   const b = document.getElementById('seed-banner');
@@ -900,6 +913,7 @@ async function _initApp() {
   const ok = await load();
   if (!ok) return;
 
+  applyRoleUI();
   updateSeedBanner();
   renderAll();
 

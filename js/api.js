@@ -420,14 +420,18 @@ const API = (() => {
   // passwordHash is always computed client-side (Auth.sha256()), same as
   // every other password field in this app — the plaintext never leaves
   // the browser.
-  async function setViewerCredentials(username, passwordHash) {
-    return post({ action: 'setViewerCredentials', username, passwordHash });
+  async function setViewerCredentials(username, passwordHash, displayName) {
+    return post({ action: 'setViewerCredentials', username, passwordHash, displayName });
   }
   async function setViewerEnabled(enabled) {
     return post({ action: 'setViewerEnabled', enabled });
   }
   async function getViewerStatus() {
     return authedGet_(authedUrl_('getViewerStatus'));
+  }
+  // Phase 3 — display name is UI-only, never checked for permissions.
+  async function setOwnerDisplayName(displayName) {
+    return post({ action: 'setOwnerDisplayName', displayName });
   }
 
   // ── AI Chat (proxied through Apps Script) ──────────────
@@ -486,7 +490,7 @@ const API = (() => {
     connectWS, disconnectWS, diagnose,
     reportPriceSuccess, reportPriceError, setButtonBusy,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
-    setViewerCredentials, setViewerEnabled, getViewerStatus,
+    setViewerCredentials, setViewerEnabled, getViewerStatus, setOwnerDisplayName,
     _url: API_URL
   };
 })();

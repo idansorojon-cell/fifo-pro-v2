@@ -1468,6 +1468,7 @@ function doPost(e) {
       case 'aiChat':         return handleAiChat_(data);
       case 'setViewerCredentials': return handleSetViewerCredentials_(data);
       case 'setViewerEnabled':     return handleSetViewerEnabled_(data);
+      case 'setOwnerDisplayName':  return handleSetOwnerDisplayName_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
   } catch (err) {
@@ -1580,7 +1581,12 @@ function _issueSession_(username, role) {
     }
   }
 
-  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt, role: role });
+  // Phase 3: display name is UI-only (never used for any permission
+  // check) — looked up from a per-role Script Property, empty string if
+  // unset (frontend falls back to username/role in that case).
+  const displayName = props.getProperty(role === 'owner' ? 'OWNER_DISPLAY_NAME' : 'VIEWER_DISPLAY_NAME') || '';
+
+  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt, role: role, displayName: displayName });
 }
 
 /**
@@ -1688,12 +1694,16 @@ function purgeViewerSessions_() {
 
 /**
  * CREATE/UPDATE VIEWER CREDENTIALS
- * POST { action:'setViewerCredentials', token, username, passwordHash }
+ * POST { action:'setViewerCredentials', token, username, passwordHash, displayName }
  * Owner-only. Sets username+password together (simplest correct model —
  * a rename doesn't require a separate flow) and always re-enables the
  * viewer (creating/updating credentials is an explicit "grant access"
  * action). Always purges existing viewer sessions — an old password must
  * never keep working after this call.
+ * displayName (Phase 3) is optional, UI-only, never checked for
+ * permissions — stored as-is (empty string clears it, meaning "no display
+ * name set", not "unchanged"), since the Settings form always submits
+ * whatever is currently in that field.
  */
 function handleSetViewerCredentials_(data) {
   if (!validateToken_(data.token || '')) {
@@ -1711,9 +1721,27 @@ function handleSetViewerCredentials_(data) {
   props.setProperty('VIEWER_USERNAME', username);
   props.setProperty('VIEWER_PASSWORD', passwordHash);
   props.setProperty('VIEWER_ENABLED', 'true');
+  props.setProperty('VIEWER_DISPLAY_NAME', (data.displayName || '').trim());
 
   purgeViewerSessions_();
 
+  return jsonOut_({ ok: true });
+}
+
+/**
+ * SET OWNER DISPLAY NAME (Phase 3, UI-only)
+ * POST { action:'setOwnerDisplayName', token, displayName }
+ * Owner-only. Purely cosmetic — never consulted for permissions. Empty
+ * string clears it (frontend falls back to username/"Owner").
+ */
+function handleSetOwnerDisplayName_(data) {
+  if (!validateToken_(data.token || '')) {
+    return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש', code: 401 });
+  }
+  if (getTokenRole_(data.token || '') !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
+  PropertiesService.getScriptProperties().setProperty('OWNER_DISPLAY_NAME', (data.displayName || '').trim());
   return jsonOut_({ ok: true });
 }
 
@@ -1746,6 +1774,9 @@ function handleSetViewerEnabled_(data) {
  * Owner-only (also excluded from VIEWER_ALLOWED_ACTIONS, so a viewer
  * token is already blocked before reaching this handler — checked again
  * here too, since a handler should never trust the dispatch gate alone).
+ * Also returns the owner's own display name (Phase 3) — this endpoint has
+ * effectively become "account settings status", not just viewer status,
+ * but keeping the existing action name avoids a pointless rename.
  */
 function handleGetViewerStatus_(token) {
   if (getTokenRole_(token) !== 'owner') {
@@ -1758,7 +1789,9 @@ function handleGetViewerStatus_(token) {
     ok: true,
     username: username,
     enabled: props.getProperty('VIEWER_ENABLED') === 'true',
-    configured: !!username && hasPassword
+    configured: !!username && hasPassword,
+    displayName: props.getProperty('VIEWER_DISPLAY_NAME') || '',
+    ownerDisplayName: props.getProperty('OWNER_DISPLAY_NAME') || ''
   });
 }
 

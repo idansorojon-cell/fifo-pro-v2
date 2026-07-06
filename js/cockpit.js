@@ -109,7 +109,7 @@ const Cockpit = (() => {
 
         <div class="cockpit-header">
           <div class="cockpit-title">Cockpit</div>
-          <div class="cockpit-sub">מה דורש תשומת לב עכשיו — לפני המספרים</div>
+          <div class="cockpit-sub">${timeGreeting()} ${Auth.getDisplayName()} · מה דורש תשומת לב עכשיו — לפני המספרים</div>
         </div>
 
         <div class="cockpit-actions">

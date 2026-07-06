@@ -437,6 +437,7 @@ const Settings = (() => {
         <div class="settings-section-title"><span class="ss-icon">🔐</span> אבטחה</div>
         <div class="settings-card">
 
+          ${Auth.getRole() === 'owner' ? `
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">שינוי סיסמה</span>
@@ -466,6 +467,7 @@ const Settings = (() => {
             </div>
             <div id="pw-change-msg" style="margin-top:8px;font-size:12px"></div>
           </div>
+          ` : ''}
 
           <!-- FUNCTIONAL CLEANUP: hidden — never read anywhere; the real
                session TTL is server-side (Script Property SESSION_TTL_HOURS,
@@ -491,6 +493,7 @@ const Settings = (() => {
             <button class="btn btn-danger btn-sm" onclick="if(confirm('לצאת מהמערכת?')) Auth.logout()">⎋ Logout</button>
           </div>
 
+          ${Auth.getRole() === 'owner' ? `
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">בטל כל הSessionים</span>
@@ -500,7 +503,26 @@ const Settings = (() => {
           </div>
           <div id="revoke-msg" style="margin:0 16px 12px;font-size:12px"></div>
 
-          ${Auth.getRole() === 'owner' ? `
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="settings-row-label">שם תצוגה (שלי)</span>
+              <span class="settings-row-sub">מוצג בברכה האישית בדשבורד/Cockpit</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.showOwnerNameForm()">ערוך</button>
+          </div>
+
+          <div id="owner-name-form" style="display:none;margin-top:12px;padding:16px;background:var(--surface-2);border-radius:var(--r-md)">
+            <div class="form-group">
+              <label>שם תצוגה</label>
+              <input type="text" id="owner-display-name" placeholder="Owner">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-primary btn-sm" onclick="Settings.saveOwnerDisplayName()">שמור</button>
+              <button class="btn btn-ghost btn-sm" onclick="Settings.hideOwnerNameForm()">ביטול</button>
+            </div>
+            <div id="owner-name-msg" style="margin-top:8px;font-size:12px"></div>
+          </div>
+
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">משתמש צופה (Viewer)</span>
@@ -510,7 +532,7 @@ const Settings = (() => {
           </div>
 
           <div id="viewer-manage-form" style="display:none;margin-top:12px;padding:16px;background:var(--surface-2);border-radius:var(--r-md)">
-            <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
               <div class="form-group">
                 <label>שם משתמש</label>
                 <input type="text" id="viewer-username" placeholder="viewer">
@@ -518,6 +540,10 @@ const Settings = (() => {
               <div class="form-group">
                 <label>סיסמה חדשה</label>
                 <input type="password" id="viewer-password" placeholder="••••••••">
+              </div>
+              <div class="form-group">
+                <label>שם תצוגה</label>
+                <input type="text" id="viewer-display-name" placeholder="Viewer">
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:10px">
@@ -788,10 +814,14 @@ const Settings = (() => {
     const res = await API.getViewerStatus();
     const lockBtn  = document.getElementById('viewer-lock-btn');
     const userEl   = document.getElementById('viewer-username');
+    const nameEl   = document.getElementById('viewer-display-name');
+    const ownerNameEl = document.getElementById('owner-display-name');
     if (!res.ok) { sub.textContent = 'שגיאה בטעינת סטטוס'; return; }
     sub.textContent = !res.configured ? 'טרם הוגדר'
       : (res.enabled ? `פעיל — ${res.username}` : `נעול — ${res.username}`);
     if (userEl && !userEl.value) userEl.value = res.username || '';
+    if (nameEl && !nameEl.value) nameEl.value = res.displayName || '';
+    if (ownerNameEl && !ownerNameEl.value) ownerNameEl.value = res.ownerDisplayName || '';
     if (lockBtn) {
       lockBtn.textContent = res.enabled ? '🔒 נעל' : '🔓 שחרר';
       lockBtn.dataset.enabled = res.enabled ? '1' : '0';
@@ -802,13 +832,15 @@ const Settings = (() => {
   async function saveViewerCredentials() {
     const userEl = document.getElementById('viewer-username');
     const pwEl   = document.getElementById('viewer-password');
+    const nameEl = document.getElementById('viewer-display-name');
     const msg    = document.getElementById('viewer-msg');
     const username = userEl ? userEl.value.trim() : '';
     const password = pwEl ? pwEl.value : '';
+    const displayName = nameEl ? nameEl.value.trim() : '';
     if (!username)                { _viewerMsg(msg, 'שם משתמש נדרש', 'red'); return; }
     if (!password || password.length < 4) { _viewerMsg(msg, 'סיסמה חייבת להיות לפחות 4 תווים', 'red'); return; }
     const passwordHash = await Auth.sha256(password);
-    const res = await API.setViewerCredentials(username, passwordHash);
+    const res = await API.setViewerCredentials(username, passwordHash, displayName);
     if (res.ok) {
       _viewerMsg(msg, '✓ נשמר — sessions קודמים של Viewer בוטלו', 'green');
       if (pwEl) pwEl.value = '';
@@ -816,6 +848,24 @@ const Settings = (() => {
     } else {
       _viewerMsg(msg, res.error || 'שגיאה', 'red');
     }
+  }
+
+  // ── Owner display name (Phase 3, UI-only) ───────────────
+  function showOwnerNameForm() {
+    const f = document.getElementById('owner-name-form');
+    if (f) f.style.display = 'block';
+    _refreshViewerStatus(); // same endpoint also returns ownerDisplayName — always re-check live
+  }
+  function hideOwnerNameForm() {
+    const f = document.getElementById('owner-name-form');
+    if (f) f.style.display = 'none';
+  }
+  async function saveOwnerDisplayName() {
+    const nameEl = document.getElementById('owner-display-name');
+    const msg    = document.getElementById('owner-name-msg');
+    const displayName = nameEl ? nameEl.value.trim() : '';
+    const res = await API.setOwnerDisplayName(displayName);
+    _viewerMsg(msg, res.ok ? '✓ נשמר' : (res.error || 'שגיאה'), res.ok ? 'green' : 'red');
   }
 
   async function toggleViewerEnabled() {
@@ -846,5 +896,6 @@ const Settings = (() => {
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
     showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,
+    showOwnerNameForm, hideOwnerNameForm, saveOwnerDisplayName,
   };
 })();

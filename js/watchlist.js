@@ -138,7 +138,7 @@ const Watchlist = (() => {
 
     return `
       <div class="wl-card">
-        <button class="wl-remove" onclick="Watchlist.remove('${w.symbol}')" title="הסר">✕</button>
+        ${Auth.isViewer() ? '' : `<button class="wl-remove" onclick="Watchlist.remove('${w.symbol}')" title="הסר">✕</button>`}
 
         <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
           <div class="wl-sym">

@@ -69,8 +69,18 @@
 // the session (Auth.getRole()), new Settings -> Security -> "Manage
 // Viewer" section (owner-only) to create/rename/re-password/lock the
 // viewer account — js/auth.js, js/api.js, js/settings.js.
-const CACHE_NAME   = 'fifopro-v24';
-const STATIC_CACHE = 'fifopro-static-v24';
+// Bumped v24 -> v25: Phase 3 — every write-capable UI control is now
+// hidden (not just blocked server-side) for a viewer session: Trades/
+// Positions/Watchlist/Quick Trade add buttons, Positions/Watchlist/
+// Journal row actions, Dashboard goal editor, AI Chat input, Settings'
+// password-change/revoke-sessions rows. Personal greeting (time-of-day +
+// display name) on Cockpit/Dashboard; Settings -> Security gained Owner
+// display-name + Viewer display-name fields (UI-only, never used for
+// permissions) — index.html, js/app.js, js/auth.js, js/api.js,
+// js/utils.js, js/settings.js, js/cockpit.js, js/dashboard.js,
+// js/positions.js, js/watchlist.js, js/journal.js, js/trades.js.
+const CACHE_NAME   = 'fifopro-v25';
+const STATIC_CACHE = 'fifopro-static-v25';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

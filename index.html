@@ -201,7 +201,7 @@
         <div id="alert-list-dropdown" class="alert-list-dropdown" style="display:none"></div>
       </div>
       <button class="dark-toggle" onclick="toggleDark()" id="dark-btn"><svg class="icon"><use href="#icon-sun"/></svg> Light</button>
-      <button id="add-btn" class="btn btn-primary btn-sm" onclick="Trades.openAddForm()" title="עסקה חדשה — נכתבת ישירות ליומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> עסקה</button>
+      <button id="add-btn" class="btn btn-primary btn-sm" data-owner-only onclick="Trades.openAddForm()" title="עסקה חדשה — נכתבת ישירות ליומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> עסקה</button>
       <button class="logout-btn" onclick="Auth.logout()" title="יציאה"><svg class="icon"><use href="#icon-logout"/></svg></button>
     </div>
   </div>
@@ -509,8 +509,8 @@
     <div class="card" style="margin-top:16px">
       <div class="card-title">יעד חודשי — עדכון</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="number" id="goal-input" style="max-width:130px" placeholder="יעד $">
-        <button class="btn btn-primary btn-sm" onclick="Dashboard.saveGoal()">עדכן</button>
+        <input type="number" id="goal-input" data-owner-only style="max-width:130px" placeholder="יעד $">
+        <button class="btn btn-primary btn-sm" data-owner-only onclick="Dashboard.saveGoal()">עדכן</button>
       </div>
       <div id="goal-detail"></div>
     </div>
@@ -562,7 +562,7 @@
       <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
       <div style="display:flex;gap:8px">
         <button id="pos-refresh-btn" class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
-        <button class="btn btn-primary btn-sm" onclick="Positions.openForm()" title="פוזיציה חדשה — נכתבת כפעולת BUY ביומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
+        <button class="btn btn-primary btn-sm" data-owner-only onclick="Positions.openForm()" title="פוזיציה חדשה — נכתבת כפעולת BUY ביומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
       </div>
     </div>
     <div id="pos-summary" style="display:none;background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);padding:14px 18px;margin-bottom:14px;display:flex;gap:24px;flex-wrap:wrap"></div>
@@ -673,7 +673,7 @@
         </div>
         <div id="qt-preview" class="preview-box" style="display:none"></div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="QuickTrade.submit()" style="flex:1;font-size:15px;padding:12px" title="נכתב ישירות ליומן הפעולות">✓ שמור עסקה</button>
+          <button class="btn btn-primary" data-owner-only onclick="QuickTrade.submit()" style="flex:1;font-size:15px;padding:12px" title="נכתב ישירות ליומן הפעולות">✓ שמור עסקה</button>
           <button class="btn btn-ghost" onclick="QuickTrade.reset()">אפס</button>
         </div>
       </div>
@@ -689,10 +689,10 @@
       <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
       <div style="display:flex;gap:8px">
         <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
-        <button class="btn btn-primary btn-sm" onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
+        <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" data-owner-only>
       <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
       <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
     </div>
@@ -849,10 +849,11 @@
     </div>
     <div class="chat-container">
       <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-footer">
+      <div class="chat-footer" data-owner-only>
         <input id="chat-input" placeholder="שאל אותי על המסחר שלך... (למשל: באיזה מניות אני הכי טוב?)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();AIChat.send()}">
         <button class="btn btn-primary btn-sm" onclick="AIChat.send()">שלח</button>
       </div>
+      <div data-viewer-only style="display:none;padding:12px;text-align:center;color:var(--text-3);font-size:13px">AI Chat אינו זמין במצב צפייה (Viewer)</div>
     </div>
   </div>
 
