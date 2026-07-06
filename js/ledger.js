@@ -98,8 +98,8 @@ const Ledger = (() => {
         <div class="ledger-detail-block">
           <div class="ledger-detail-title">פוזיציה פתוחה</div>
           <div class="ledger-detail-grid">
-            <div><span style="color:var(--text-3)">כמות</span> ${r.position.qty}</div>
-            <div><span style="color:var(--text-3)">כניסה</span> $${r.position.avg_price}</div>
+            <div><span style="color:var(--text-3)">כמות</span> <bdi>${r.position.qty}</bdi></div>
+            <div><span style="color:var(--text-3)">כניסה</span> <bdi>$${r.position.avg_price}</bdi></div>
             <div><span style="color:var(--text-3)">יעד</span> ${r.position.target || '—'}</div>
             <div><span style="color:var(--text-3)">סטופ</span> ${r.position.stop_loss || '—'}</div>
             <div><span style="color:var(--text-3)">תאריך כניסה</span> ${r.position.added_date || '—'}</div>
@@ -125,10 +125,10 @@ const Ledger = (() => {
               ${rows.map(t => `
                 <tr>
                   <td>${t.sell_date}</td>
-                  <td>${t.qty}</td>
-                  <td>$${t.buy_price}</td>
-                  <td>$${t.sell_price}</td>
-                  <td class="${t.net >= 0 ? 'green' : 'red'}">${f$(Math.round(t.net))}</td>
+                  <td><bdi>${t.qty}</bdi></td>
+                  <td><bdi>$${t.buy_price}</bdi></td>
+                  <td><bdi>$${t.sell_price}</bdi></td>
+                  <td class="${t.net >= 0 ? 'green' : 'red'}"><bdi>${f$(Math.round(t.net))}</bdi></td>
                 </tr>`).join('')}
             </tbody>
           </table></div>
@@ -179,13 +179,13 @@ const Ledger = (() => {
                 <tr class="ledger-row" onclick="Ledger.toggleDetail('${r.symbol}')">
                   <td style="font-weight:700">${r.symbol}</td>
                   <td>${_statusBadges(r)}</td>
-                  <td>${r.live?.price ? '$' + r.live.price.toFixed(2) : '—'}</td>
+                  <td><bdi>${r.live?.price ? '$' + r.live.price.toFixed(2) : '—'}</bdi></td>
                   <td class="${r.openPnl == null ? '' : r.openPnl >= 0 ? 'green' : 'red'}">
-                    ${r.openPnl == null ? '—' : f$(Math.round(r.openPnl)) + ' (' + fpct(r.openPnlPct) + ')'}
+                    <bdi>${r.openPnl == null ? '—' : f$(Math.round(r.openPnl)) + ' (' + fpct(r.openPnlPct) + ')'}</bdi>
                   </td>
                   <td>${r.tradeCount || '—'}</td>
                   <td class="${!r.tradeCount ? '' : r.historicalNet >= 0 ? 'green' : 'red'}">
-                    ${r.tradeCount ? f$(Math.round(r.historicalNet)) + (r.winRate !== null ? ' (WR ' + r.winRate + '%)' : '') : '—'}
+                    <bdi>${r.tradeCount ? f$(Math.round(r.historicalNet)) + (r.winRate !== null ? ' (WR ' + r.winRate + '%)' : '') : '—'}</bdi>
                   </td>
                   <td>${r.needsAttention ? `<span class="badge badge-red">${r.attentionReason}</span>` : '—'}</td>
                 </tr>

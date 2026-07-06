@@ -34,16 +34,22 @@ const Positions = (() => {
     });
 
     el.style.display = 'flex';
+    // Every dynamic value below is wrapped in <bdi> — these strings mix
+    // LTR currency/percent content ($, %, digits, minus signs, parens)
+    // into an RTL page, and without isolation the bidi algorithm visually
+    // reorders the minus sign/parens (e.g. "-$1,234" renders as "$1,234-").
+    // <bdi> isolates each value's own direction without affecting layout
+    // or the underlying number/logic. See docs/TECHNICAL_DEBT.md.
     el.innerHTML = `
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות כוללת</div><div style="font-weight:700">${f$(Math.round(totalCost))}</div></div>
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי נוכחי</div><div style="font-weight:700">${f$(Math.round(totalVal))}</div></div>
+      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות כוללת</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
+      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
       <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">Open P&L</div>
         <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
-          ${f$(Math.round(totalPnl))} ${liveCount ? `(${liveCount}/${APP.positions.length} live)` : ''}
+          <bdi>${f$(Math.round(totalPnl))}</bdi> ${liveCount ? `<bdi>(${liveCount}/${APP.positions.length} live)</bdi>` : ''}
         </div></div>
       <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">P&L %</div>
         <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
-          ${totalCost ? fpct(totalPnl/totalCost*100) : '—'}
+          <bdi>${totalCost ? fpct(totalPnl/totalCost*100) : '—'}</bdi>
         </div></div>
     `;
   }
@@ -106,46 +112,46 @@ const Positions = (() => {
 
         <div class="pos-card-price-row">
           <div class="pos-card-price ${pnl===null?'':(pnl>=0?'green':'red')}">
-            ${price ? fprice(price) : '—'}
+            <bdi>${price ? fprice(price) : '—'}</bdi>
           </div>
           ${live ? (
             dayChgValid
-              ? `<div class="pos-card-daychg ${dayChg>=0?'green':'red'}">יומי: ${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</div>`
+              ? `<div class="pos-card-daychg ${dayChg>=0?'green':'red'}">יומי: <bdi>${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</bdi></div>`
               : `<div class="pos-card-daychg" style="color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי: N/A</div>`
           ) : ''}
         </div>
 
         ${live?.preMarket ? `
           <div style="font-size:11px;padding:2px 8px;background:var(--gold-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--gold)">
-            🌅 Pre: <b>${fprice(live.preMarket)}</b>
-            ${dayChgValid ? ` (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)` : ''}
+            🌅 Pre: <b><bdi>${fprice(live.preMarket)}</bdi></b>
+            ${dayChgValid ? `<bdi> (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)</bdi>` : ''}
           </div>` : ''}
 
         ${live?.postMarket ? `
           <div style="font-size:11px;padding:2px 8px;background:var(--purple-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--purple)">
-            🌙 AH: <b>${fprice(live.postMarket)}</b>
+            🌙 AH: <b><bdi>${fprice(live.postMarket)}</bdi></b>
           </div>` : ''}
 
         <div class="pos-card-stats">
-          <div class="pos-card-stat"><span class="pos-card-stat-label">כמות</span><span class="pos-card-stat-val">${fnum(p.qty)}</span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">כניסה</span><span class="pos-card-stat-val">${fprice(p.avg_price)}</span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">שווי נוכחי</span><span class="pos-card-stat-val">${f$(Math.round(val))}</span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">P&L %</span><span class="pos-card-stat-val ${pnlPct===null?'':(pnlPct>=0?'green':'red')}">${pnlPct!==null?fpct(pnlPct):'—'}</span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">כמות</span><span class="pos-card-stat-val"><bdi>${fnum(p.qty)}</bdi></span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">כניסה</span><span class="pos-card-stat-val"><bdi>${fprice(p.avg_price)}</bdi></span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">שווי נוכחי</span><span class="pos-card-stat-val"><bdi>${f$(Math.round(val))}</bdi></span></div>
+          <div class="pos-card-stat"><span class="pos-card-stat-label">P&L %</span><span class="pos-card-stat-val ${pnlPct===null?'':(pnlPct>=0?'green':'red')}"><bdi>${pnlPct!==null?fpct(pnlPct):'—'}</bdi></span></div>
         </div>
 
         ${p.added_date ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px">${p.added_date}</div>` : ''}
 
         <div class="pos-card-pnl-row">
           <span class="pos-card-pnl ${pnl===null?'':(pnl>=0?'green':'red')}">
-            P&L: ${pnl!==null ? f$(Math.round(pnl)) : '—'}
+            P&L: <bdi>${pnl!==null ? f$(Math.round(pnl)) : '—'}</bdi>
           </span>
-          ${pnl !== null ? `<span style="font-size:11px;color:var(--text-3)">₪ ${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}</span>` : ''}
+          ${pnl !== null ? `<span style="font-size:11px;color:var(--text-3)"><bdi>${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}</bdi></span>` : ''}
         </div>
 
         ${p.target ? `
           <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px">
-            <span style="color:var(--blue)">${icon('target')} יעד: ${fprice(p.target)}${targetPct!==null?' ('+fpct(targetPct)+' נותר)':''}</span>
-            ${p.stop_loss ? `<span style="color:var(--red)">${icon('octagon')} סטופ: ${fprice(p.stop_loss)}${stopPct!==null?' ('+fpct(-stopPct)+')':''}</span>` : ''}
+            <span style="color:var(--blue)">${icon('target')} יעד: <bdi>${fprice(p.target)}</bdi>${targetPct!==null?'<bdi> ('+fpct(targetPct)+' נותר)</bdi>':''}</span>
+            ${p.stop_loss ? `<span style="color:var(--red)">${icon('octagon')} סטופ: <bdi>${fprice(p.stop_loss)}</bdi>${stopPct!==null?'<bdi> ('+fpct(-stopPct)+')</bdi>':''}</span>` : ''}
           </div>` : ''}
 
         ${p.notes ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;font-style:italic">${p.notes}</div>` : ''}
@@ -287,15 +293,15 @@ const Positions = (() => {
       const pct   = (price - p.avg_price) / p.avg_price * 100;
       if (p.target && price >= p.target) {
         alerts.push({ id: _alertId('target', p.symbol, p.target), type: 'target', symbol: p.symbol,
-          msg: `${icon('target')} ${p.symbol} הגיע ליעד! ${fprice(price)} ≥ ${fprice(p.target)}` });
+          msg: `${icon('target')} ${p.symbol} הגיע ליעד! <bdi>${fprice(price)} ≥ ${fprice(p.target)}</bdi>` });
       }
       if (stopAlertsEnabled && p.stop_loss && price <= p.stop_loss) {
         alerts.push({ id: _alertId('stop', p.symbol, p.stop_loss), type: 'stop', symbol: p.symbol,
-          msg: `${icon('octagon')} ${p.symbol} פגע בסטופ! ${fprice(price)} ≤ ${fprice(p.stop_loss)}` });
+          msg: `${icon('octagon')} ${p.symbol} פגע בסטופ! <bdi>${fprice(price)} ≤ ${fprice(p.stop_loss)}</bdi>` });
       }
       if (stopAlertsEnabled && pct <= WARN_THRESHOLD_PCT && (!p.stop_loss || price > p.stop_loss)) {
         alerts.push({ id: _alertId('warn', p.symbol, WARN_THRESHOLD_PCT), type: 'warn', symbol: p.symbol,
-          msg: `${icon('alert-triangle')} ${p.symbol} ירד ${pct.toFixed(1)}% מהכניסה` });
+          msg: `${icon('alert-triangle')} ${p.symbol} ירד <bdi>${pct.toFixed(1)}%</bdi> מהכניסה` });
       }
     });
     return alerts;
@@ -378,12 +384,46 @@ const Positions = (() => {
       ? alerts.map(a => `<div class="alert-list-item alert-list-item--${a.type}">${a.msg}</div>`).join('')
       : '<div class="alert-list-item">אין התראות פעילות</div>';
     dd.style.display = 'block';
+    _repositionAlertList(dd, badge);
   }
 
   function hideAlertList() {
     const dd = document.getElementById('alert-list-dropdown');
-    if (dd) dd.style.display = 'none';
+    if (dd) { dd.style.display = 'none'; dd.style.top = ''; }
   }
+
+  // The dropdown is `position:absolute` under the alert badge (top action
+  // row), but the category nav row (.main-nav) sits directly below that
+  // row — at desktop widths the dropdown's default offset lands on top of
+  // it, silently swallowing clicks meant for the nav buttons underneath
+  // (confirmed via elementFromPoint: the nav button never received the
+  // click at all). Fix: when .main-nav is actually visible (desktop/
+  // tablet — it's hidden entirely on mobile, which uses the bottom nav
+  // instead, so this is a no-op there), push the dropdown's top down to
+  // clear the nav row's own bottom edge instead of just the badge's.
+  function _repositionAlertList(dd, badge) {
+    const nav = document.querySelector('.main-nav');
+    if (!nav) return;
+    const navRect  = nav.getBoundingClientRect();
+    const wrapRect = badge.closest('.alert-badge-wrap').getBoundingClientRect();
+    if (navRect.height > 0 && navRect.bottom > wrapRect.bottom) {
+      dd.style.top = (navRect.bottom - wrapRect.top + 8) + 'px';
+    }
+  }
+
+  // Click-outside-to-close: without this, the dropdown stayed open
+  // indefinitely once opened (nothing ever closed it), which is what let
+  // it sit on top of the nav row blocking clicks. Clicking the badge
+  // itself is left to its own onclick (toggleAlertList) so it isn't
+  // double-toggled; clicking anywhere else — including inside the
+  // dropdown, which has no other defined action per row — just closes it.
+  document.addEventListener('click', (e) => {
+    const dd = document.getElementById('alert-list-dropdown');
+    const badge = document.getElementById('alert-badge');
+    if (!dd || dd.style.display !== 'block') return;
+    if (badge && badge.contains(e.target)) return;
+    hideAlertList();
+  });
 
   // ── R:R Calculator ──────────────────────────────────────
 

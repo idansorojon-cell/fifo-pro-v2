@@ -60,8 +60,8 @@
 // backend changes, no mutation of any existing row. Edit/Delete Trade
 // remain disabled — a closed trade's lot is already consumed, so this
 // same pure-addition approach doesn't apply there — js/positions.js.
-const CACHE_NAME   = 'fifopro-v21';
-const STATIC_CACHE = 'fifopro-static-v21';
+const CACHE_NAME   = 'fifopro-v22';
+const STATIC_CACHE = 'fifopro-static-v22';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

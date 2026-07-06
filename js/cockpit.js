@@ -39,7 +39,7 @@ const Cockpit = (() => {
         items.push({
           severity: 'high',
           symbol: p.symbol,
-          text: `${p.symbol}: אין סטופ מוגדר, ${Utils.fpct(pnlPct)}${heldDays !== null ? `, ${heldDays} ימים בפוזיציה` : ''}`,
+          text: `${p.symbol}: אין סטופ מוגדר, <bdi>${Utils.fpct(pnlPct)}</bdi>${heldDays !== null ? `, ${heldDays} ימים בפוזיציה` : ''}`,
         });
         return; // most specific, most actionable signal for this position — don't also add a duplicate generic-risk row
       }
@@ -48,13 +48,13 @@ const Cockpit = (() => {
         items.push({
           severity: 'high',
           symbol: p.symbol,
-          text: `${p.symbol}: ${Utils.fpct(pnlPct)} — סיכון גבוה${hasStop ? '' : ' (ללא סטופ)'}`,
+          text: `${p.symbol}: <bdi>${Utils.fpct(pnlPct)}</bdi> — סיכון גבוה${hasStop ? '' : ' (ללא סטופ)'}`,
         });
       } else if (risk && risk.level === 'warn') {
         items.push({
           severity: 'medium',
           symbol: p.symbol,
-          text: `${p.symbol}: ${Utils.fpct(pnlPct)} — מתקרב לאזור סיכון`,
+          text: `${p.symbol}: <bdi>${Utils.fpct(pnlPct)}</bdi> — מתקרב לאזור סיכון`,
         });
       }
     });
@@ -118,10 +118,10 @@ const Cockpit = (() => {
 
         <div class="mc-hero">
           <div class="mc-hero-label">שווי כולל — Realized + Unrealized</div>
-          <div class="mc-hero-value ${live.combinedNet >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(live.combinedNet))}</div>
+          <div class="mc-hero-value ${live.combinedNet >= 0 ? 'green' : 'red'}"><bdi>${Utils.f$(Math.round(live.combinedNet))}</bdi></div>
           <div class="mc-hero-sub">
-            רווח ממומש: ${Utils.f$(Math.round(live.realizedNet))} ·
-            פתוח (${live.liveCount}/${live.positionsCount} live): ${Utils.f$(Math.round(live.unrealizedNet))}
+            רווח ממומש: <bdi>${Utils.f$(Math.round(live.realizedNet))}</bdi> ·
+            פתוח <bdi>(${live.liveCount}/${live.positionsCount} live)</bdi>: <bdi>${Utils.f$(Math.round(live.unrealizedNet))}</bdi>
           </div>
         </div>
 
