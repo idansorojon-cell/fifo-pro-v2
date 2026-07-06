@@ -528,11 +528,11 @@ const Settings = (() => {
               <span class="settings-row-label">משתמש צופה (Viewer)</span>
               <span class="settings-row-sub" id="viewer-status-sub">טוען...</span>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="Settings.showViewerManage()">נהל Viewer</button>
+            <button class="btn btn-ghost btn-sm viewer-manage-btn" onclick="Settings.showViewerManage()">נהל Viewer</button>
           </div>
 
           <div id="viewer-manage-form" style="display:none;margin-top:12px;padding:16px;background:var(--surface-2);border-radius:var(--r-md)">
-            <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-grid">
               <div class="form-group">
                 <label>שם משתמש</label>
                 <input type="text" id="viewer-username" placeholder="viewer">

@@ -102,6 +102,20 @@
   .modal { padding: 20px 16px; }
   .form-grid { grid-template-columns: 1fr 1fr; }
 
+  /* Viewer Management (Settings → Security) — bigger tap targets.
+     #viewer-manage-form's own fields already reflow via .form-grid above
+     (this used to be defeated by an inline 3-column override in
+     settings.js; removed there so these rules can actually take effect). */
+  .viewer-manage-btn { min-height: 40px; padding: 10px 16px; }
+  #viewer-manage-form { padding: 14px !important; }
+  #viewer-manage-form > div:last-of-type { flex-wrap: wrap; }
+  #viewer-manage-form .btn-sm { min-height: 40px; padding: 8px 14px; }
+  /* Match iOS's native UISwitch size (51×31) — much easier to hit than
+     the default 40×22 desktop size used elsewhere in Settings. */
+  #viewer-manage-form .switch { width: 51px; height: 31px; }
+  #viewer-manage-form .switch-slider::before { width: 27px; height: 27px; }
+  #viewer-manage-form .switch input:checked + .switch-slider::before { transform: translateX(20px); }
+
   /* Chart */
   .chart-wrap { height: 180px; }
   .chart-wrap-sm { height: 150px; }
