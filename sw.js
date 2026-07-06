@@ -60,8 +60,13 @@
 // backend changes, no mutation of any existing row. Edit/Delete Trade
 // remain disabled — a closed trade's lot is already consumed, so this
 // same pure-addition approach doesn't apply there — js/positions.js.
-const CACHE_NAME   = 'fifopro-v22';
-const STATIC_CACHE = 'fifopro-static-v22';
+// Bumped v22 -> v23: Phase 1 owner login restored — login overlay markup
+// back in index.html, boot flow now gated on Auth.init()/_onAuthSuccess
+// (was silently broken: login succeeded but the app never actually booted
+// or started price polling — see docs/TECHNICAL_DEBT.md "Restoring
+// authentication") — index.html, js/auth.js, js/api.js, js/app.js.
+const CACHE_NAME   = 'fifopro-v23';
+const STATIC_CACHE = 'fifopro-static-v23';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

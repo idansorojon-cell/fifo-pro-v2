@@ -1362,7 +1362,11 @@ function installOnEditTrigger_() { installAutoRefreshTriggers_(); }
 // ── AUTH BYPASS FLAG ─────────────────────────────────────────────
 // Set to true  → all endpoints open, no token required (testing mode)
 // Set to false → full session auth enforced (production mode)
-var AUTH_DISABLED = true;
+// Phase 1 (owner login): only takes effect once this file is manually
+// pasted into script.google.com and redeployed — see
+// docs/PROJECT_OVERVIEW.md "Deployment". Also requires OWNER_USERNAME +
+// LOGIN_PASSWORD Script Properties to be set for a meaningful login gate.
+var AUTH_DISABLED = false;
 
 const TRADE_HEADERS = [
   'id','symbol','buy_date','sell_date','qty','buy_price','sell_price',
@@ -1409,7 +1413,7 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
 
     // ── Auth actions (no token required) ──────────────────
-    if (data.action === 'login')             return handleLogin_(data.passwordHash);
+    if (data.action === 'login')             return handleLogin_(data.username, data.passwordHash);
     if (data.action === 'logout')            return handleLogout_(data.token || '');
     if (data.action === 'revokeAllSessions') return handleRevokeAllSessions_(data.passwordHash);
 
@@ -1472,14 +1476,22 @@ var SESSION_STORE_KEY = 'FIFO_SESSIONS';
 
 /**
  * LOGIN
- * POST { action:'login', passwordHash:'<sha256-hex>' }
+ * POST { action:'login', username:'<owner username>', passwordHash:'<sha256-hex>' }
  * Client sends SHA-256 of the password (Web Crypto API in browser).
  * Server computes SHA-256 of LOGIN_PASSWORD and compares.
- * On success: generates a random UUID, stores it server-side, returns it.
+ * Username is only checked against OWNER_USERNAME if that Script Property
+ * is set — if it's unset, any username is accepted alongside the correct
+ * password (back-compat with the pre-username single-password flow, and
+ * avoids a hard lockout before OWNER_USERNAME has been configured).
+ * On success: generates a random UUID, stores it server-side as
+ * { role:'owner', expiresAt }, returns it. (Phase 1: only 'owner' exists —
+ * the role tag is stored now so a future viewer role needs no session
+ * schema migration.)
  */
-function handleLogin_(clientHash) {
-  const props    = PropertiesService.getScriptProperties();
-  const storedPw = props.getProperty('LOGIN_PASSWORD');
+function handleLogin_(username, clientHash) {
+  const props      = PropertiesService.getScriptProperties();
+  const storedPw   = props.getProperty('LOGIN_PASSWORD');
+  const storedUser = props.getProperty('OWNER_USERNAME');
 
   // Auth disabled — no password configured (dev/first-setup mode)
   if (!storedPw) {
@@ -1491,28 +1503,34 @@ function handleLogin_(clientHash) {
     return jsonOut_({ ok: false, error: 'סיסמה נדרשת' });
   }
 
+  if (storedUser && (username || '').trim() !== storedUser) {
+    Utilities.sleep(800); // slow down brute-force attempts
+    return jsonOut_({ ok: false, error: 'שם משתמש או סיסמה שגויים' });
+  }
+
   const serverHash = sha256hex_(storedPw);
   Logger.log('handleLogin_: comparing hashes — match=' + (clientHash === serverHash));
 
   if (clientHash !== serverHash) {
     Utilities.sleep(800); // slow down brute-force attempts
-    return jsonOut_({ ok: false, error: 'סיסמה שגויה' });
+    return jsonOut_({ ok: false, error: 'שם משתמש או סיסמה שגויים' });
   }
 
   // Generate a random session token and store it server-side
-  const token     = Utilities.getUuid();
-  const ttlHours  = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10); // default 30 days
-  const expiresAt = Date.now() + ttlHours * 3600000;
+  const token      = Utilities.getUuid();
+  const ttlHours   = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10); // default 30 days
+  const expiresAt  = Date.now() + ttlHours * 3600000;
+  const sessionVal = { role: 'owner', expiresAt: expiresAt };
 
   try {
-    storeSessions_(upsertSession_(loadSessions_(), token, expiresAt));
+    storeSessions_(upsertSession_(loadSessions_(), token, sessionVal));
     Logger.log('handleLogin_: session stored OK, token=' + token.slice(0, 8) + '...');
   } catch(e) {
     Logger.log('handleLogin_: storeSessions_ failed: ' + e.message + ' — forcing clean session store');
     // storeSessions_ failed (corrupt/oversized FIFO_SESSIONS). Force-clear and save only this token.
     try {
       const fresh = {};
-      fresh[token] = expiresAt;
+      fresh[token] = sessionVal;
       props.setProperty(SESSION_STORE_KEY, JSON.stringify(fresh));
       Logger.log('handleLogin_: emergency session store succeeded');
     } catch(e2) {
@@ -1521,7 +1539,7 @@ function handleLogin_(clientHash) {
     }
   }
 
-  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt });
+  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt, role: 'owner' });
 }
 
 /**
@@ -1584,11 +1602,12 @@ function handleChangePassword_(data) {
   // Clear ALL existing sessions — every device must re-login
   props.deleteProperty(SESSION_STORE_KEY);
 
-  // Issue a fresh token for this device
+  // Issue a fresh token for this device (owner — this endpoint is only
+  // ever called by the owner in Phase 1, before a viewer role exists)
   const ttlHours  = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10);
   const newToken  = Utilities.getUuid();
   const expiresAt = Date.now() + ttlHours * 3600000;
-  storeSessions_(upsertSession_({}, newToken, expiresAt));
+  storeSessions_(upsertSession_({}, newToken, { role: 'owner', expiresAt: expiresAt }));
 
   return jsonOut_({ ok: true, token: newToken });
 }
@@ -1598,7 +1617,17 @@ function handleChangePassword_(data) {
  * Returns true if the token exists in FIFO_SESSIONS and has not expired.
  * If LOGIN_PASSWORD is not set: all requests are accepted (dev mode).
  * Side-effect: lazily removes expired sessions on every validation call.
+ *
+ * Session values are stored as { role, expiresAt } (Phase 1: role is
+ * always 'owner' — no viewer role exists yet). _sessionExpiresAt_ also
+ * accepts a bare number for back-compat with any session written before
+ * this schema change, so an old FIFO_SESSIONS entry doesn't crash
+ * validation — it's just treated as a valid expiresAt with no role.
  */
+function _sessionExpiresAt_(session) {
+  return typeof session === 'number' ? session : (session && session.expiresAt);
+}
+
 function validateToken_(token) {
   const props    = PropertiesService.getScriptProperties();
   const storedPw = props.getProperty('LOGIN_PASSWORD');
@@ -1615,12 +1644,14 @@ function validateToken_(token) {
   const now      = Date.now();
   const sessions = loadSessions_();
   const count    = Object.keys(sessions).length;
+  const session  = sessions[token];
 
-  if (!sessions[token]) {
+  if (!session) {
     Logger.log('validateToken_: token not found in FIFO_SESSIONS (total sessions: ' + count + ')');
     return false;
   }
-  if (sessions[token] <= now) {
+  const expiresAt = _sessionExpiresAt_(session);
+  if (!expiresAt || expiresAt <= now) {
     Logger.log('validateToken_: token expired');
     return false;
   }
@@ -1628,7 +1659,8 @@ function validateToken_(token) {
   // Lazy-clean expired sessions (avoids the property growing unbounded)
   let dirty = false;
   Object.keys(sessions).forEach(t => {
-    if (sessions[t] < now) { delete sessions[t]; dirty = true; }
+    const exp = _sessionExpiresAt_(sessions[t]);
+    if (!exp || exp < now) { delete sessions[t]; dirty = true; }
   });
   try { if (dirty) storeSessions_(sessions); } catch(e) { /* non-fatal */ }
 
@@ -1652,9 +1684,9 @@ function storeSessions_(sessions) {
     // Property too large (>9KB) — drop the oldest half and retry.
     // Use reduce instead of Object.fromEntries for GAS V8/Rhino compatibility.
     const now    = Date.now();
-    const sorted = Object.entries(sessions).sort(function(a, b) { return a[1] - b[1]; });
+    const sorted = Object.entries(sessions).sort(function(a, b) { return _sessionExpiresAt_(a[1]) - _sessionExpiresAt_(b[1]); });
     // Keep only the newest half (drop expired first, then oldest)
-    const keep   = sorted.filter(function(x) { return x[1] > now; });
+    const keep   = sorted.filter(function(x) { return _sessionExpiresAt_(x[1]) > now; });
     const half   = keep.length > 0 ? keep.slice(Math.ceil(keep.length / 2)) : sorted.slice(Math.ceil(sorted.length / 2));
     const trimmed = half.reduce(function(acc, pair) { acc[pair[0]] = pair[1]; return acc; }, {});
     try {
@@ -1666,8 +1698,8 @@ function storeSessions_(sessions) {
   }
 }
 
-function upsertSession_(sessions, token, expiresAt) {
-  sessions[token] = expiresAt;
+function upsertSession_(sessions, token, sessionVal) {
+  sessions[token] = sessionVal;
   return sessions;
 }
 
@@ -1683,7 +1715,7 @@ function testAuth_() {
   const sessions = loadSessions_();
   const sessionCount = Object.keys(sessions).length;
   const now = Date.now();
-  const activeSessions = Object.keys(sessions).filter(function(t) { return sessions[t] > now; }).length;
+  const activeSessions = Object.keys(sessions).filter(function(t) { return _sessionExpiresAt_(sessions[t]) > now; }).length;
 
   Logger.log('=== FIFO PRO Auth Diagnostics ===');
   Logger.log('LOGIN_PASSWORD set: ' + !!storedPw);
@@ -1693,6 +1725,7 @@ function testAuth_() {
     // Print the server-side hash so you can compare with what the browser sends
     Logger.log('Server hash (sha256hex_ of storedPw): ' + sha256hex_(storedPw));
   }
+  Logger.log('OWNER_USERNAME set: ' + !!props.getProperty('OWNER_USERNAME'));
   Logger.log('FIFO_SESSIONS total: ' + sessionCount + ', active (not expired): ' + activeSessions);
 
   const rawFinnhubKey = props.getProperty('FINNHUB_API_KEY');

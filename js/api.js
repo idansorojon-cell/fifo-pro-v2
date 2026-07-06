@@ -8,7 +8,10 @@ const API = (() => {
   // ── Auth bypass flag (must match auth.js AUTH_DISABLED) ─────────
   // true  → skip all token logic, ignore 401s, verifyLogin is a no-op (testing mode)
   // false → full session auth enforced (production mode)
-  const AUTH_DISABLED = true;
+  // Phase 1 (owner login): the backend flag (AppScript_FULL.gs) only takes
+  // effect after a manual Apps Script redeploy — see
+  // docs/PROJECT_OVERVIEW.md "Deployment".
+  const AUTH_DISABLED = false;
 
   const API_URL = 'https://script.google.com/macros/s/AKfycbzbiOcOGu5Qh8Zte_eU04BIh-ufie_V87nq8otruMBgwuil3DYJR5qn0qgo4VFsY-R5sw/exec';
   // NOTE: the Polygon.io API key and the Anthropic API key must NEVER live
@@ -358,7 +361,7 @@ const API = (() => {
 
   // ── Auth ──────────────────────────────────────────────────
 
-  async function verifyLogin(passwordHash) {
+  async function verifyLogin(username, passwordHash) {
     if (AUTH_DISABLED) {
       // No network call — return a valid auth-disabled response immediately
       return { ok: true, token: 'auth-disabled', authDisabled: true };
@@ -366,7 +369,7 @@ const API = (() => {
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'login', passwordHash }),
+        body: JSON.stringify({ action: 'login', username, passwordHash }),
         headers: { 'Content-Type': 'text/plain' },
         redirect: 'follow',
       });

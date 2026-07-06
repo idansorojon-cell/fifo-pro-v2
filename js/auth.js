@@ -8,7 +8,10 @@ const Auth = (() => {
   // ── Auth bypass flag ────────────────────────────────────────
   // true  → skip login screen entirely, load dashboard immediately (testing mode)
   // false → full session auth enforced (production mode)
-  const AUTH_DISABLED = true;
+  // Phase 1 (owner login): must match the AUTH_DISABLED flag in api.js AND
+  // AppScript_FULL.gs. The backend flag only takes effect after a manual
+  // Apps Script redeploy — see docs/PROJECT_OVERVIEW.md "Deployment".
+  const AUTH_DISABLED = false;
 
   const TOKEN_KEY    = 'fifo_session_v1';
   const EXPIRY_DAYS  = 30;
@@ -36,7 +39,7 @@ const Auth = (() => {
     PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
     // Also sweep for any unknown fifo_ keys except theme
     Object.keys(localStorage)
-      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_local_pw_hash')
+      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_local_pw_hash' && k !== 'fifo_local_username')
       .forEach(k => localStorage.removeItem(k));
     // Clear any SW cache partitions named 'fifo-*'
     if ('caches' in window) {
@@ -108,15 +111,21 @@ const Auth = (() => {
   }
 
   // ── Login ───────────────────────────────────────────────
-  async function login(password) {
+  // username is currently only meaningfully checked server-side once
+  // OWNER_USERNAME is set in Script Properties and AppScript_FULL.gs is
+  // redeployed (see handleLogin_) — until then the backend accepts any
+  // username alongside the correct password, same as before this phase.
+  async function login(username, password) {
+    if (!username || !username.trim()) return { ok: false, error: 'הכנס שם משתמש' };
     if (!password.trim()) return { ok: false, error: 'הכנס סיסמה' };
 
+    const user = username.trim();
     const hash = await sha256(password.trim());
 
     // Try backend verification
     if (API.isConfigured()) {
       try {
-        const res = await API.verifyLogin(hash);
+        const res = await API.verifyLogin(user, hash);
         if (res.ok && res.token) {
           saveToken(res.token);
           return { ok: true };
@@ -131,30 +140,39 @@ const Auth = (() => {
         if (res.deploymentError) {
           return { ok: false, error: res.error };
         }
-        return { ok: false, error: res.error || 'סיסמה שגויה' };
+        return { ok: false, error: res.error || 'שם משתמש או סיסמה שגויים' };
       } catch(e) {
         // Network error only — fall through to offline mode
         console.warn('Auth backend unreachable (network), using offline mode:', e.message);
       }
     }
 
-    // Offline / no backend — use local hash comparison
-    const storedHash = localStorage.getItem('fifo_local_pw_hash');
+    // Offline / no backend — use local username+hash comparison
+    const storedUser = localStorage.getItem('fifo_local_username');
+    const storedHash  = localStorage.getItem('fifo_local_pw_hash');
     if (!storedHash) {
-      // First time, no password set — allow any password and save hash
+      // First time, nothing set — allow any username/password and save both
+      localStorage.setItem('fifo_local_username', user);
       localStorage.setItem('fifo_local_pw_hash', hash);
       saveToken('local-' + hash.slice(0,8) + '-' + Date.now());
       return { ok: true, firstTime: true };
     }
-    if (hash === storedHash) {
+    if (user === storedUser && hash === storedHash) {
       saveToken('local-' + hash.slice(0,8) + '-' + Date.now());
       return { ok: true };
     }
-    return { ok: false, error: 'סיסמה שגויה' };
+    return { ok: false, error: 'שם משתמש או סיסמה שגויים' };
   }
 
   // ── Logout ──────────────────────────────────────────────
   async function logout() {
+    // Stop price polling — otherwise refreshPrices() keeps firing getPrices
+    // every 15s with no token after logout, and (now that auth is real)
+    // each call is correctly rejected server-side but logs a console error.
+    // stopPolling() is defined in app.js (loaded after auth.js) but exists
+    // by the time a logged-in user can click logout.
+    if (typeof stopPolling === 'function') stopPolling();
+
     // Revoke server-side session first (fire-and-forget; we log out locally regardless)
     if (API.isConfigured()) {
       try { await API.logoutServer(); } catch(e) { console.warn('Server logout failed:', e.message); }
@@ -166,6 +184,11 @@ const Auth = (() => {
   // Called by api.js when the server returns code:401 (expired/invalid session)
   function handle401() {
     if (AUTH_DISABLED) return; // bypass — don't show login screen in testing mode
+    // Same reasoning as logout(): a 401 can arrive in a tab that never
+    // called logout() itself (e.g. another tab logged out, clearing the
+    // shared localStorage token) — without this, that tab keeps polling
+    // getPrices every 15s, each one failing, indefinitely.
+    if (typeof stopPolling === 'function') stopPolling();
     clearPrivateCache();
     showLoginScreen();
   }
@@ -219,16 +242,18 @@ const Auth = (() => {
 
   // ── Login form handler ──────────────────────────────────
   async function handleLoginSubmit() {
+    const userEl = document.getElementById('login-username');
     const pwEl  = document.getElementById('login-password');
     const errEl = document.getElementById('login-error');
     const btn   = document.getElementById('login-btn');
     if (!pwEl) return;
 
+    const user = userEl ? userEl.value : '';
     const pw = pwEl.value;
     if (btn) { btn.disabled = true; btn.textContent = 'מתחבר...'; }
     if (errEl) errEl.textContent = '';
 
-    const res = await login(pw);
+    const res = await login(user, pw);
 
     if (res.ok) {
       pwEl.value = '';

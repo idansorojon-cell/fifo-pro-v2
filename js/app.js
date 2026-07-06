@@ -919,7 +919,18 @@ async function _initApp() {
   }
 }
 
+// Called by auth.js's handleLoginSubmit() after a successful login — this
+// callback was referenced there but never defined anywhere, which meant a
+// successful login hid the overlay but never actually booted the app (no
+// data load, no price polling). See docs/TECHNICAL_DEBT.md — "Restoring
+// authentication".
+window._onAuthSuccess = () => { _initApp(); };
+
 (async () => {
-  // Auth disabled — boot directly into the dashboard, no login screen.
-  await _initApp();
+  // Auth.init() shows the login screen and returns false if not logged in
+  // (or AUTH_DISABLED short-circuits to true and boots immediately, as
+  // before). When it returns false, _initApp() is deferred to
+  // window._onAuthSuccess() above, fired once login succeeds.
+  const authed = await Auth.init();
+  if (authed) await _initApp();
 })();

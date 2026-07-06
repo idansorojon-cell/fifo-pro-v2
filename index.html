@@ -153,7 +153,25 @@
 <!-- ═══════════════════════════════════════════════════
      LOGIN OVERLAY (shown before app loads)
 ═══════════════════════════════════════════════════ -->
-<!-- login-overlay removed — auth disabled, app auto-starts -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-brand-name">FIFO <span>PRO</span></div>
+      <div class="login-brand-sub">Trading Dashboard</div>
+    </div>
+    <form class="login-form" onsubmit="event.preventDefault(); Auth.handleLoginSubmit();">
+      <div class="login-input-wrap">
+        <input type="text" id="login-username" placeholder="שם משתמש" autocomplete="username">
+      </div>
+      <div class="login-input-wrap">
+        <input type="password" id="login-password" placeholder="סיסמה" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <button type="submit" class="login-btn" id="login-btn">כניסה</button>
+    </form>
+    <div class="login-hint">גישה מוגבלת — FIFO PRO</div>
+  </div>
+</div>
 
 <div class="app" id="app">
 
