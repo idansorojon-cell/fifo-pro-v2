@@ -1390,6 +1390,15 @@ function doGet(e) {
       return jsonOut_({ ok: false, error: 'Unauthorized', code: 401 });
     }
 
+    // Phase 2: a viewer-role session may only call actions on the
+    // read-only allowlist below — default-deny, not a write-blocklist, so
+    // any future new action is blocked for viewer unless explicitly added
+    // here. addWatchlist/removeWatchlist are deliberately NOT included —
+    // they mutate data even though they're GET requests.
+    if (!AUTH_DISABLED && getTokenRole_(token) === 'viewer' && VIEWER_ALLOWED_ACTIONS.indexOf(action) === -1) {
+      return jsonOut_({ ok: false, error: 'Read-only access — action not permitted', code: 403 });
+    }
+
     switch (action) {
       case 'getTrades':       return handleGetTrades_();
       case 'getGoal':         return handleGetGoal_();
@@ -1401,12 +1410,22 @@ function doGet(e) {
       case 'getIndicators':   return handleGetIndicators_(e.parameter.symbol);
       case 'getNews':         return handleGetNews_(e.parameter.symbol);
       case 'getOperations':   return handleGetOperations_();
+      case 'getViewerStatus': return handleGetViewerStatus_(token);
       default:                return jsonOut_({ ok: false, error: 'Unknown action: ' + action });
     }
   } catch (err) {
     return jsonOut_({ ok: false, error: err.message });
   }
 }
+
+// Read-only actions a viewer-role session may call via doGet. Everything
+// else (including addWatchlist/removeWatchlist, which are GET requests
+// but mutate data) is denied by default. See "Persistence architecture"/
+// role model in docs/TECHNICAL_DEBT.md.
+var VIEWER_ALLOWED_ACTIONS = [
+  'getTrades', 'getGoal', 'getPositions', 'getWatchlist',
+  'getPrices', 'getIndicators', 'getNews', 'getOperations'
+];
 
 function doPost(e) {
   try {
@@ -1425,6 +1444,14 @@ function doPost(e) {
       return jsonOut_({ ok: false, error: 'Unauthorized', code: 401 });
     }
 
+    // Phase 2: every action reachable below is a write (or aiChat, which
+    // sends data to Anthropic) — a viewer-role session is never permitted
+    // to call any of them. This also covers aiChat's "blocked for viewer"
+    // requirement with no special-casing needed.
+    if (!AUTH_DISABLED && getTokenRole_(data.token || '') === 'viewer') {
+      return jsonOut_({ ok: false, error: 'Read-only access — action not permitted', code: 403 });
+    }
+
     switch (data.action) {
       case 'add':            return handleAddTrade_(data.trade);
       case 'update':         return handleUpdateTrade_(data.trade);
@@ -1439,6 +1466,8 @@ function doPost(e) {
       case 'appendOperation':    return handleAppendOperation_(data.op);
       case 'addTradeOperation':  return handleAddTradeOperation_(data.trade);
       case 'aiChat':         return handleAiChat_(data);
+      case 'setViewerCredentials': return handleSetViewerCredentials_(data);
+      case 'setViewerEnabled':     return handleSetViewerEnabled_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
   } catch (err) {
@@ -1476,17 +1505,19 @@ var SESSION_STORE_KEY = 'FIFO_SESSIONS';
 
 /**
  * LOGIN
- * POST { action:'login', username:'<owner username>', passwordHash:'<sha256-hex>' }
+ * POST { action:'login', username, passwordHash:'<sha256-hex>' }
  * Client sends SHA-256 of the password (Web Crypto API in browser).
- * Server computes SHA-256 of LOGIN_PASSWORD and compares.
- * Username is only checked against OWNER_USERNAME if that Script Property
- * is set — if it's unset, any username is accepted alongside the correct
- * password (back-compat with the pre-username single-password flow, and
- * avoids a hard lockout before OWNER_USERNAME has been configured).
+ * Tries owner credentials first (LOGIN_PASSWORD, sha256hex_() handles the
+ * legacy plaintext-or-__hash__: format; OWNER_USERNAME only checked if
+ * set — back-compat with the pre-username single-password flow). If that
+ * doesn't match, tries viewer credentials (Phase 2) — only if
+ * VIEWER_ENABLED === 'true' and both VIEWER_USERNAME/VIEWER_PASSWORD are
+ * set. VIEWER_PASSWORD is always stored as a raw sha256 hex hash (set via
+ * setViewerCredentials, which only ever receives an already-hashed value
+ * from the owner's browser) — no legacy plaintext case to support there,
+ * unlike LOGIN_PASSWORD.
  * On success: generates a random UUID, stores it server-side as
- * { role:'owner', expiresAt }, returns it. (Phase 1: only 'owner' exists —
- * the role tag is stored now so a future viewer role needs no session
- * schema migration.)
+ * { role, expiresAt }, returns it including the role.
  */
 function handleLogin_(username, clientHash) {
   const props      = PropertiesService.getScriptProperties();
@@ -1503,28 +1534,38 @@ function handleLogin_(username, clientHash) {
     return jsonOut_({ ok: false, error: 'סיסמה נדרשת' });
   }
 
-  if (storedUser && (username || '').trim() !== storedUser) {
-    Utilities.sleep(800); // slow down brute-force attempts
-    return jsonOut_({ ok: false, error: 'שם משתמש או סיסמה שגויים' });
+  const usernameTrimmed = (username || '').trim();
+  const ownerUsernameOk = !storedUser || usernameTrimmed === storedUser;
+  const ownerHashOk     = clientHash === sha256hex_(storedPw);
+  Logger.log('handleLogin_: owner match — username=' + ownerUsernameOk + ' hash=' + ownerHashOk);
+
+  if (ownerUsernameOk && ownerHashOk) {
+    return _issueSession_(usernameTrimmed, 'owner');
   }
 
-  const serverHash = sha256hex_(storedPw);
-  Logger.log('handleLogin_: comparing hashes — match=' + (clientHash === serverHash));
-
-  if (clientHash !== serverHash) {
-    Utilities.sleep(800); // slow down brute-force attempts
-    return jsonOut_({ ok: false, error: 'שם משתמש או סיסמה שגויים' });
+  if (props.getProperty('VIEWER_ENABLED') === 'true') {
+    const viewerUser = props.getProperty('VIEWER_USERNAME');
+    const viewerHash  = props.getProperty('VIEWER_PASSWORD');
+    if (viewerUser && viewerHash && usernameTrimmed === viewerUser && clientHash === viewerHash) {
+      return _issueSession_(usernameTrimmed, 'viewer');
+    }
   }
 
-  // Generate a random session token and store it server-side
-  const token      = Utilities.getUuid();
-  const ttlHours   = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10); // default 30 days
-  const expiresAt  = Date.now() + ttlHours * 3600000;
-  const sessionVal = { role: 'owner', expiresAt: expiresAt };
+  Utilities.sleep(800); // slow down brute-force attempts (uniform timing regardless of which check failed)
+  return jsonOut_({ ok: false, error: 'שם משתמש או סיסמה שגויים' });
+}
+
+/** Issues and stores a new session token for the given role ('owner'|'viewer'). */
+function _issueSession_(username, role) {
+  const props      = PropertiesService.getScriptProperties();
+  const token       = Utilities.getUuid();
+  const ttlHours    = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10); // default 30 days
+  const expiresAt   = Date.now() + ttlHours * 3600000;
+  const sessionVal  = { role: role, expiresAt: expiresAt };
 
   try {
     storeSessions_(upsertSession_(loadSessions_(), token, sessionVal));
-    Logger.log('handleLogin_: session stored OK, token=' + token.slice(0, 8) + '...');
+    Logger.log('handleLogin_: session stored OK, role=' + role + ', token=' + token.slice(0, 8) + '...');
   } catch(e) {
     Logger.log('handleLogin_: storeSessions_ failed: ' + e.message + ' — forcing clean session store');
     // storeSessions_ failed (corrupt/oversized FIFO_SESSIONS). Force-clear and save only this token.
@@ -1539,7 +1580,7 @@ function handleLogin_(username, clientHash) {
     }
   }
 
-  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt, role: 'owner' });
+  return jsonOut_({ ok: true, token: token, expiresAt: expiresAt, role: role });
 }
 
 /**
@@ -1589,6 +1630,13 @@ function handleChangePassword_(data) {
   if (!validateToken_(data.token || '')) {
     return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש' });
   }
+  // Phase 2: this changes the OWNER's own password (LOGIN_PASSWORD) —
+  // a viewer-role token must never reach this, or a viewer could lock the
+  // owner out / take over the owner account. Explicit role check, not
+  // just relying on the caller never sending this action.
+  if (getTokenRole_(data.token || '') !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
   if (sha256hex_(storedPw) !== (data.currentHash || '')) {
     return jsonOut_({ ok: false, error: 'הסיסמה הנוכחית שגויה' });
   }
@@ -1602,8 +1650,7 @@ function handleChangePassword_(data) {
   // Clear ALL existing sessions — every device must re-login
   props.deleteProperty(SESSION_STORE_KEY);
 
-  // Issue a fresh token for this device (owner — this endpoint is only
-  // ever called by the owner in Phase 1, before a viewer role exists)
+  // Issue a fresh token for this device (owner)
   const ttlHours  = parseInt(props.getProperty('SESSION_TTL_HOURS') || '720', 10);
   const newToken  = Utilities.getUuid();
   const expiresAt = Date.now() + ttlHours * 3600000;
@@ -1612,20 +1659,138 @@ function handleChangePassword_(data) {
   return jsonOut_({ ok: true, token: newToken });
 }
 
+// ════════════════════════════════════════════════════════════
+// VIEWER MANAGEMENT (Phase 2) — owner-only
+// ════════════════════════════════════════════════════════════
+// VIEWER_USERNAME / VIEWER_PASSWORD (raw sha256 hex) / VIEWER_ENABLED
+// ('true'/'false' string) are Script Properties, same pattern as
+// LOGIN_PASSWORD. A viewer session's own validity (validateToken_) is
+// re-checked against VIEWER_ENABLED on every request — see there for why
+// that's what makes "lock kicks out an already-open tab" work without
+// needing to touch every write handler individually.
+
+/**
+ * Deletes every viewer-role session from FIFO_SESSIONS, leaving any
+ * owner session(s) untouched. Called on every credential change AND on
+ * every lock/unlock, per the explicit requirement that a password change
+ * or lock must invalidate existing viewer sessions immediately — not just
+ * rely on validateToken_'s VIEWER_ENABLED check (defense in depth: the
+ * sessions are actually gone, not just currently failing a flag check).
+ */
+function purgeViewerSessions_() {
+  const sessions = loadSessions_();
+  let dirty = false;
+  Object.keys(sessions).forEach(function(t) {
+    if (_sessionRole_(sessions[t]) === 'viewer') { delete sessions[t]; dirty = true; }
+  });
+  if (dirty) storeSessions_(sessions);
+}
+
+/**
+ * CREATE/UPDATE VIEWER CREDENTIALS
+ * POST { action:'setViewerCredentials', token, username, passwordHash }
+ * Owner-only. Sets username+password together (simplest correct model —
+ * a rename doesn't require a separate flow) and always re-enables the
+ * viewer (creating/updating credentials is an explicit "grant access"
+ * action). Always purges existing viewer sessions — an old password must
+ * never keep working after this call.
+ */
+function handleSetViewerCredentials_(data) {
+  if (!validateToken_(data.token || '')) {
+    return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש', code: 401 });
+  }
+  if (getTokenRole_(data.token || '') !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
+  const username = (data.username || '').trim();
+  const passwordHash = data.passwordHash || '';
+  if (!username) return jsonOut_({ ok: false, error: 'שם משתמש נדרש' });
+  if (!passwordHash || passwordHash.length !== 64) return jsonOut_({ ok: false, error: 'סיסמה לא תקינה' });
+
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('VIEWER_USERNAME', username);
+  props.setProperty('VIEWER_PASSWORD', passwordHash);
+  props.setProperty('VIEWER_ENABLED', 'true');
+
+  purgeViewerSessions_();
+
+  return jsonOut_({ ok: true });
+}
+
+/**
+ * LOCK / UNLOCK VIEWER
+ * POST { action:'setViewerEnabled', token, enabled: true|false }
+ * Owner-only. Always purges existing viewer sessions (a no-op on unlock,
+ * since none should still be valid — see validateToken_ — but cheap and
+ * keeps the invariant simple: this action always leaves zero viewer
+ * sessions behind, regardless of direction).
+ */
+function handleSetViewerEnabled_(data) {
+  if (!validateToken_(data.token || '')) {
+    return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש', code: 401 });
+  }
+  if (getTokenRole_(data.token || '') !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('VIEWER_ENABLED', data.enabled === true ? 'true' : 'false');
+
+  purgeViewerSessions_();
+
+  return jsonOut_({ ok: true, viewerEnabled: data.enabled === true });
+}
+
+/**
+ * GET VIEWER STATUS (for the Settings UI — never returns the password)
+ * GET ?action=getViewerStatus&token=...
+ * Owner-only (also excluded from VIEWER_ALLOWED_ACTIONS, so a viewer
+ * token is already blocked before reaching this handler — checked again
+ * here too, since a handler should never trust the dispatch gate alone).
+ */
+function handleGetViewerStatus_(token) {
+  if (getTokenRole_(token) !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
+  const props = PropertiesService.getScriptProperties();
+  const username = props.getProperty('VIEWER_USERNAME') || '';
+  const hasPassword = !!props.getProperty('VIEWER_PASSWORD');
+  return jsonOut_({
+    ok: true,
+    username: username,
+    enabled: props.getProperty('VIEWER_ENABLED') === 'true',
+    configured: !!username && hasPassword
+  });
+}
+
 /**
  * TOKEN VALIDATION
  * Returns true if the token exists in FIFO_SESSIONS and has not expired.
  * If LOGIN_PASSWORD is not set: all requests are accepted (dev mode).
  * Side-effect: lazily removes expired sessions on every validation call.
  *
- * Session values are stored as { role, expiresAt } (Phase 1: role is
- * always 'owner' — no viewer role exists yet). _sessionExpiresAt_ also
- * accepts a bare number for back-compat with any session written before
- * this schema change, so an old FIFO_SESSIONS entry doesn't crash
- * validation — it's just treated as a valid expiresAt with no role.
+ * Session values are stored as { role, expiresAt }. _sessionExpiresAt_
+ * also accepts a bare number for back-compat with any session written
+ * before this schema change, so an old FIFO_SESSIONS entry doesn't crash
+ * validation — it's just treated as a valid expiresAt with no role
+ * (defaults to 'owner' — see _sessionRole_).
  */
 function _sessionExpiresAt_(session) {
   return typeof session === 'number' ? session : (session && session.expiresAt);
+}
+
+function _sessionRole_(session) {
+  return (session && typeof session === 'object' && session.role) ? session.role : 'owner';
+}
+
+/**
+ * Returns 'owner', 'viewer', or null (token not found/invalid) — does NOT
+ * check expiry or the viewer-enabled flag itself; callers should call
+ * validateToken_(token) first, which already accounts for both.
+ */
+function getTokenRole_(token) {
+  if (token === 'auth-disabled') return 'owner';
+  const session = loadSessions_()[token];
+  return session ? _sessionRole_(session) : null;
 }
 
 function validateToken_(token) {
@@ -1653,6 +1818,15 @@ function validateToken_(token) {
   const expiresAt = _sessionExpiresAt_(session);
   if (!expiresAt || expiresAt <= now) {
     Logger.log('validateToken_: token expired');
+    return false;
+  }
+  // A viewer session becomes invalid the instant the viewer is disabled
+  // (locked), even if its own TTL hasn't expired yet — this is what makes
+  // "lock kicks out an already-open viewer tab" work, reusing the exact
+  // same expiry-style rejection path (-> 401 -> frontend's existing
+  // handle401() already shows the login screen and stops polling).
+  if (_sessionRole_(session) === 'viewer' && props.getProperty('VIEWER_ENABLED') !== 'true') {
+    Logger.log('validateToken_: viewer session rejected — viewer is disabled');
     return false;
   }
 

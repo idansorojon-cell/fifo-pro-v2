@@ -500,6 +500,35 @@ const Settings = (() => {
           </div>
           <div id="revoke-msg" style="margin:0 16px 12px;font-size:12px"></div>
 
+          ${Auth.getRole() === 'owner' ? `
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <span class="settings-row-label">משתמש צופה (Viewer)</span>
+              <span class="settings-row-sub" id="viewer-status-sub">טוען...</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.showViewerManage()">נהל Viewer</button>
+          </div>
+
+          <div id="viewer-manage-form" style="display:none;margin-top:12px;padding:16px;background:var(--surface-2);border-radius:var(--r-md)">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+              <div class="form-group">
+                <label>שם משתמש</label>
+                <input type="text" id="viewer-username" placeholder="viewer">
+              </div>
+              <div class="form-group">
+                <label>סיסמה חדשה</label>
+                <input type="password" id="viewer-password" placeholder="••••••••">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-primary btn-sm" onclick="Settings.saveViewerCredentials()">שמור</button>
+              <button class="btn btn-ghost btn-sm" id="viewer-lock-btn" onclick="Settings.toggleViewerEnabled()">🔒 נעל</button>
+              <button class="btn btn-ghost btn-sm" onclick="Settings.hideViewerManage()">ביטול</button>
+            </div>
+            <div id="viewer-msg" style="margin-top:8px;font-size:12px"></div>
+          </div>
+          ` : ''}
+
         </div>
       </div>
 
@@ -538,6 +567,8 @@ const Settings = (() => {
       </div>
 
     </div>`;
+
+    if (Auth.getRole() === 'owner') _refreshViewerStatus();
   }
 
   // ── Row builders ────────────────────────────────────────
@@ -738,6 +769,75 @@ const Settings = (() => {
     }
   }
 
+  // ── Viewer management (Phase 2, owner-only — section isn't even
+  // rendered unless Auth.getRole()==='owner', but every action below is
+  // also independently rejected server-side for a non-owner token) ──
+  function showViewerManage() {
+    const f = document.getElementById('viewer-manage-form');
+    if (f) f.style.display = 'block';
+    _refreshViewerStatus(); // always re-check live state on open, never assume
+  }
+  function hideViewerManage() {
+    const f = document.getElementById('viewer-manage-form');
+    if (f) f.style.display = 'none';
+  }
+
+  async function _refreshViewerStatus() {
+    const sub = document.getElementById('viewer-status-sub');
+    if (!sub) return; // not owner, or Settings tab not open
+    const res = await API.getViewerStatus();
+    const lockBtn  = document.getElementById('viewer-lock-btn');
+    const userEl   = document.getElementById('viewer-username');
+    if (!res.ok) { sub.textContent = 'שגיאה בטעינת סטטוס'; return; }
+    sub.textContent = !res.configured ? 'טרם הוגדר'
+      : (res.enabled ? `פעיל — ${res.username}` : `נעול — ${res.username}`);
+    if (userEl && !userEl.value) userEl.value = res.username || '';
+    if (lockBtn) {
+      lockBtn.textContent = res.enabled ? '🔒 נעל' : '🔓 שחרר';
+      lockBtn.dataset.enabled = res.enabled ? '1' : '0';
+      lockBtn.disabled = !res.configured; // nothing to lock/unlock before a viewer exists
+    }
+  }
+
+  async function saveViewerCredentials() {
+    const userEl = document.getElementById('viewer-username');
+    const pwEl   = document.getElementById('viewer-password');
+    const msg    = document.getElementById('viewer-msg');
+    const username = userEl ? userEl.value.trim() : '';
+    const password = pwEl ? pwEl.value : '';
+    if (!username)                { _viewerMsg(msg, 'שם משתמש נדרש', 'red'); return; }
+    if (!password || password.length < 4) { _viewerMsg(msg, 'סיסמה חייבת להיות לפחות 4 תווים', 'red'); return; }
+    const passwordHash = await Auth.sha256(password);
+    const res = await API.setViewerCredentials(username, passwordHash);
+    if (res.ok) {
+      _viewerMsg(msg, '✓ נשמר — sessions קודמים של Viewer בוטלו', 'green');
+      if (pwEl) pwEl.value = '';
+      _refreshViewerStatus();
+    } else {
+      _viewerMsg(msg, res.error || 'שגיאה', 'red');
+    }
+  }
+
+  async function toggleViewerEnabled() {
+    const lockBtn = document.getElementById('viewer-lock-btn');
+    const msg     = document.getElementById('viewer-msg');
+    if (!lockBtn) return;
+    const currentlyEnabled = lockBtn.dataset.enabled === '1';
+    const res = await API.setViewerEnabled(!currentlyEnabled);
+    if (res.ok) {
+      _viewerMsg(msg, currentlyEnabled ? '✓ Viewer ננעל — sessions קיימים בוטלו' : '✓ Viewer שוחרר', 'green');
+      _refreshViewerStatus();
+    } else {
+      _viewerMsg(msg, res.error || 'שגיאה', 'red');
+    }
+  }
+
+  function _viewerMsg(el, text, color) {
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = 'var(--' + color + ')';
+  }
+
   // ── Compatibility shim ───────────────────────────────────
   function save() { _syncGoal(); }
 
@@ -745,5 +845,6 @@ const Settings = (() => {
     render, get, set, getPrefs, save, setTheme, toggleModule,
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
+    showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,
   };
 })();

@@ -80,9 +80,13 @@ const Auth = (() => {
     } catch { return null; }
   }
 
-  function saveToken(token) {
+  // role defaults to 'owner' — every Phase 1 session (before the viewer
+  // role existed) is an owner session, and this keeps an already-logged-in
+  // browser working without forcing a re-login after this Phase 2 update.
+  function saveToken(token, role) {
     localStorage.setItem(TOKEN_KEY, JSON.stringify({
       token,
+      role: role || 'owner',
       expiry: Date.now() + EXPIRY_DAYS * 86400000
     }));
   }
@@ -97,6 +101,20 @@ const Auth = (() => {
 
   function getToken() {
     return getStoredToken();
+  }
+
+  // Only ever consulted by the frontend for UI purposes (e.g. showing/
+  // hiding the Settings "Manage Viewer" section) — never for enforcing
+  // access to anything. The backend independently re-derives and checks
+  // the role from its own session store on every request; the frontend's
+  // copy is just a display convenience and is never trusted for security.
+  function getRole() {
+    try {
+      const raw = localStorage.getItem(TOKEN_KEY);
+      if (!raw) return 'owner';
+      const data = JSON.parse(raw);
+      return (data && data.role) || 'owner';
+    } catch { return 'owner'; }
   }
 
   // ── Last-visit tracking ─────────────────────────────────
@@ -127,7 +145,7 @@ const Auth = (() => {
       try {
         const res = await API.verifyLogin(user, hash);
         if (res.ok && res.token) {
-          saveToken(res.token);
+          saveToken(res.token, res.role);
           return { ok: true };
         }
         if (res.authDisabled) {
@@ -272,7 +290,7 @@ const Auth = (() => {
   }
 
   return {
-    init, login, logout, isLoggedIn, getToken,
+    init, login, logout, isLoggedIn, getToken, getRole,
     handleLoginSubmit, showLoginScreen, hideLoginScreen,
     sha256, changePasswordLocal, saveLastVisit, getLastVisit,
     handle401, clearPrivateCache

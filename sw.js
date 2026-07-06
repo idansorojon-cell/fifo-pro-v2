@@ -65,8 +65,12 @@
 // (was silently broken: login succeeded but the app never actually booted
 // or started price polling — see docs/TECHNICAL_DEBT.md "Restoring
 // authentication") — index.html, js/auth.js, js/api.js, js/app.js.
-const CACHE_NAME   = 'fifopro-v23';
-const STATIC_CACHE = 'fifopro-static-v23';
+// Bumped v23 -> v24: Phase 2 viewer (read-only) role — role now stored in
+// the session (Auth.getRole()), new Settings -> Security -> "Manage
+// Viewer" section (owner-only) to create/rename/re-password/lock the
+// viewer account — js/auth.js, js/api.js, js/settings.js.
+const CACHE_NAME   = 'fifopro-v24';
+const STATIC_CACHE = 'fifopro-static-v24';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

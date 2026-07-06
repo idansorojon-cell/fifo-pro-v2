@@ -416,6 +416,20 @@ const API = (() => {
     return post({ action: 'changePassword', currentHash, newHash });
   }
 
+  // ── Viewer management (Phase 2, owner-only — enforced server-side) ──
+  // passwordHash is always computed client-side (Auth.sha256()), same as
+  // every other password field in this app — the plaintext never leaves
+  // the browser.
+  async function setViewerCredentials(username, passwordHash) {
+    return post({ action: 'setViewerCredentials', username, passwordHash });
+  }
+  async function setViewerEnabled(enabled) {
+    return post({ action: 'setViewerEnabled', enabled });
+  }
+  async function getViewerStatus() {
+    return authedGet_(authedUrl_('getViewerStatus'));
+  }
+
   // ── AI Chat (proxied through Apps Script) ──────────────
   // Never call api.anthropic.com directly from the browser — that
   // would require shipping an Anthropic API key in client JS, which
@@ -472,6 +486,7 @@ const API = (() => {
     connectWS, disconnectWS, diagnose,
     reportPriceSuccess, reportPriceError, setButtonBusy,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
+    setViewerCredentials, setViewerEnabled, getViewerStatus,
     _url: API_URL
   };
 })();
