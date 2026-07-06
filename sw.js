@@ -79,8 +79,8 @@
 // permissions) — index.html, js/app.js, js/auth.js, js/api.js,
 // js/utils.js, js/settings.js, js/cockpit.js, js/dashboard.js,
 // js/positions.js, js/watchlist.js, js/journal.js, js/trades.js.
-const CACHE_NAME   = 'fifopro-v25';
-const STATIC_CACHE = 'fifopro-static-v25';
+const CACHE_NAME   = 'fifopro-v26';
+const STATIC_CACHE = 'fifopro-static-v26';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath

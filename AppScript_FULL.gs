@@ -1402,14 +1402,14 @@ function doGet(e) {
     switch (action) {
       case 'getTrades':       return handleGetTrades_();
       case 'getGoal':         return handleGetGoal_();
-      case 'getPositions':    return handleGetPositions_();
+      case 'getPositions':    return handleGetPositions_(token);
       case 'getWatchlist':    return handleGetWatchlist_();
       case 'addWatchlist':    return handleAddWatchlist_(e.parameter);
       case 'removeWatchlist': return handleRemoveWatchlist_(e.parameter);
       case 'getPrices':       return handleGetPrices_(e.parameter.symbols);
       case 'getIndicators':   return handleGetIndicators_(e.parameter.symbol);
       case 'getNews':         return handleGetNews_(e.parameter.symbol);
-      case 'getOperations':   return handleGetOperations_();
+      case 'getOperations':   return handleGetOperations_(token);
       case 'getViewerStatus': return handleGetViewerStatus_(token);
       default:                return jsonOut_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -1468,6 +1468,7 @@ function doPost(e) {
       case 'aiChat':         return handleAiChat_(data);
       case 'setViewerCredentials': return handleSetViewerCredentials_(data);
       case 'setViewerEnabled':     return handleSetViewerEnabled_(data);
+      case 'setViewerPositionPermission': return handleSetViewerPositionPermission_(data);
       case 'setOwnerDisplayName':  return handleSetOwnerDisplayName_(data);
       default:               return jsonOut_({ ok: false, error: 'Unknown action: ' + data.action });
     }
@@ -1769,6 +1770,29 @@ function handleSetViewerEnabled_(data) {
 }
 
 /**
+ * SET VIEWER POSITION PERMISSION
+ * POST { action:'setViewerPositionPermission', token, enabled: true|false }
+ * Owner-only. Controls whether the Viewer's getOperations/getPositions
+ * responses include real position rows (see viewerCanViewPositions_,
+ * enforced in handleGetOperations_/handleGetPositions_). Unlike
+ * setViewerEnabled, this does NOT purge viewer sessions — it doesn't
+ * affect login validity, only what data a valid viewer session can read,
+ * and that's re-checked live on every request, so a change takes effect
+ * on the Viewer's very next data load without needing to kick them out.
+ */
+function handleSetViewerPositionPermission_(data) {
+  if (!validateToken_(data.token || '')) {
+    return jsonOut_({ ok: false, error: 'Session פג תוקף — התחבר מחדש', code: 401 });
+  }
+  if (getTokenRole_(data.token || '') !== 'owner') {
+    return jsonOut_({ ok: false, error: 'Forbidden — owner only', code: 403 });
+  }
+  PropertiesService.getScriptProperties().setProperty(
+    'VIEWER_CAN_VIEW_POSITIONS', data.enabled === true ? 'true' : 'false');
+  return jsonOut_({ ok: true, canViewOpenPositions: data.enabled === true });
+}
+
+/**
  * GET VIEWER STATUS (for the Settings UI — never returns the password)
  * GET ?action=getViewerStatus&token=...
  * Owner-only (also excluded from VIEWER_ALLOWED_ACTIONS, so a viewer
@@ -1791,7 +1815,8 @@ function handleGetViewerStatus_(token) {
     enabled: props.getProperty('VIEWER_ENABLED') === 'true',
     configured: !!username && hasPassword,
     displayName: props.getProperty('VIEWER_DISPLAY_NAME') || '',
-    ownerDisplayName: props.getProperty('OWNER_DISPLAY_NAME') || ''
+    ownerDisplayName: props.getProperty('OWNER_DISPLAY_NAME') || '',
+    canViewOpenPositions: props.getProperty('VIEWER_CAN_VIEW_POSITIONS') === 'true'
   });
 }
 
@@ -1824,6 +1849,14 @@ function getTokenRole_(token) {
   if (token === 'auth-disabled') return 'owner';
   const session = loadSessions_()[token];
   return session ? _sessionRole_(session) : null;
+}
+
+// Per-viewer permission: whether the (single) Viewer account may see open-
+// position data. Unset Script Property → false, so an existing Viewer
+// defaults to hidden until the Owner explicitly enables it — no migration
+// needed. See handleGetOperations_/handleGetPositions_ for enforcement.
+function viewerCanViewPositions_() {
+  return PropertiesService.getScriptProperties().getProperty('VIEWER_CAN_VIEW_POSITIONS') === 'true';
 }
 
 function validateToken_(token) {
@@ -2178,7 +2211,12 @@ function mergeTradeMeta_(trades) {
 // POSITIONS
 // ════════════════════════════════════════════════════════════
 
-function handleGetPositions_() {
+function handleGetPositions_(token) {
+  // Per-viewer permission: a viewer-role session without canViewOpenPositions
+  // gets an empty list, never the real rows. See viewerCanViewPositions_.
+  if (!AUTH_DISABLED && getTokenRole_(token) === 'viewer' && !viewerCanViewPositions_()) {
+    return jsonOut_({ ok: true, positions: [] });
+  }
   const sh = getSheet_('Positions');
   ensureHeaders_(sh, POSITION_HEADERS);
   const { rows } = readRows_(sh);
@@ -2911,7 +2949,7 @@ function getOperationsSheet_() {
   return ss ? ss.getSheetByName('פעולות') : null;
 }
 
-function handleGetOperations_() {
+function handleGetOperations_(token) {
   try {
     const sh = getOperationsSheet_();
     if (!sh) return jsonOut_({ ok: false, error: 'לשונית "פעולות" לא נמצאה' });
@@ -2947,6 +2985,13 @@ function handleGetOperations_() {
     var result = applyFIFO_(ops);
     mergePositionMeta_(result.positions);
     mergeTradeMeta_(result.trades);
+
+    // Per-viewer permission: hide open positions only — historical trades
+    // are unaffected. See viewerCanViewPositions_.
+    if (!AUTH_DISABLED && getTokenRole_(token) === 'viewer' && !viewerCanViewPositions_()) {
+      result.positions = [];
+    }
+
     return jsonOut_({ ok: true, trades: result.trades, positions: result.positions });
   } catch (err) {
     return jsonOut_({ ok: false, error: err.message });

@@ -426,6 +426,12 @@ const API = (() => {
   async function setViewerEnabled(enabled) {
     return post({ action: 'setViewerEnabled', enabled });
   }
+  // Whether the Viewer's getOperations/getPositions responses include real
+  // open-position rows. Independent of setViewerEnabled — doesn't require
+  // re-entering the viewer's credentials.
+  async function setViewerPositionPermission(enabled) {
+    return post({ action: 'setViewerPositionPermission', enabled });
+  }
   async function getViewerStatus() {
     return authedGet_(authedUrl_('getViewerStatus'));
   }
@@ -490,7 +496,7 @@ const API = (() => {
     connectWS, disconnectWS, diagnose,
     reportPriceSuccess, reportPriceError, setButtonBusy,
     askClaude, verifyLogin, logoutServer, revokeAllSessions, changePassword,
-    setViewerCredentials, setViewerEnabled, getViewerStatus, setOwnerDisplayName,
+    setViewerCredentials, setViewerEnabled, setViewerPositionPermission, getViewerStatus, setOwnerDisplayName,
     _url: API_URL
   };
 })();

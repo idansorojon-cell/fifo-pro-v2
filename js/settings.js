@@ -546,6 +546,18 @@ const Settings = (() => {
                 <input type="text" id="viewer-display-name" placeholder="Viewer">
               </div>
             </div>
+
+            <div class="settings-row" style="margin-top:10px">
+              <div class="settings-row-info">
+                <span class="settings-row-label">יכול לראות פוזיציות פתוחות</span>
+                <span class="settings-row-sub">פוזיציות, מחירים חיים, P&amp;L, יעד/סטופ ופתקים — ברירת מחדל: מוסתר</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="viewer-can-view-positions" onchange="Settings.toggleViewerPositionPermission()">
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-primary btn-sm" onclick="Settings.saveViewerCredentials()">שמור</button>
               <button class="btn btn-ghost btn-sm" id="viewer-lock-btn" onclick="Settings.toggleViewerEnabled()">🔒 נעל</button>
@@ -816,6 +828,7 @@ const Settings = (() => {
     const userEl   = document.getElementById('viewer-username');
     const nameEl   = document.getElementById('viewer-display-name');
     const ownerNameEl = document.getElementById('owner-display-name');
+    const posEl    = document.getElementById('viewer-can-view-positions');
     if (!res.ok) { sub.textContent = 'שגיאה בטעינת סטטוס'; return; }
     sub.textContent = !res.configured ? 'טרם הוגדר'
       : (res.enabled ? `פעיל — ${res.username}` : `נעול — ${res.username}`);
@@ -826,6 +839,12 @@ const Settings = (() => {
       lockBtn.textContent = res.enabled ? '🔒 נעל' : '🔓 שחרר';
       lockBtn.dataset.enabled = res.enabled ? '1' : '0';
       lockBtn.disabled = !res.configured; // nothing to lock/unlock before a viewer exists
+    }
+    if (posEl) {
+      // Independent, immediately-saved toggle (same idiom as lockBtn above) —
+      // always reflect the live server value, never preserve a pending click.
+      posEl.checked = !!res.canViewOpenPositions;
+      posEl.disabled = !res.configured; // nothing to grant before a viewer exists
     }
   }
 
@@ -882,6 +901,24 @@ const Settings = (() => {
     }
   }
 
+  // Independent, immediately-saved toggle — same idiom as toggleViewerEnabled
+  // above, but for the canViewOpenPositions permission (no session purge,
+  // no need to retype the viewer's password just to flip this).
+  async function toggleViewerPositionPermission() {
+    const el  = document.getElementById('viewer-can-view-positions');
+    const msg = document.getElementById('viewer-msg');
+    if (!el) return;
+    const res = await API.setViewerPositionPermission(el.checked);
+    if (res.ok) {
+      _viewerMsg(msg, res.canViewOpenPositions
+        ? '✓ Viewer יכול לראות פוזיציות פתוחות'
+        : '✓ פוזיציות פתוחות מוסתרות מה-Viewer', 'green');
+    } else {
+      el.checked = !el.checked; // revert optimistic UI change
+      _viewerMsg(msg, res.error || 'שגיאה', 'red');
+    }
+  }
+
   function _viewerMsg(el, text, color) {
     if (!el) return;
     el.textContent = text;
@@ -896,6 +933,7 @@ const Settings = (() => {
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
     showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,
+    toggleViewerPositionPermission,
     showOwnerNameForm, hideOwnerNameForm, saveOwnerDisplayName,
   };
 })();
