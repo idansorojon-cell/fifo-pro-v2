@@ -80,6 +80,23 @@ git push origin main` → cache-busted live check (`?bust=<ts>` on
 Rollback if needed: `git revert -m 1 <merge>` or reset to `cf1d454` and
 force-push (owner's call).
 
+
+## 4b. Real-device mobile checklist (only you can run these)
+
+On a physical phone, install the PWA and check:
+1. On-screen keyboard opens INSIDE the Trade Ticket without hiding the
+   submit button; the drawer scrolls to the focused field.
+2. Long trades table scrolls horizontally inside its own container (page
+   body never scrolls sideways).
+3. Open + close a (test) position from the phone; the flow completes.
+4. Filters + navigation with a thumb; bottom-nav reachable one-handed.
+5. Landscape: nothing overflows; the rail stays hidden, bottom nav stays.
+6. Installed-PWA safe areas (notch/home-bar) — nothing clipped.
+7. Offline: turn on airplane mode → the offline pill shows, writes are
+   blocked; turn it back on → pill clears, app recovers (no reload loop).
+8. Update while installed: after you deploy a new version, the installed
+   PWA shows the mandatory update overlay on next foreground and updates.
+
 ## 5. Known post-merge follow-ups (deliberate, not forgotten)
 
 - Slimming pass: remove dormant modules (dashboard.js, quicktrade.js,
@@ -88,6 +105,9 @@ force-push (owner's call).
 - Trades' edit/delete of a recorded trade — still the standing product
   decision (ROADMAP P0), untouched by 2.0.
 - SW network-first for HTML (P1), automated tests (P3) — unchanged.
+- The mandatory version-update mechanism is part of 2.0 (version.json /
+  js/version.js / sw.js via tools/bump-version.sh) — a release is one
+  `./tools/bump-version.sh <semver>` then commit+push.
 - Launch.json legacy configs (`fifo-pro`, `fifo-matan`,
   `trading-dashboard`) point at a moved path + deleted node binary.
 
