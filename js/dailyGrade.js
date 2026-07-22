@@ -129,7 +129,7 @@ const DailyGrade = (() => {
           <div class="grade-hero-title">Trading Grade — היום</div>
           ${todayG ? _renderGradeCard(todayG, 'היום') : `
             <div class="grade-empty">
-              <div style="font-size:40px;margin-bottom:12px">📋</div>
+              <div style="margin-bottom:12px;opacity:.5">${icon('clipboard')}</div>
               <div style="font-size:15px;color:var(--text-2);font-weight:600">אין עסקאות סגורות היום</div>
               <div style="font-size:13px;color:var(--text-3);margin-top:4px">הציון מחושב לאחר סגירת עסקאות</div>
             </div>
@@ -139,14 +139,14 @@ const DailyGrade = (() => {
         <!-- Current month grade -->
         ${curG ? `
           <div class="card">
-            <div class="card-title">📅 ציון החודש — ${Utils.monthLabel(curMonth)}</div>
+            <div class="card-title">${icon('calendar')} ציון החודש — ${Utils.monthLabel(curMonth)}</div>
             ${_renderGradeCard(curG, Utils.monthLabel(curMonth))}
           </div>
         ` : ''}
 
         <!-- Monthly history -->
         <div class="card">
-          <div class="card-title">📈 היסטוריה חודשית</div>
+          <div class="card-title">${icon('trending-up')} היסטוריה חודשית</div>
           ${monthlyG.length ? `
             <div class="grade-history">
               ${monthlyG.slice().reverse().slice(0,12).map(g => _renderGradeRow(g)).join('')}
@@ -158,10 +158,10 @@ const DailyGrade = (() => {
         <div class="card">
           <div class="card-title">ℹ️ איך מחושב הציון</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-            ${_gradeComponent('⚡ Execution', '30%', 'לפי תוכנית, יחס ממוצע')}
-            ${_gradeComponent('🛡️ Risk', '30%', 'כיבוד סטופ, הפסדים גדולים')}
-            ${_gradeComponent('🎯 Discipline', '25%', 'Revenge, FOMO, רצף')}
-            ${_gradeComponent('🧠 Psychology', '15%', 'מצב רגשי, עקביות')}
+            ${_gradeComponent('Execution', '30%', 'לפי תוכנית, יחס ממוצע')}
+            ${_gradeComponent('Risk', '30%', 'כיבוד סטופ, הפסדים גדולים')}
+            ${_gradeComponent('Discipline', '25%', 'Revenge, FOMO, רצף')}
+            ${_gradeComponent('Psychology', '15%', 'מצב רגשי, עקביות')}
           </div>
         </div>
       </div>
@@ -171,10 +171,10 @@ const DailyGrade = (() => {
   function _renderGradeCard(g, label) {
     const info = GRADE_LABELS[g.grade];
     const components = [
-      { name: 'Execution',  score: g.execution,  icon: '⚡', color: _scoreColor(g.execution) },
-      { name: 'Risk',       score: g.risk,        icon: '🛡️', color: _scoreColor(g.risk) },
-      { name: 'Discipline', score: g.discipline,  icon: '🎯', color: _scoreColor(g.discipline) },
-      { name: 'Psychology', score: g.psychology,  icon: '🧠', color: _scoreColor(g.psychology) },
+      { name: 'Execution',  score: g.execution,  icon: icon('zap'), color: _scoreColor(g.execution) },
+      { name: 'Risk',       score: g.risk,        icon: icon('octagon'), color: _scoreColor(g.risk) },
+      { name: 'Discipline', score: g.discipline,  icon: icon('target'), color: _scoreColor(g.discipline) },
+      { name: 'Psychology', score: g.psychology,  icon: icon('cpu'), color: _scoreColor(g.psychology) },
     ];
     return `
       <div class="grade-card">

@@ -78,6 +78,39 @@ const Positions = (() => {
     return { level: 'ok', label: icon('dot') + ' תקין', color: 'var(--green)' };
   }
 
+  // ── R:R gauge (v2) ──────────────────────────────────────
+  // Visual stop→target track with the current price as a marker and the
+  // entry as a tick. Pure presentation over the same numbers the R:R
+  // calculator already uses — no new trading logic.
+  function _rrGauge(p, price) {
+    const entry = p.avg_price, stop = p.stop_loss, target = p.target;
+    const clamp = v => Math.max(2, Math.min(98, v));
+    if (target && stop && target !== stop) {
+      const span = target - stop;
+      const markerPct = price ? clamp((price - stop) / span * 100) : null;
+      const entryPct  = clamp((entry - stop) / span * 100);
+      const inProfit  = price ? price >= entry : true;
+      return `
+        <div class="rr-gauge">
+          ${markerPct !== null ? `<div class="pcard-fill" style="inset-inline-start:0;width:${markerPct}%;background:${inProfit ? 'var(--signal)' : 'var(--alarm)'}"></div>` : ''}
+          <div class="pcard-tick" style="inset-inline-start:${entryPct}%" title="כניסה ${fprice(entry)}"></div>
+          ${markerPct !== null ? `<div class="rr-gauge-marker" style="inset-inline-start:${markerPct}%"></div>` : ''}
+        </div>
+        <div class="rr-labels">
+          <span>סטופ <b><bdi>${fprice(stop)}</bdi></b></span>
+          <span>כניסה <b><bdi>${fprice(entry)}</bdi></b></span>
+          <span>יעד <b><bdi>${fprice(target)}</bdi></b></span>
+        </div>`;
+    }
+    // Missing stop and/or target — state it plainly rather than draw a fake bar.
+    const parts = [];
+    if (!stop)   parts.push(`<span class="pcard-warn">${icon('alert-triangle')} אין סטופ מוגדר</span>${Auth.isViewer() ? '' : ` <button class="pcard-setstop" onclick="event.stopPropagation(); actOnRisk('${p.symbol}')">${icon('octagon')} הגדר סטופ</button>`}`);
+    else         parts.push(`<span>סטופ <b><bdi>${fprice(stop)}</bdi></b></span>`);
+    if (target)  parts.push(`<span>יעד <b><bdi>${fprice(target)}</bdi></b></span>`);
+    else         parts.push(`<span class="pcard-warn">אין יעד</span>`);
+    return `<div class="rr-labels rr-labels--flat">${parts.join('')}</div>`;
+  }
+
   function posCard(p) {
     const live      = APP.liveData[p.symbol];
     const price     = live?.price;
@@ -87,79 +120,49 @@ const Positions = (() => {
     const pnlPct    = price ? (price - p.avg_price) / p.avg_price * 100 : null;
     const val       = price ? price * p.qty : p.avg_price * p.qty;
 
-    // BUG FIX: daily change must come from the backend's own validated
-    // changePct, gated on changePctValid — NEVER recomputed client-side
-    // from live.prevClose. The backend may still return a `prevClose`
-    // value even when it's flagged "suspicious" (kept for transparency/
-    // debugging), so blindly recomputing (price-prevClose)/prevClose
-    // here would silently resurrect exactly the bug this fix addresses
-    // (e.g. ONDL's fake -42.92% from a ~1-year-old reference close).
+    // BUG FIX (unchanged): daily change must come from the backend's own
+    // validated changePct, gated on changePctValid — NEVER recomputed
+    // client-side from live.prevClose (see docs/AI_CONTEXT.md — ONDL fake
+    // -42.92% from a stale reference close).
     const dayChgValid = !!(live && live.changePctValid && live.changePct != null);
     const dayChg      = dayChgValid ? live.changePct : null;
-    const targetPct = p.target && price ? (p.target - price) / price * 100 : null;
-    const stopPct   = p.stop_loss && price ? (price - p.stop_loss) / price * 100 : null;
-    const risk      = riskStatus(p, live);
+    const risk        = riskStatus(p, live);
+    const cls  = risk.level === 'high' ? 'high' : risk.level === 'warn' ? 'warn' : (risk.level === 'ok' ? 'ok' : 'muted');
+    const label = risk.level === 'high' ? 'סיכון גבוה' : risk.level === 'warn' ? 'אזהרה' : risk.level === 'ok' ? 'תקין' : '—';
 
     return `
-      <div class="pos-card pos-card--${risk.level}">
-        <div class="pos-card-top">
-          <div class="pos-card-sym">
-            ${p.symbol}
-            ${live ? '<span class="live-dot"></span>' : ''}
-          </div>
-          <span class="risk-pill" style="color:${risk.color};border-color:${risk.color}">${risk.label}</span>
+      <div class="pcard">
+        <div class="pcard-top">
+          <span class="pcard-sym">${p.symbol}${live ? '<span class="live-dot"></span>' : ''}</span>
+          <span class="qpill ${cls}">${label}</span>
         </div>
 
-        <div class="pos-card-price-row">
-          <div class="pos-card-price ${pnl===null?'':(pnl>=0?'green':'red')}">
-            <bdi>${price ? fprice(price) : '—'}</bdi>
-          </div>
+        <div class="pcard-price-row">
+          <span class="pcard-price num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${price ? fprice(price) : '—'}</bdi></span>
           ${live ? (
             dayChgValid
-              ? `<div class="pos-card-daychg ${dayChg>=0?'green':'red'}">יומי: <bdi>${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</bdi></div>`
-              : `<div class="pos-card-daychg" style="color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי: N/A</div>`
+              ? `<span class="pcard-daychg num ${dayChg>=0?'pos':'neg'}">יומי <bdi>${dayChg>=0?'+':''}${dayChg.toFixed(2)}%</bdi></span>`
+              : `<span class="pcard-daychg" style="color:var(--text-3)" title="${_dayChangeStatusTitle(live.dayChangeStatus)}">יומי N/A</span>`
           ) : ''}
         </div>
 
-        ${live?.preMarket ? `
-          <div style="font-size:11px;padding:2px 8px;background:var(--gold-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--gold)">
-            🌅 Pre: <b><bdi>${fprice(live.preMarket)}</bdi></b>
-            ${dayChgValid ? `<bdi> (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)</bdi>` : ''}
-          </div>` : ''}
+        ${live?.preMarket ? `<div class="pcard-chip">🌅 Pre <b><bdi>${fprice(live.preMarket)}</bdi></b>${dayChgValid ? ` <bdi>(${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)</bdi>` : ''}</div>` : ''}
+        ${live?.postMarket ? `<div class="pcard-chip">🌙 AH <b><bdi>${fprice(live.postMarket)}</bdi></b></div>` : ''}
 
-        ${live?.postMarket ? `
-          <div style="font-size:11px;padding:2px 8px;background:var(--purple-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--purple)">
-            🌙 AH: <b><bdi>${fprice(live.postMarket)}</bdi></b>
-          </div>` : ''}
+        ${_rrGauge(p, price)}
 
-        <div class="pos-card-stats">
-          <div class="pos-card-stat"><span class="pos-card-stat-label">כמות</span><span class="pos-card-stat-val"><bdi>${fnum(p.qty)}</bdi></span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">כניסה</span><span class="pos-card-stat-val"><bdi>${fprice(p.avg_price)}</bdi></span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">שווי נוכחי</span><span class="pos-card-stat-val"><bdi>${f$(Math.round(val))}</bdi></span></div>
-          <div class="pos-card-stat"><span class="pos-card-stat-label">P&L %</span><span class="pos-card-stat-val ${pnlPct===null?'':(pnlPct>=0?'green':'red')}"><bdi>${pnlPct!==null?fpct(pnlPct):'—'}</bdi></span></div>
+        ${p.notes ? `<div class="pcard-thesis">"${p.notes}"</div>` : ''}
+
+        <div class="pcard-stats">
+          <div><span class="pcard-stat-l">כמות</span><span class="pcard-stat-v num"><bdi>${fnum(p.qty)}</bdi></span></div>
+          <div><span class="pcard-stat-l">שווי</span><span class="pcard-stat-v num"><bdi>${f$(Math.round(val))}</bdi></span></div>
+          <div class="pcard-pl"><span class="pcard-stat-l">P&L</span><span class="pcard-stat-v num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${pnl!==null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}</bdi></span><span class="pcard-pl-sub num">${pnl!==null ? fpct(pnlPct)+' · '+fILS(Math.round(usdToIls(pnl, currentMonthKey()))) : ''}</span></div>
         </div>
-
-        ${p.added_date ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px">${p.added_date}</div>` : ''}
-
-        <div class="pos-card-pnl-row">
-          <span class="pos-card-pnl ${pnl===null?'':(pnl>=0?'green':'red')}">
-            P&L: <bdi>${pnl!==null ? f$(Math.round(pnl)) : '—'}</bdi>
-          </span>
-          ${pnl !== null ? `<span style="font-size:11px;color:var(--text-3)"><bdi>${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}</bdi></span>` : ''}
-        </div>
-
-        ${p.target ? `
-          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px">
-            <span style="color:var(--blue)">${icon('target')} יעד: <bdi>${fprice(p.target)}</bdi>${targetPct!==null?'<bdi> ('+fpct(targetPct)+' נותר)</bdi>':''}</span>
-            ${p.stop_loss ? `<span style="color:var(--red)">${icon('octagon')} סטופ: <bdi>${fprice(p.stop_loss)}</bdi>${stopPct!==null?'<bdi> ('+fpct(-stopPct)+')</bdi>':''}</span>` : ''}
-          </div>` : ''}
-
-        ${p.notes ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;font-style:italic">${p.notes}</div>` : ''}
 
         ${Auth.isViewer() ? '' : `
-        <div style="display:flex;gap:6px;margin-top:12px">
-          <button class="btn-icon" onclick="Positions.openEdit(${p.id})" title="ערוך יעד/סטופ/הערות">${icon('edit')}</button>
-          <button class="btn-icon danger" onclick="Positions.remove(${p.id})" title="מחק פוזיציה — נכתב כמכירה במחיר עלות ביומן הפעולות">${icon('x')}</button>
+        <div class="pcard-actions">
+          <button class="btn-icon" onclick="Positions.openEdit(${p.id})" title="ערוך יעד / סטופ / הערות">${icon('edit')} <span>ערוך</span></button>
+          <button class="btn-icon danger" onclick="Positions.remove(${p.id})" title="הסר פוזיציה — נכתב כמכירה במחיר עלות ביומן הפעולות (ללא השפעת P&L)">${icon('x')} <span>הסר</span></button>
         </div>`}
       </div>
     `;
@@ -654,7 +657,7 @@ const Positions = (() => {
   async function remove(id) {
     const p = APP.positions.find(x => x.id === id);
     if (!p) return;
-    if (!confirm(`למחוק את הפוזיציה ${p.symbol}? הפעולה תיכתב כמכירה מלאה של ${fnum(p.qty)} מניות במחיר העלות (${fprice(p.avg_price)}) ביומן הפעולות — ללא השפעה על הרווח/הפסד.`)) return;
+    if (!(await uiConfirm(`הפוזיציה ${p.symbol} תיסגר בכתיבת מכירה מלאה של ${fnum(p.qty)} מניות במחיר העלות (${fprice(p.avg_price)}) ביומן הפעולות — ללא השפעה על הרווח/הפסד.`, { title:'הסרת פוזיציה', danger:true, confirmText:'הסר פוזיציה' }))) return;
 
     API.setStatus('מוחק פוזיציה — נכתב כפעולת SELL במחיר עלות ביומן הפעולות...', 'info');
     API.showSpinner(true);

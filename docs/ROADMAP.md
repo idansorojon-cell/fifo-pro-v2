@@ -1,5 +1,74 @@
 # FIFO PRO — Roadmap / Outstanding Work
 
+> ## ⚡ FIFO PRO 2.0 — feature decisions (2026-07-22, product pass)
+>
+> After a founder/CPO-lens re-review, the feature set was split into
+> **Must-Have (built in 2.0)** and **Roadmap (deliberately deferred, with
+> reasoning)** — not "add everything", the right set with depth.
+>
+> **Must-Have — BUILT in 2.0:**
+> - Unified Home / Trades / Performance / Research / Coach + Trade Ticket
+>   (the whole IA) — see FEATURES.md.
+> - Entry thesis captured at entry and shown on the position card while
+>   open (plan visible during the trade, not only after).
+> - Direct action from a risk alert: attention-queue item / no-stop card
+>   / Coach priority all open the position editor focused on the STOP
+>   field (actOnRisk) — the warning and its fix are one click apart.
+> - Inline journal on every closed trade; close-with-journal in one flow
+>   (Trade Ticket close intent).
+> - Mandatory version-update mechanism (see TECHNICAL_DEBT.md / this file
+>   below).
+>
+> **Roadmap — DEFERRED, with product reasoning (each needs a data path or
+> model change beyond a design transformation; none is chrome):**
+> - **SPY / benchmark on the equity curve.** Value: real (is my edge vs.
+>   just-holding-the-index?). Cost: a new market-data path — fetch SPY
+>   daily history server-side, align to each trade/day, a new chart
+>   series. It's a data feature, not a layout change. Deferred to a
+>   focused data sprint.
+> - **Decision-Engine-score → outcome feedback loop.** Value: high — it's
+>   the one thing that would make the DE self-improving/credible. Cost:
+>   persist the DE score at entry time (new field on the operation or a
+>   meta row) and join it to the derived closed trade; then a
+>   score-vs-realized view. New write + new schema. Deferred.
+> - **Partial close / scale-out / trailing stop / position-plan state.**
+>   Value: real for an active trader. Cost: FIFO currently derives whole
+>   positions from BUY/SELL rows; partial management + a mutable plan
+>   (moving stops, staged exits) is a lot-level data-model change in
+>   applyFIFO_ and a new plan store. This is the single biggest backend
+>   item; it needs its own design. Deferred (documented as the known
+>   FIFO limitation).
+> - **Plan-vs-actual stop/target history.** Value: answers "did I stick
+>   to my plan / did it hit target or stop?". Cost: the app stores only
+>   the CURRENT stop/target, not a history — Coach already says so
+>   honestly. Needs entry-time plan capture + change log. Deferred.
+>
+> Rationale for the cut line: 2.0 is a design+IA+chrome transformation
+> with zero backend change (0-diff in AppScript_FULL.gs), which is what
+> makes it safe to ship now. Every deferred item requires a real backend
+> or data-model change and deserves its own verified sprint rather than
+> being rushed into this release.
+
+
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — status update
+>
+> - "Restore authentication" (P0 below): **DONE** 2026-07-06 (login +
+>   viewer role, server-enforced).
+> - The Design & UX overhaul section below: **superseded** by the 2.0
+>   Design Transformation (branch `premium-redesign`) — new IA, design
+>   system, unified Home/Trades/Performance/Research/Coach + Trade
+>   Ticket. See FEATURES.md.
+> - Still open after 2.0: Trades' edit/delete of a recorded trade
+>   (unchanged product decision, P0 below); SW network-first for HTML
+>   (P1); automated tests (P3); Script.html/Style.html cleanup (P1).
+> - New, introduced by 2.0 (deliberate, low-priority): dormant modules
+>   kept loaded for their null-guarded renderers (dashboard.js,
+>   quicktrade.js, journal.js table path); goals ring/simulation retired
+>   (goal % chip on Home + editing in Settings); legacy CSS in
+>   style.css now largely shadowed by system.css — a slimming pass is
+>   safe post-merge but was deliberately not done pre-merge.
+
+
 Grouped by priority. Nothing here has been started unless explicitly noted.
 
 ## P0 — Security / correctness (do before wider use)

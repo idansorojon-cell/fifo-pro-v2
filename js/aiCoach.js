@@ -34,9 +34,9 @@ const AICoach = (() => {
     const holdPct    = Math.round(holdTrades.length / trades.length * 100);
 
     let styleLabel = 'מסחר מעורב';
-    if (dayPct > 50)   styleLabel = '⚡ Day Trader';
-    else if (swingPct > 50) styleLabel = '🌊 Swing Trader';
-    else if (holdPct > 50)  styleLabel = '📦 Position Trader';
+    if (dayPct > 50)   styleLabel = 'Day Trader';
+    else if (swingPct > 50) styleLabel = 'Swing Trader';
+    else if (holdPct > 50)  styleLabel = 'Position Trader';
 
     // ── Behavioral patterns ─────────────────────────────────
     // BUG FIX: these criteria must match analytics.js's Mistake Detector
@@ -114,15 +114,15 @@ const AICoach = (() => {
 
     // ── KPI cards ─────────────────────────────────────────────
     const cards = [
-      { icon:'🏆', title:'סגנון מסחר',          main:styleLabel,          sub:`${dayPct}% Day | ${swingPct}% Swing | ${holdPct}% Hold` },
-      { icon:'🥇', title:'סימבול הטוב ביותר',    main:bestSym?bestSym[0]:'—',    sub:bestSym ? f$(Math.round(bestSym[1].net)) : '' },
-      { icon:'⚠️', title:'סימבול הגרוע ביותר',  main:worstSym&&worstSym[1].net<0?worstSym[0]:'ללא', sub:worstSym&&worstSym[1].net<0?f$(Math.round(worstSym[1].net)):'' },
+      { icon:icon('award'), title:'סגנון מסחר',          main:styleLabel,          sub:`${dayPct}% Day | ${swingPct}% Swing | ${holdPct}% Hold` },
+      { icon:icon('trophy'), title:'סימבול הטוב ביותר',    main:bestSym?bestSym[0]:'—',    sub:bestSym ? f$(Math.round(bestSym[1].net)) : '' },
+      { icon:icon('alert-triangle'), title:'סימבול הגרוע ביותר',  main:worstSym&&worstSym[1].net<0?worstSym[0]:'ללא', sub:worstSym&&worstSym[1].net<0?f$(Math.round(worstSym[1].net)):'' },
       { icon:'⏱️', title:'זמן החזקה אידיאלי',    main:bestHoldKey?bestHoldKey[0]:'—', sub:bestHoldKey?`ממוצע ${f$(Math.round(bestHoldKey[1]))} לעסקה`:'' },
-      { icon:'📅', title:'יום מסחר חזק',         main:bestDow, sub:bestDowEntry ? f$(Math.round(bestDowEntry[1].net)) : '' },
-      { icon:'😤', title:'Revenge Trading',       main:revengeCount+' מקרים', sub:revengeCount>2?'⚠️ בעיה שדורשת תשומת לב':'✓ בשליטה' },
-      { icon:'🛑', title:'מסחר ללא סטופ',        main:noStopTrades.length+' עסקאות', sub:noStopTrades.length>3?'⚠️ סיכון גבוה':'✓ תקין' },
-      { icon:'📋', title:'עמידה בתוכנית',        main:planRate+'%', sub:planRate >= 70 ? '✓ דיסציפלינה טובה' : '⚠️ שפר דיסציפלינה' },
-      { icon:'🔥', title:'Losing Streak מקסימלי', main:maxLS+' עסקאות', sub:maxLS>4?'⚠️ בדוק ניהול סיכון':'✓ תקין' },
+      { icon:icon('calendar'), title:'יום מסחר חזק',         main:bestDow, sub:bestDowEntry ? f$(Math.round(bestDowEntry[1].net)) : '' },
+      { icon:icon('alert-triangle'), title:'Revenge Trading',       main:revengeCount+' מקרים', sub:revengeCount>2?'בעיה שדורשת תשומת לב':'בשליטה' },
+      { icon:icon('octagon'), title:'מסחר ללא סטופ',        main:noStopTrades.length+' עסקאות', sub:noStopTrades.length>3?'סיכון גבוה':'תקין' },
+      { icon:icon('clipboard'), title:'עמידה בתוכנית',        main:planRate+'%', sub:planRate >= 70 ? 'דיסציפלינה טובה' : 'שפר דיסציפלינה' },
+      { icon:icon('zap'), title:'Losing Streak מקסימלי', main:maxLS+' עסקאות', sub:maxLS>4?'בדוק ניהול סיכון':'תקין' },
     ];
 
     // ── Inject into DOM ────────────────────────────────────────
@@ -132,9 +132,9 @@ const AICoach = (() => {
     const reportEl = document.getElementById('coach-report');
     if (reportEl) {
       reportEl.innerHTML = [
-        { title:'💪 חוזקות',    items:strengths,    border:'var(--green)' },
-        { title:'⚠️ חולשות',    items:weaknesses,   border:'var(--red)' },
-        { title:'🔧 שיפורים',   items:improvements, border:'var(--blue)' },
+        { title:'חוזקות',    items:strengths,    border:'var(--green)' },
+        { title:'חולשות',    items:weaknesses,   border:'var(--red)' },
+        { title:'שיפורים',   items:improvements, border:'var(--blue)' },
       ].map(s => `
         <div class="card" style="border-color:${s.border}">
           <div class="card-title" style="color:${s.border}">${s.title}</div>

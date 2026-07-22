@@ -87,6 +87,19 @@ const API = (() => {
   // ── REST post ──────────────────────────────────────────
 
   async function post(body) {
+    // FIFO PRO 2.0 mandatory-update guard: once a newer deployed build
+    // is detected, every write is refused until the client updates —
+    // an out-of-date bundle must not create data against a newer
+    // contract. Login/logout stay allowed (the update flow itself may
+    // need them). This is the ONLY behavioral addition to api.js; all
+    // endpoints/payloads are unchanged.
+    const _act = body && body.action;
+    if (typeof VersionGuard !== 'undefined' && _act && _act !== 'login' && _act !== 'logout'
+        && VersionGuard.isBlocked()) {
+      VersionGuard.assertUpToDate();
+      return { ok: false, error: 'נדרש עדכון גרסה — לחץ "עדכון עכשיו" בחלון העדכון' };
+    }
+
     if (!isConfigured()) { setStatus('⚠️ API לא מוגדר','warn'); return {ok:false}; }
     if (!navigator.onLine) { setStatus('❌ אין חיבור לאינטרנט','error'); return {ok:false}; }
     try {

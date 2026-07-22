@@ -1,5 +1,19 @@
 # FIFO PRO — Development Rules
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — local dev for this branch
+>
+> - v2 worktree: `/Users/idansorojon/Desktop/עידן/claude/fifo/
+>   fifo-premium-redesign` (branch `premium-redesign`). Preview config:
+>   **`fifo-premium-preview`** (port 5179, node at
+>   `~/.local/node22/bin/node`).
+> - The paths in this doc referencing `/Users/idansorojon/Desktop/
+>   claude/...` (without `עידן/`) are stale — the machine's folder moved;
+>   the old `fifo-pro`/`fifo-matan`/`trading-dashboard` launch configs
+>   point at the dead path AND a deleted node binary.
+> - Everything else below (evolution-not-revolution, verify-live,
+>   SW-clearing ritual, no-new-emoji, endpoint contracts) still applies.
+
+
 ## Local development (read this before starting a preview server)
 
 - **Project root:** `/Users/idansorojon/Desktop/claude/fifo/files` — note

@@ -1,5 +1,17 @@
 # FIFO PRO — Project Overview
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22)
+>
+> The product-goals section below predates the 2.0 Design
+> Transformation (branch `premium-redesign`): the app now has ONE home
+> (not Mission Control + Cockpit + Dashboard + Brief), 7 flat
+> destinations, a unified Trade Ticket, and the "Quiet Terminal" design
+> system. Also: **authentication is enabled** (the auth section below is
+> stale — `AUTH_DISABLED = false`, login + owner/viewer live since
+> 2026-07-06). Architecture, deployment model, the two-spreadsheet data
+> model, Script Properties, and APIs below are all still accurate.
+
+
 ## What it is
 
 FIFO PRO is a personal trading journal and analytics dashboard for an Israeli

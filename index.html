@@ -15,6 +15,8 @@
 <!-- CSS -->
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/mobile.css">
+<!-- FIFO PRO 2.0 — Quiet Terminal design system (loaded last: wins the cascade) -->
+<link rel="stylesheet" href="css/system.css">
 </head>
 <body>
 
@@ -147,6 +149,15 @@
     <symbol id="icon-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 3h11l3 3v15H5z"/><path d="M16 3v4h4"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>
     </symbol>
+    <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>
+    </symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="14,6 8,12 14,18"/>
+    </symbol>
+    <symbol id="icon-briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -157,54 +168,98 @@
   <div class="login-card">
     <div class="login-brand">
       <div class="login-brand-name">FIFO <span>PRO</span></div>
-      <div class="login-brand-sub">Trading Dashboard</div>
+      <div class="login-brand-sub">Trading Terminal</div>
     </div>
     <form class="login-form" onsubmit="event.preventDefault(); Auth.handleLoginSubmit();">
-      <div class="login-input-wrap">
-        <input type="text" id="login-username" placeholder="שם משתמש" autocomplete="username">
+      <div class="login-field">
+        <label for="login-username">שם משתמש</label>
+        <input type="text" id="login-username" autocomplete="username">
       </div>
-      <div class="login-input-wrap">
-        <input type="password" id="login-password" placeholder="סיסמה" autocomplete="current-password">
+      <div class="login-field">
+        <label for="login-password">סיסמה</label>
+        <input type="password" id="login-password" autocomplete="current-password">
       </div>
       <div class="login-error" id="login-error"></div>
-      <button type="submit" class="login-btn" id="login-btn">כניסה</button>
+      <button type="submit" class="btn btn-primary login-btn" id="login-btn">כניסה</button>
     </form>
-    <div class="login-hint">גישה מוגבלת — FIFO PRO</div>
+    <div class="login-hint">גישה מוגבלת · הנתונים מוצפנים בדרך לשרת</div>
   </div>
 </div>
 
-<div class="app" id="app">
-
-  <!-- ── Sync Status Bar ─────────────────────────────── -->
-  <div id="sync-bar" class="sync-bar" style="display:none"></div>
-
-  <!-- ── Alert Toast (auto-hides; same alert only toasts once/day) ── -->
-  <div id="alert-banner" class="alert-banner"></div>
-
-  <!-- ── Header ──────────────────────────────────────── -->
-  <div class="header">
-    <div class="header-logo" onclick="showCockpit()" style="cursor:pointer" title="חזרה ל-Cockpit">
-      <div>
-        <h1>FIFO <span>PRO</span>
-          <span id="sync-spinner" style="display:none" class="spinner" style="width:12px;height:12px;margin-right:6px"></span>
-        </h1>
-        <span id="last-updated" class="header-sub">דשבורד מסחר</span>
-      </div>
+<!-- Boot loading skeleton — bridges the gap between login/AUTH_DISABLED
+     boot and the first real render (API.loadAll() resolving). Previously
+     this window showed the static (empty) Dashboard panel markup that
+     happens to be index.html's default-active panel, then snapped to
+     Cockpit once data arrived — a flash of the wrong screen rather than
+     an honest loading state. Shown/hidden only in js/app.js's _initApp();
+     no calculation/data logic touched. -->
+<div id="boot-skeleton">
+  <div class="boot-skeleton-inner">
+    <!-- Mirrors the Home layout it resolves into: greeting line →
+         attention row → hero card → chip row → position cards. -->
+    <div class="skeleton skeleton-text" style="width:180px;height:20px;margin-bottom:22px"></div>
+    <div class="skeleton skeleton-row" style="margin-bottom:18px"></div>
+    <div class="skeleton" style="height:150px;border-radius:12px;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <div class="skeleton" style="flex:1;height:58px;border-radius:8px"></div>
+      <div class="skeleton" style="flex:1;height:58px;border-radius:8px"></div>
+      <div class="skeleton" style="flex:1;height:58px;border-radius:8px"></div>
+      <div class="skeleton" style="flex:1;height:58px;border-radius:8px"></div>
     </div>
-    <div class="header-actions">
-      <div class="ws-indicator">
-        <span id="ws-dot"></span>
-        <span id="ws-label">—</span>
+    <div style="display:flex;gap:10px">
+      <div class="skeleton skeleton-card" style="flex:1"></div>
+      <div class="skeleton skeleton-card" style="flex:1"></div>
+      <div class="skeleton skeleton-card" style="flex:1"></div>
+    </div>
+  </div>
+</div>
+
+<div class="app app-shell" id="app">
+
+  <!-- ═══════════════════════════════════════════════════
+       RAIL — primary navigation (desktop). 7 flat destinations,
+       replacing the old 5-category hub→tab model. Each destination
+       is a top-level screen; navigate(dest) shows exactly one.
+  ═══════════════════════════════════════════════════ -->
+  <nav class="rail" aria-label="ניווט ראשי">
+    <div class="rail-logo" onclick="navigate('home')" title="FIFO PRO — Home">FIFO<br><b>PRO</b></div>
+    <button class="rail-item active" data-dest="home"        onclick="navigate('home')"><svg class="icon"><use href="#icon-home"/></svg>בית</button>
+    <button class="rail-item"        data-dest="positions"   onclick="navigate('positions')"><svg class="icon"><use href="#icon-trending-up"/></svg>פוזיציות</button>
+    <button class="rail-item"        data-dest="trades"      onclick="navigate('trades')"><svg class="icon"><use href="#icon-list"/></svg>עסקאות</button>
+    <button class="rail-item"        data-dest="performance" onclick="navigate('performance')"><svg class="icon"><use href="#icon-award"/></svg>ביצועים</button>
+    <button class="rail-item"        data-dest="research"    onclick="navigate('research')"><svg class="icon"><use href="#icon-search"/></svg>מחקר</button>
+    <button class="rail-item"        data-dest="coach"       onclick="navigate('coach')"><svg class="icon"><use href="#icon-cpu"/></svg>מאמן</button>
+    <button class="rail-item"        data-dest="chat"        onclick="navigate('chat')"><svg class="icon"><use href="#icon-message"/></svg>צ'אט</button>
+    <div class="rail-spacer"></div>
+    <button class="rail-new" data-owner-only onclick="openTradeTicket()" title="עסקה חדשה"><svg class="icon"><use href="#icon-plus"/></svg></button>
+    <button class="rail-avatar" id="rail-avatar" onclick="toggleAvatarMenu(event)" title="חשבון והגדרות">מ</button>
+  </nav>
+
+  <div class="main">
+
+    <!-- ── Topbar ──────────────────────────────────────── -->
+    <div class="topbar">
+      <div class="topbar-title" id="screen-title">בית</div>
+      <div class="topbar-spacer"></div>
+      <div class="qt-status" title="סטטוס נתונים חיים">
+        <span class="dot" id="ws-dot"></span>
+        <span class="offline-pill">אין חיבור</span>
+        <span id="last-updated">—</span>
+        <span id="ws-label" style="display:none"></span>
+        <span id="sync-spinner" style="display:none" class="spinner"></span>
       </div>
       <div class="alert-badge-wrap">
         <button id="alert-badge" class="alert-badge" style="display:none" onclick="Positions.toggleAlertList()"></button>
         <div id="alert-list-dropdown" class="alert-list-dropdown" style="display:none"></div>
       </div>
       <button class="dark-toggle" onclick="toggleDark()" id="dark-btn"><svg class="icon"><use href="#icon-sun"/></svg> Light</button>
-      <button id="add-btn" class="btn btn-primary btn-sm" data-owner-only onclick="Trades.openAddForm()" title="עסקה חדשה — נכתבת ישירות ליומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> עסקה</button>
-      <button class="logout-btn" onclick="Auth.logout()" title="יציאה"><svg class="icon"><use href="#icon-logout"/></svg></button>
+      <button id="add-btn" class="btn btn-primary btn-sm topbar-new" data-owner-only onclick="openTradeTicket()" title="עסקה חדשה"><svg class="icon"><use href="#icon-plus"/></svg> עסקה</button>
+      <button class="rail-avatar topbar-avatar" onclick="toggleAvatarMenu(event)" title="חשבון והגדרות">מ</button>
     </div>
-  </div>
+
+    <!-- ── Ambient toast + alert banner (fixed-position) ── -->
+    <div id="sync-bar" class="sync-bar" style="display:none"></div>
+    <div id="alert-banner" class="alert-banner"></div>
 
   <!-- ── Seed Banner ─────────────────────────────────── -->
   <div id="seed-banner" class="seed-banner">
@@ -212,593 +267,122 @@
     <button class="btn btn-ghost btn-sm" onclick="seedToSheets()">העלה היסטוריה</button>
   </div>
 
-  <!-- ── Main Navigation (5 Categories) ─────────────── -->
-  <nav class="main-nav" id="main-nav">
-    <button class="nav-cat active" data-cat="dashboard" onclick="switchCategory('dashboard',this)">
-      <span class="nav-cat-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-      <span class="nav-cat-label">דשבורד</span>
-    </button>
-    <button class="nav-cat" data-cat="trading" onclick="switchCategory('trading',this)">
-      <span class="nav-cat-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-      <span class="nav-cat-label">מסחר</span>
-    </button>
-    <button class="nav-cat" data-cat="analysis" onclick="switchCategory('analysis',this)">
-      <span class="nav-cat-icon"><svg class="icon"><use href="#icon-search"/></svg></span>
-      <span class="nav-cat-label">ניתוח</span>
-    </button>
-    <button class="nav-cat" data-cat="ai" onclick="switchCategory('ai',this)">
-      <span class="nav-cat-icon"><svg class="icon"><use href="#icon-cpu"/></svg></span>
-      <span class="nav-cat-label">בינה מלאכותית</span>
-    </button>
-    <button class="nav-cat" data-cat="settings" onclick="switchCategory('settings',this)">
-      <span class="nav-cat-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>
-      <span class="nav-cat-label">הגדרות</span>
-    </button>
-  </nav>
-
-  <!-- ── Breadcrumb (back to section hub) ────────────── -->
-  <div id="breadcrumb" class="breadcrumb" style="display:none">
-    <button class="breadcrumb-back" onclick="switchCategory(APP.currentCategory, document.querySelector('.nav-cat.active'))">
-      <span class="bc-arrow">←</span>
-      <span id="breadcrumb-cat-label"></span>
-    </button>
-    <span class="bc-sep">/</span>
-    <span id="breadcrumb-tab-label" class="bc-current"></span>
-  </div>
-
   <!-- ═══════════════════════════════════════════════════
-       FIFO PRO 2.0, Phase 1 — Cockpit (new default landing screen).
-       Built additively: renders entirely via Cockpit.render() (js/cockpit.js).
-       Mission Control below (tab-hub-dashboard) is completely unchanged and
-       still fully reachable via the "דשבורד" nav category — nothing here
-       replaces or hides it.
+       CONTENT — one screen visible at a time (.panel.active).
+       navigate(dest) shows the destination's screen.
   ═══════════════════════════════════════════════════ -->
-  <div id="tab-cockpit" class="panel"></div>
+  <div class="content">
 
-  <!-- ═══════════════════════════════════════════════════
-       HUB PANELS — Section landing pages
-  ═══════════════════════════════════════════════════ -->
+    <!-- HOME (v2) — replaces Cockpit + Mission Control + Dashboard +
+         Daily Brief. Renders via Home.render() (js/home.js). -->
+    <div id="screen-home" class="panel"></div>
 
-  <!-- HUB: דשבורד — Mission Control -->
-  <div id="tab-hub-dashboard" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-target"/></svg></div>
-      <div>
-        <div class="hub-title">Mission Control</div>
-        <div class="hub-sub">התמונה המלאה במבט אחד</div>
-      </div>
-    </div>
+  <!-- v1 Cockpit / Mission Control / hub panels removed — all merged
+       into the unified Home (js/home.js). The Cockpit MODULE (cockpit.js)
+       remains loaded: Home + Coach reuse buildActionItems()/
+       riskAwareInsight(); its render() null-guards on the removed panel. -->
 
-    <!-- ── Mission Control — live summary, no full dashboard/tables ── -->
-    <div id="mission-control"></div>
-
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('dashboard')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-        <span class="hub-card-label">דשבורד ראשי</span>
-        <span class="hub-card-desc">KPIs, גרפים, equity curve</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('brief')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-clipboard"/></svg></span>
-        <span class="hub-card-label">סיכום יומי</span>
-        <span class="hub-card-desc">מה קרה מהביקור האחרון</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('goals')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-target"/></svg></span>
-        <span class="hub-card-label">יעדים</span>
-        <span class="hub-card-desc">מטרה חודשית, התקדמות, סימולציה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('progress')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-        <span class="hub-card-label">התקדמות</span>
-        <span class="hub-card-desc">נתוני ביצועים לאורך זמן</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('ptimeline')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-calendar"/></svg></span>
-        <span class="hub-card-label">ציר זמן</span>
-        <span class="hub-card-desc">חודש אחר חודש — חוזקות וחולשות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('grade')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-award"/></svg></span>
-        <span class="hub-card-label">ציון מסחר</span>
-        <span class="hub-card-desc">ביצוע, ריסק, משמעת, פסיכולוגיה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: מסחר -->
-  <div id="tab-hub-trading" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></div>
-      <div>
-        <div class="hub-title">מסחר</div>
-        <div class="hub-sub">ניהול פוזיציות, עסקאות ורשימות מעקב</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card hub-card-primary" onclick="switchTab('positions')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-        <span class="hub-card-label">פוזיציות פתוחות</span>
-        <span class="hub-card-desc">מחירים חיים, P&L, stop loss</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('trades')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-list"/></svg></span>
-        <span class="hub-card-label">היסטוריית עסקאות</span>
-        <span class="hub-card-desc">כל העסקאות הסגורות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('quicktrade')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-zap"/></svg></span>
-        <span class="hub-card-label">כניסה מהירה</span>
-        <span class="hub-card-desc">הוסף עסקה בקלות ובמהירות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('watchlist')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-eye"/></svg></span>
-        <span class="hub-card-label">רשימת מעקב</span>
-        <span class="hub-card-desc">סימבולים, דירוג AI, מחירים חיים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('journal')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-book"/></svg></span>
-        <span class="hub-card-label">יומן מסחר</span>
-        <span class="hub-card-desc">רשומות, מחשבות, לקחים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('ledger')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-list"/></svg></span>
-        <span class="hub-card-label">Ledger</span>
-        <span class="hub-card-desc">מעקב, פוזיציה, היסטוריה — לפי סימבול</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: ניתוח -->
-  <div id="tab-hub-analysis" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-search"/></svg></div>
-      <div>
-        <div class="hub-title">ניתוח</div>
-        <div class="hub-sub">העמק בנתונים — זהה דפוסים ומגמות</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('analysis')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-        <span class="hub-card-label">ניתוח גרפי</span>
-        <span class="hub-card-desc">גרפים לפי סימבול ותקופה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('performance')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trophy"/></svg></span>
-        <span class="hub-card-label">ביצועים</span>
-        <span class="hub-card-desc">Win rate, expectancy, risk/reward</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('insights')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-bulb"/></svg></span>
-        <span class="hub-card-label">תובנות</span>
-        <span class="hub-card-desc">דפוסים, ימים, שעות — מה עובד</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('replay')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-film"/></svg></span>
-        <span class="hub-card-label">Trade Replay</span>
-        <span class="hub-card-desc">ציר זמן ויזואלי לפי חודש</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('portheatmap')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-grid"/></svg></span>
-        <span class="hub-card-label">Heatmap תיק</span>
-        <span class="hub-card-desc">תרומת כל סימבול לתיק</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('heatmap')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-calendar"/></svg></span>
-        <span class="hub-card-label">לוח שנה</span>
-        <span class="hub-card-desc">P&L לפי יום — heatmap קלנדרי</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('symnotes')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-bookmark"/></svg></span>
-        <span class="hub-card-label">לפי סימבול</span>
-        <span class="hub-card-desc">ביצועים מרוכזים לכל מניה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: בינה מלאכותית -->
-  <div id="tab-hub-ai" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-cpu"/></svg></div>
-      <div>
-        <div class="hub-title">בינה מלאכותית</div>
-        <div class="hub-sub">כלי AI לניתוח, אימון וקבלת החלטות</div>
-      </div>
-    </div>
-    <div class="hub-grid hub-grid-ai">
-      <button class="hub-card hub-card-ai" onclick="switchTab('decision')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-target"/></svg></span>
-        <span class="hub-card-label">מנוע החלטות</span>
-        <span class="hub-card-desc">אינדיקטורים, חדשות, המלצת כניסה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai" onclick="switchTab('coach')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-cpu"/></svg></span>
-        <span class="hub-card-label">מאמן AI</span>
-        <span class="hub-card-desc">ניתוח שגיאות, תובנות, שיפור</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai hub-card-featured" onclick="switchTab('aichat')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-message"/></svg></span>
-        <span class="hub-card-label">שיחה עם AI</span>
-        <span class="hub-card-desc">שאל כל שאלה על המסחר שלך</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai" onclick="switchTab('coach-evidence')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-search"/></svg></span>
-        <span class="hub-card-label">Coach — מבוסס עדויות</span>
-        <span class="hub-card-desc">תוכנית מול מציאות מול היסטוריה — בלי ניחושים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: הגדרות -->
-  <div id="tab-hub-settings" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-settings"/></svg></div>
-      <div>
-        <div class="hub-title">הגדרות</div>
-        <div class="hub-sub">התאמת החשבון, תצוגה ועדפות</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('settings')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>
-        <span class="hub-card-label">הגדרות מערכת</span>
-        <span class="hub-card-desc">סיסמה, theme, יעד חודשי, מודולים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       DASHBOARD CATEGORY
-  ═══════════════════════════════════════════════════ -->
-
-  <!-- DASHBOARD (main) -->
-  <div id="tab-dashboard" class="panel active">
-    <!-- Hero status bar -->
-    <div id="dash-hero" class="dash-hero"></div>
-    <div id="weekly-summary" class="week-grid" style="display:none"></div>
-    <div class="kpi-grid" id="kpi-grid"></div>
-    <div class="card" id="portfolio-health"></div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
-      <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> רווח נטו לפי חודש ($)</div>
-      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-trending-down"/></svg> Drawdown Chart</div>
-      <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
-    </div>
-    <div class="card" id="goal-card"></div>
-  </div>
-
-  <!-- DAILY BRIEF -->
-  <div id="tab-brief" class="panel">
-    <div id="brief-content"></div>
-  </div>
-
-  <!-- GOALS (improved) -->
-  <div id="tab-goals" class="panel">
-    <div id="goals-content"></div>
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">יעד חודשי — עדכון</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="number" id="goal-input" data-owner-only style="max-width:130px" placeholder="יעד $">
-        <button class="btn btn-primary btn-sm" data-owner-only onclick="Dashboard.saveGoal()">עדכן</button>
-      </div>
-      <div id="goal-detail"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">היסטוריית חודשים</div>
-      <div class="table-wrap"><table id="month-history-table"></table></div>
-    </div>
-  </div>
-
-  <!-- PROGRESS -->
-  <div id="tab-progress" class="panel">
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">האם אתה משתפר לאורך זמן?</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="progress-kpis"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Win Rate לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
-        <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
-      </div>
-    </div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Profit Factor לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">שבוע חזק בחודש</div>
-        <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PERFORMANCE TIMELINE (new) -->
-  <div id="tab-ptimeline" class="panel"></div>
-
-  <!-- DAILY GRADE (new) -->
-  <div id="tab-grade" class="panel"></div>
+  <!-- v1 Dashboard-category panels (main dashboard, daily brief, goals,
+       progress, timeline, daily grade) removed — headline numbers live on
+       Home; charts/analytics live in the unified Performance screen below.
+       Their render functions null-guard on the removed element ids. -->
 
   <!-- ═══════════════════════════════════════════════════
        TRADING CATEGORY
   ═══════════════════════════════════════════════════ -->
 
-  <!-- POSITIONS -->
+  <!-- POSITIONS (v2) -->
   <div id="tab-positions" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">מסחר</div>
+        <h1>פוזיציות פתוחות</h1>
+        <div class="lede">מחיר חי · P&amp;L · סיכון · R:R · תזת הכניסה גלויה כל עוד הפוזיציה פתוחה</div>
+      </div>
       <div style="display:flex;gap:8px">
         <button id="pos-refresh-btn" class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
-        <button class="btn btn-primary btn-sm" data-owner-only onclick="Positions.openForm()" title="פוזיציה חדשה — נכתבת כפעולת BUY ביומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
+        <button class="btn btn-primary btn-sm" data-owner-only onclick="openTradeTicket({intent:'open'})" title="פתיחת פוזיציה — נכתבת כפעולת BUY ביומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
       </div>
     </div>
-    <div id="pos-summary" style="display:none;background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);padding:14px 18px;margin-bottom:14px;display:flex;gap:24px;flex-wrap:wrap"></div>
+    <div id="pos-summary" class="pos-summary-strip" style="display:none"></div>
     <div id="pos-grid" class="pos-grid"></div>
-    <div style="font-size:11px;color:var(--text-3);margin-top:8px">
-      * מחירים דרך Finnhub. Pre/AH מוצג כשזמין.
-    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:10px">* מחירים דרך Finnhub. Pre/After-market מוצג כשזמין.</div>
   </div>
 
-  <!-- TRADES -->
+  <!-- TRADES (v2) — merges history + Ledger (by-symbol) + inline Journal -->
   <div id="tab-trades" class="panel">
-    <div class="search-row">
-      <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
-      <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
-      <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
-      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV"><svg class="icon"><use href="#icon-download"/></svg> CSV</button>
-    </div>
-    <div class="card card--flush">
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th class="sort-btn" onclick="Trades.setSort('symbol')">סימבול <span id="s-symbol"></span></th>
-            <th class="sort-btn" onclick="Trades.setSort('sell_date')">מכירה <span id="s-sell_date"></span></th>
-            <th class="sort-btn" onclick="Trades.setSort('qty')">כמות <span id="s-qty"></span></th>
-            <th>קנייה $</th><th>מכירה $</th>
-            <th class="sort-btn" onclick="Trades.setSort('net')">נטו $ <span id="s-net"></span></th>
-            <th>נטו ₪</th>
-            <th class="sort-btn" onclick="Trades.setSort('pct')">% <span id="s-pct"></span></th>
-            <th>ימים</th><th></th>
-          </tr></thead>
-          <tbody id="trades-tbody"></tbody>
-        </table>
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">Trades</div>
+        <h1>עסקאות</h1>
+        <div class="lede">כל העסקאות הסגורות · יומן בלחיצה על שורה · תצוגה לפי עסקה או לפי סימבול</div>
       </div>
-      <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <span id="trades-count"></span>
-        <button id="trades-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Trades.loadMore()">טען עוד ⌄</button>
+      <div class="segmented" id="trades-mode">
+        <button class="active" data-mode="bytrade"  onclick="Trades.setMode('bytrade')">לפי עסקה</button>
+        <button data-mode="bysymbol" onclick="Trades.setMode('bysymbol')">לפי סימבול</button>
       </div>
     </div>
-  </div>
 
-  <!-- JOURNAL -->
-  <div id="tab-journal" class="panel">
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:13px;color:var(--text-3)">יומן מסחר</span>
-      <input id="journal-search" type="text" placeholder="חיפוש..." oninput="Journal.renderDebounced()" style="max-width:160px">
-      <select id="journal-filter-sym"  onchange="Journal.render()" style="max-width:130px"><option value="">כל הסימבולים</option></select>
-      <select id="journal-filter-plan" onchange="Journal.render()" style="max-width:150px">
-        <option value="">כל העסקאות</option>
-        <option value="כן">לפי תוכנית ✓</option>
-        <option value="לא">לא לפי תוכנית</option>
-      </select>
-    </div>
-    <div class="card card--flush">
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th>סימבול</th><th>תאריך</th><th>נטו</th><th>סיבת כניסה</th><th>סיבת יציאה</th>
-            <th>כיבד סטופ</th><th>לפי תוכנית</th><th>לקח</th><th>מצב רגשי</th><th></th>
-          </tr></thead>
-          <tbody id="journal-tbody"></tbody>
-        </table>
+    <!-- Pane: by trade -->
+    <div id="trades-pane-bytrade" class="trades-pane active">
+      <div class="search-row">
+        <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
+        <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
+        <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV"><svg class="icon"><use href="#icon-download"/></svg> CSV</button>
       </div>
-      <div style="padding:10px 16px;text-align:center;border-top:1px solid var(--border)">
-        <button id="journal-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Journal.loadMore()">טען עוד ⌄</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- QUICK TRADE -->
-  <div id="tab-quicktrade" class="panel">
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-zap"/></svg> הוספת עסקה מהירה</div>
-    <div style="max-width:520px">
-      <div class="card">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-          <div class="form-group">
-            <label>סימבול</label>
-            <input id="qt-symbol" placeholder="AAPL" style="text-transform:uppercase;font-size:16px;font-weight:700" oninput="QuickTrade.fetchPrice()">
-          </div>
-          <div class="form-group">
-            <label>מחיר נוכחי</label>
-            <div id="qt-live-price" style="padding:9px 12px;font-size:16px;font-weight:700;color:var(--green);border:1px solid var(--border);border-radius:var(--r-md);min-height:40px">—</div>
-          </div>
+      <div class="card card--flush">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th class="sort-btn" onclick="Trades.setSort('symbol')">סימבול <span id="s-symbol"></span></th>
+              <th class="sort-btn" onclick="Trades.setSort('sell_date')">מכירה <span id="s-sell_date"></span></th>
+              <th class="sort-btn" onclick="Trades.setSort('qty')">כמות <span id="s-qty"></span></th>
+              <th>קנייה $</th><th>מכירה $</th>
+              <th class="sort-btn" onclick="Trades.setSort('net')">נטו $ <span id="s-net"></span></th>
+              <th>נטו ₪</th>
+              <th class="sort-btn" onclick="Trades.setSort('pct')">% <span id="s-pct"></span></th>
+              <th>ימים</th><th></th>
+            </tr></thead>
+            <tbody id="trades-tbody"></tbody>
+          </table>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
-          <div class="form-group">
-            <label>פעולה</label>
-            <select id="qt-action" onchange="QuickTrade.calc()" style="font-weight:700">
-              <option value="buy">🟢 קנייה</option>
-              <option value="sell">🔴 מכירה</option>
-            </select>
-          </div>
-          <div class="form-group"><label>כמות</label><input id="qt-qty" type="number" placeholder="100" oninput="QuickTrade.calc()"></div>
-          <div class="form-group"><label>מחיר ביצוע ($)</label><input id="qt-price" type="number" step="0.01" oninput="QuickTrade.calc()"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
-          <div class="form-group"><label>תאריך קנייה</label><input id="qt-buy-date" type="date"></div>
-          <div class="form-group"><label>תאריך מכירה</label><input id="qt-sell-date" type="date"></div>
-          <div class="form-group"><label>מחיר קנייה ($)</label><input id="qt-buy-price" type="number" step="0.01" placeholder="רק למכירה" oninput="QuickTrade.calc()"></div>
-        </div>
-        <div class="sizer-box">
-          <div class="sizer-title"><svg class="icon"><use href="#icon-ruler"/></svg> Position Sizer</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-            <div class="form-group"><label>גודל תיק ($)</label><input id="qt-portfolio" type="number" placeholder="67000" value="67000" oninput="QuickTrade.calc()"></div>
-            <div class="form-group"><label>% סיכון מקס</label><input id="qt-risk-pct" type="number" step="0.1" placeholder="1.0" value="1.0" oninput="QuickTrade.calc()"></div>
-            <div class="form-group"><label>מחיר סטופ ($)</label><input id="qt-stop-price" type="number" step="0.01" oninput="QuickTrade.calc()"></div>
-          </div>
-          <div id="qt-sizer-result" style="font-size:13px;color:var(--text-3)">הזן מחיר וסטופ לחישוב כמות מומלצת</div>
-        </div>
-        <div id="qt-preview" class="preview-box" style="display:none"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" data-owner-only onclick="QuickTrade.submit()" style="flex:1;font-size:15px;padding:12px" title="נכתב ישירות ליומן הפעולות">✓ שמור עסקה</button>
-          <button class="btn btn-ghost" onclick="QuickTrade.reset()">אפס</button>
+        <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span id="trades-count"></span>
+          <button id="trades-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Trades.loadMore()">טען עוד ⌄</button>
         </div>
       </div>
     </div>
+
+    <!-- Pane: by symbol — the Ledger module renders here unchanged
+         (it targets #tab-ledger by id; nesting it makes it the second
+         mode of the unified Trades screen instead of a separate screen). -->
+    <div id="tab-ledger" class="trades-pane"></div>
   </div>
 
-  <!-- LEDGER (FIFO PRO 2.0, Phase 2) — renders entirely via Ledger.render() -->
-  <div id="tab-ledger" class="panel"></div>
+  <!-- JOURNAL — absorbed into the unified Trades screen: journal entries
+       render inline per trade row, edited via the existing #modal-journal.
+       Journal.render() null-guards on the removed #journal-tbody, so all
+       its existing callers are safe no-ops. -->
 
-  <!-- WATCHLIST -->
-  <div id="tab-watchlist" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
-      <div style="display:flex;gap:8px">
-        <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
-        <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
-      </div>
+  <!-- QUICK TRADE — absorbed into the unified Trade Ticket slide-over
+       (openTradeTicket). QuickTrade's own functions null-guard on the
+       removed elements, so its remaining callers are safe no-ops. -->
+
+  <!-- LEDGER — moved inside the unified Trades screen (by-symbol mode);
+       see #tab-trades above. -->
+
+  <!-- RESEARCH (v2) — merges Watchlist + Decision Engine into one
+       pre-trade flow: search one symbol → price, score, notes, history →
+       straight into the Trade Ticket without re-typing anything. -->
+  <div id="screen-research" class="panel">
+    <div class="screen-head">
+      <div class="eyebrow">Research</div>
+      <h1>מחקר לפני עסקה</h1>
+      <div class="lede">רשימת מעקב + מנוע החלטות — זרימה אחת · מהציון ישר לטיקט המסחר</div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" data-owner-only>
-      <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
-      <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
-    </div>
-    <div id="watchlist-grid" class="wl-grid"></div>
-  </div>
 
-  <!-- ═══════════════════════════════════════════════════
-       ANALYSIS CATEGORY
-  ═══════════════════════════════════════════════════ -->
-
-  <!-- ANALYSIS -->
-  <div id="tab-analysis" class="panel">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card">
-        <div class="card-title">רווח נטו לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Win Rate לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">סיכום לפי סימבול</div>
-      <div class="table-wrap"><table id="sym-table"></table></div>
-    </div>
-  </div>
-
-  <!-- INSIGHTS -->
-  <div id="tab-insights" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">תובנות אוטומטיות מהנתונים שלך</div>
-    <div id="insights-grid" class="insight-grid"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">סטטיסטיקות מתקדמות</div>
-        <div id="adv-stats"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח לפי יום בשבוע</div>
-        <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
-      </div>
-    </div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">רווח לפי משך החזקה</div>
-        <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח לפי גודל פוזיציה</div>
-        <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-alert-triangle"/></svg> Mistake Detector</div>
-      <div id="mistake-grid" class="mistake-grid"></div>
-    </div>
-  </div>
-
-  <!-- PERFORMANCE CENTER -->
-  <div id="tab-performance" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">Performance Center — מדדי ביצוע מקצועיים</div>
-    <div id="perf-grid" class="perf-grid"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Symbol Intelligence</div>
-        <div id="sym-intel"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Sector Exposure</div>
-        <div id="sector-exposure"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TRADE REPLAY (new) -->
-  <div id="tab-replay" class="panel"></div>
-
-  <!-- CALENDAR HEATMAP -->
-  <div id="tab-heatmap" class="panel">
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">לוח שנה — רווח/הפסד יומי</div>
-      <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
-    </div>
-    <div id="heatmap-container"></div>
-  </div>
-
-  <!-- PORTFOLIO HEATMAP (new, by symbol) -->
-  <div id="tab-portheatmap" class="panel">
-    <div id="portheatmap-content"></div>
-  </div>
-
-  <!-- SYMBOL NOTES -->
-  <div id="tab-symnotes" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
-      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
-    </div>
-    <div id="sym-notes-container" class="sym-notes-grid"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       AI CATEGORY
-  ═══════════════════════════════════════════════════ -->
-
-  <!-- DECISION ENGINE -->
-  <div id="tab-decision" class="panel">
+    <!-- Decision Engine (existing module, ids unchanged) -->
     <div class="card">
       <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
       <div class="de-grid">
@@ -812,39 +396,224 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="DecisionEngine.run()"><svg class="icon"><use href="#icon-search"/></svg> נתח מניה</button>
         <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
+        <button class="btn btn-ghost" data-owner-only onclick="openTradeTicket({intent:'open', symbol:(document.getElementById('de-symbol')?.value||'').toUpperCase(), entry:document.getElementById('de-entry')?.value, stop:document.getElementById('de-stop')?.value, target:document.getElementById('de-target')?.value, qty:document.getElementById('de-qty')?.value})"><svg class="icon"><use href="#icon-plus"/></svg> פתח טיקט מסחר עם הנתונים</button>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
         שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
-        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום AI.
+        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום מבוסס-חוקים.
         לא מחליף שיקול דעת.
       </div>
     </div>
     <div id="decision-result"></div>
     <div id="trade-memory"></div>
+
+    <!-- Watchlist (existing module, ids unchanged) -->
+    <div class="sec-head" style="margin-top:22px"><h3>רשימת מעקב — Live</h3>
+      <div style="display:flex;gap:8px">
+        <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
+        <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" data-owner-only>
+      <input id="watchlist-input" placeholder="סימבול (AAPL)" style="max-width:160px;text-transform:uppercase" onkeydown="if(event.key==='Enter')Watchlist.add()">
+      <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
+    </div>
+    <div id="watchlist-grid" class="wl-grid"></div>
   </div>
 
-  <!-- AI COACH -->
-  <div id="tab-coach" class="panel">
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-cpu"/></svg> AI Coach — ניתוח אופי המסחר שלך</div>
-      <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
+  <!-- ═══════════════════════════════════════════════════
+       PERFORMANCE (v2) — one segmented screen replacing the v1
+       analysis screens + the main dashboard's charts. Each pane holds
+       the element ids its existing render functions target; every
+       renderer null-guards, so each pane renders only its own parts.
+  ═══════════════════════════════════════════════════ -->
+  <div id="screen-performance" class="panel">
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">Performance</div>
+        <h1>ביצועים</h1>
+        <div class="lede">כל מדד מוצג פעם אחת · סקירה, לפי סימבול, לפי זמן, משמעת, Replay</div>
+      </div>
+      <div class="segmented" id="perf-seg">
+        <button class="active" data-seg="overview"   onclick="Perf.setSegment('overview')">סקירה</button>
+        <button data-seg="symbol"     onclick="Perf.setSegment('symbol')">לפי סימבול</button>
+        <button data-seg="time"       onclick="Perf.setSegment('time')">לפי זמן</button>
+        <button data-seg="discipline" onclick="Perf.setSegment('discipline')">משמעת</button>
+        <button data-seg="replay"     onclick="Perf.setSegment('replay')">Replay</button>
+      </div>
     </div>
-    <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
-    <div id="coach-grid" class="coach-grid"></div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-clipboard"/></svg> פעולות לשבוע הקרוב</div>
-      <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
+
+    <!-- Pane: overview -->
+    <div id="pv-overview" class="trades-pane active">
+      <div class="qstat-grid" id="pv-overview-stats" style="margin-bottom:16px"></div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
+        <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> רווח נטו לפי חודש ($)</div>
+        <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-trending-down"/></svg> Drawdown</div>
+        <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Pane: by symbol -->
+    <div id="pv-symbol" class="trades-pane">
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח נטו לפי סימבול</div>
+          <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Win Rate לפי סימבול</div>
+          <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">סיכום לפי סימבול</div>
+        <div class="table-wrap"><table id="sym-table"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-grid"/></svg> תרומה לתיק (Heatmap)</div>
+        <div id="portheatmap-content"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:7px"><svg class="icon"><use href="#icon-bookmark"/></svg> תובנות ולקחים לפי סימבול</span>
+          <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
+        </div>
+        <div id="sym-notes-container" class="sym-notes-grid"></div>
+      </div>
+    </div>
+
+    <!-- Pane: over time -->
+    <div id="pv-time" class="trades-pane">
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:7px"><svg class="icon"><use href="#icon-calendar"/></svg> לוח שנה — רווח/הפסד יומי</span>
+          <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
+        </div>
+        <div id="heatmap-container"></div>
+      </div>
+      <div id="progress-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px"></div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">Win Rate לאורך זמן</div>
+          <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
+          <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
+        </div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">Profit Factor לאורך זמן</div>
+          <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">שבוע חזק בחודש</div>
+          <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
+        </div>
+      </div>
+      <div id="tab-ptimeline"></div>
+    </div>
+
+    <!-- Pane: discipline -->
+    <div id="pv-discipline" class="trades-pane">
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-alert-triangle"/></svg> Mistake Detector</div>
+        <div id="mistake-grid" class="mistake-grid"></div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח לפי יום בשבוע</div>
+          <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">רווח לפי משך החזקה</div>
+          <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
+        </div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח לפי גודל פוזיציה</div>
+          <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
+        </div>
+        <div class="card card--flush" style="padding:0"><div id="tab-grade" style="padding:18px 20px"></div></div>
+      </div>
+    </div>
+
+    <!-- Pane: replay -->
+    <div id="pv-replay" class="trades-pane">
+      <div id="tab-replay"></div>
     </div>
   </div>
 
-  <!-- COACH — evidence-based (FIFO PRO 2.0, Phase 3). Renders entirely via
-       Coach.render() (js/coach.js). AI Coach above is unchanged. -->
-  <div id="tab-coach-evidence" class="panel"></div>
+  <!-- ═══════════════════════════════════════════════════
+       AI CATEGORY
+  ═══════════════════════════════════════════════════ -->
 
-  <!-- AI CHAT -->
+  <!-- DECISION ENGINE — moved into the unified Research screen above. -->
+
+  <!-- COACH (v2) — one Coach, evidence-first. The evidence Coach
+       (js/coach.js, deterministic, every claim backed by data or an
+       explicit "not enough data") is the primary pane; the historical
+       pattern analysis (js/aiCoach.js, also fully deterministic) is the
+       second pane. Honest labeling: neither calls an LLM — the only
+       real AI in the product is Chat below, and each screen now says so. -->
+  <div id="screen-coach" class="panel">
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">Coach</div>
+        <h1>מאמן</h1>
+        <div class="lede">כל תובנה מגובה בעדות מספרית, או שנאמר בפירוש שאין מספיק נתונים · חישוב דטרמיניסטי, לא מודל שפה</div>
+      </div>
+      <div class="segmented" id="coach-seg">
+        <button class="active" data-cseg="evidence" onclick="CoachScreen.setSeg('evidence')">היום — מבוסס עדויות</button>
+        <button data-cseg="patterns" onclick="CoachScreen.setSeg('patterns')">דפוסים היסטוריים</button>
+      </div>
+    </div>
+
+    <!-- Pane: evidence coach (js/coach.js renders into #tab-coach-evidence) -->
+    <div id="coach-pane-evidence" class="trades-pane active">
+      <div id="tab-coach-evidence"></div>
+    </div>
+
+    <!-- Pane: historical patterns (js/aiCoach.js targets these ids) -->
+    <div id="coach-pane-patterns" class="trades-pane">
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-cpu"/></svg> ניתוח אופי המסחר — חישוב דפוסים על כל ההיסטוריה</div>
+        <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
+      </div>
+      <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
+      <div id="coach-grid" class="coach-grid"></div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-clipboard"/></svg> פעולות לשבוע הקרוב</div>
+        <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI CHAT — the one genuinely LLM-backed feature. The context line
+       below states exactly what data the model receives and its limits. -->
   <div id="tab-aichat" class="panel">
+    <div class="screen-head">
+      <div class="eyebrow">AI Chat</div>
+      <h1>שיחה עם המודל</h1>
+      <div class="lede">שיחה חופשית עם מודל שפה (Claude) על המסחר שלך</div>
+    </div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text-2);line-height:1.7">
+        <b>מה המודל רואה:</b> הסטטיסטיקות המסוכמות שלך, הפוזיציות הפתוחות (כולל P&L חי), רשימת המעקב, ועד 10 לקחים אחרונים מהיומן.
+        <b>מה הוא לא רואה:</b> נתוני שוק חיים מעבר לפוזיציות שלך, חדשות, או כל מידע מחוץ למערכת.
+        התשובות נוצרות על ידי מודל שפה — הצליבו מספרים מול המסכים עצמם לפני החלטה.
+      </div>
+    </div>
     <div style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px;display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-message"/></svg> AI Chat — שאל שאלות על המסחר שלך</div>
       <div class="chat-suggestions" id="chat-suggestions"></div>
     </div>
     <div class="chat-container">
@@ -858,11 +627,13 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       SETTINGS CATEGORY
+       SETTINGS (reached via the avatar menu, not primary nav)
   ═══════════════════════════════════════════════════ -->
   <div id="tab-settings" class="panel"></div>
 
-</div><!-- /.app -->
+  </div><!-- /.content -->
+  </div><!-- /.main -->
+</div><!-- /.app-shell -->
 
 <!-- ═══════════════════════════════════════════════════
      MODALS
@@ -955,36 +726,54 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════
-     MOBILE BOTTOM NAV
+     MOBILE BOTTOM NAV — v2 flat destinations (5 primary; Coach/Chat
+     reachable from Home + Research). Keeps the reachable set thumb-sized.
 ═══════════════════════════════════════════════════ -->
 <nav class="bottom-nav" id="bottom-nav">
   <div class="bn-items">
-    <button class="bn-item active" data-cat="dashboard" onclick="switchCategory('dashboard', this, true)">
-      <span class="bn-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-      <span class="bn-label">דשבורד</span>
-    </button>
-    <button class="bn-item" data-cat="trading" onclick="switchCategory('trading', this, true)">
-      <span class="bn-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-      <span class="bn-label">מסחר</span>
-    </button>
-    <button class="bn-item" data-cat="analysis" onclick="switchCategory('analysis', this, true)">
-      <span class="bn-icon"><svg class="icon"><use href="#icon-search"/></svg></span>
-      <span class="bn-label">ניתוח</span>
-    </button>
-    <button class="bn-item" data-cat="ai" onclick="switchCategory('ai', this, true)">
-      <span class="bn-icon"><svg class="icon"><use href="#icon-cpu"/></svg></span>
-      <span class="bn-label">AI</span>
-    </button>
-    <button class="bn-item" data-cat="settings" onclick="switchCategory('settings', this, true)">
-      <span class="bn-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>
-      <span class="bn-label">הגדרות</span>
-    </button>
+    <button class="bn-item active" data-dest="home"        onclick="navigate('home')"><span class="bn-icon"><svg class="icon"><use href="#icon-home"/></svg></span><span class="bn-label">בית</span></button>
+    <button class="bn-item"        data-dest="positions"   onclick="navigate('positions')"><span class="bn-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span><span class="bn-label">פוזיציות</span></button>
+    <button class="bn-item"        data-dest="trades"      onclick="navigate('trades')"><span class="bn-icon"><svg class="icon"><use href="#icon-list"/></svg></span><span class="bn-label">עסקאות</span></button>
+    <button class="bn-item"        data-dest="performance" onclick="navigate('performance')"><span class="bn-icon"><svg class="icon"><use href="#icon-award"/></svg></span><span class="bn-label">ביצועים</span></button>
+    <button class="bn-item"        data-dest="research"    onclick="navigate('research')"><span class="bn-icon"><svg class="icon"><use href="#icon-search"/></svg></span><span class="bn-label">מחקר</span></button>
   </div>
 </nav>
 
 <!-- ═══════════════════════════════════════════════════
+     AVATAR MENU — account + Settings (moved out of primary nav)
+═══════════════════════════════════════════════════ -->
+<div class="avatar-menu" id="avatar-menu">
+  <div class="avatar-menu-head">
+    <div class="avatar-menu-name" id="avatar-menu-name">FIFO PRO</div>
+    <div class="avatar-menu-role" id="avatar-menu-role">מחובר</div>
+  </div>
+  <button class="avatar-menu-item" onclick="navigate('coach'); closeAvatarMenu()"><svg class="icon"><use href="#icon-cpu"/></svg> Coach</button>
+  <button class="avatar-menu-item" onclick="navigate('chat'); closeAvatarMenu()"><svg class="icon"><use href="#icon-message"/></svg> AI Chat</button>
+  <div class="avatar-menu-sep"></div>
+  <button class="avatar-menu-item" onclick="openSettings(); closeAvatarMenu()"><svg class="icon"><use href="#icon-settings"/></svg> הגדרות</button>
+  <button class="avatar-menu-item danger" onclick="Auth.logout()"><svg class="icon"><use href="#icon-logout"/></svg> יציאה</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     TRADE TICKET — unified slide-over (Wave E fills the body).
+     Replaces Add Trade + New Position + Quick Trade entry points.
+═══════════════════════════════════════════════════ -->
+<div class="scrim" id="ticket-scrim" onclick="closeTradeTicket()"></div>
+<aside class="slideover" id="trade-ticket" aria-hidden="true">
+  <div class="slideover-head">
+    <div>
+      <div class="eyebrow" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)">טיקט מסחר</div>
+      <div id="ticket-title" style="font-weight:700">עסקה חדשה</div>
+    </div>
+    <button class="btn-icon" onclick="closeTradeTicket()" title="סגור"><svg class="icon"><use href="#icon-x"/></svg></button>
+  </div>
+  <div class="slideover-body" id="ticket-body"></div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════
      SCRIPTS — order matters!
 ═══════════════════════════════════════════════════ -->
+<script src="js/version.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/learningEngine.js"></script>
@@ -1007,6 +796,10 @@
 <script src="js/tradeReplay.js"></script>
 <script src="js/performanceTimeline.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/home.js"></script>
+<script src="js/tradeTicket.js"></script>
+<script src="js/versionGuard.js"></script>
+<script src="js/performance.js"></script>
 <script src="js/app.js"></script>
 
 </body>

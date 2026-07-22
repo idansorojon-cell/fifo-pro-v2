@@ -77,7 +77,21 @@
   /* Tables */
   table { font-size: 11.5px; }
   td, th { padding: 8px 7px; }
-  .actions .btn-icon { padding: 3px 5px; font-size: 12px; }
+  /* Was padding:3px 5px (~20x18px effective hit area) — smaller than the
+     base desktop .btn-icon (6px padding), not bigger, despite these being
+     the exact row-action buttons (edit/delete on Trades/Positions/
+     Journal) where a mis-tap has real financial consequences. Sized to
+     match the ~44px guideline the app already uses correctly elsewhere
+     on this same viewport (#viewer-manage-form .switch is 51x31 "to
+     match iOS's native UISwitch size... much easier to hit"). Uses
+     min-width/min-height rather than large padding so the icon itself
+     stays visually compact inside a comfortably-sized hit area. */
+  .actions .btn-icon {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+    font-size: 14px;
+  }
 
   /* Search row */
   .search-row { flex-wrap: wrap; }

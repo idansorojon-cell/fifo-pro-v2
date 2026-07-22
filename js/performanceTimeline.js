@@ -90,7 +90,7 @@ const PerformanceTimeline = (() => {
         <!-- Header -->
         <div class="ptl-header">
           <div>
-            <div style="font-size:18px;font-weight:700">📅 Performance Timeline</div>
+            <div style="font-size:18px;font-weight:700">ציר זמן חודשי</div>
             <div style="font-size:13px;color:var(--text-3)">ניתוח ביצועים חודש לחודש</div>
           </div>
         </div>
@@ -170,9 +170,9 @@ const PerformanceTimeline = (() => {
         </div>
 
         <div class="ptl-month-insights">
-          ${mainStrength ? `<div class="ptl-insight success"><span>✅</span><span>${mainStrength}</span></div>` : ''}
-          ${mainMistake  ? `<div class="ptl-insight warning"><span>⚠️</span><span>${mainMistake}</span></div>` : ''}
-          ${improvement  ? `<div class="ptl-insight info"><span>💡</span><span>${improvement}</span></div>` : ''}
+          ${mainStrength ? `<div class="ptl-insight success"><span>${icon('check-circle')}</span><span>${mainStrength}</span></div>` : ''}
+          ${mainMistake  ? `<div class="ptl-insight warning"><span>${icon('alert-triangle')}</span><span>${mainMistake}</span></div>` : ''}
+          ${improvement  ? `<div class="ptl-insight info"><span>${icon('bulb')}</span><span>${improvement}</span></div>` : ''}
         </div>
       </div>
     `;

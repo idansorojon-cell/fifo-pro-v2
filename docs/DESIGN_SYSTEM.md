@@ -1,5 +1,36 @@
 # FIFO PRO — Design System
 
+> ## ⚡ FIFO PRO 2.0 — "Quiet Terminal" (2026-07-22) — the current system
+>
+> `css/system.css` (loaded last) is now the canonical design layer.
+> Direction: a quiet, dense, high-trust instrument panel — action and
+> risk before vanity metrics; every number from one source of truth.
+>
+> **Tokens (dark default / light via `body.light`):**
+> - Grounds: `--ink #0a0c10`, `--paper #12151c` (+`-2`/`-3`)
+> - Semantic, ONE meaning each: `--signal #33c48f` (profit·brand·live·
+>   focus), `--alarm #f0645f` (loss·danger), `--amber #dfa23f`
+>   (risk·warning ONLY), `--mist #6d7a8c` (neutral), `--info #5f93c7`
+>   (informational), `--ai #a892d8` (AI surfaces ONLY).
+> - Every legacy token name (--green/--red/--gold/--blue/--purple/
+>   surfaces/text/radius) is redefined to the new palette so old CSS
+>   keeps working. Radii tightened (4/8/12/14), shadows quieted.
+> - Numerals: `--font-mono` + `tabular-nums` on every aligned figure.
+>
+> **Component kit (system.css):** rail/topbar/avatar-menu shell, hero
+> metric + expandable breakdown, attention queue, chips, `.qpill`
+> status pills, R:R gauge, `.qstat` tiles, segmented control,
+> slide-over + scrim, `.pcard` position card, inline journal detail.
+>
+> **CSS gotcha recorded:** a `*/` inside a comment (e.g. writing
+> `--surface*/--border*`) closes the comment early and silently drops
+> the rest of the block — this actually happened and dropped the whole
+> `:root` token block. Never write `*/` inside comment prose.
+>
+> The phase log below is v1 history; its principles (semantic color,
+> sprite icons, no new emoji, verified-not-assumed) carry forward.
+
+
 This is the single source of truth for FIFO PRO's visual language as it's
 being rebuilt into a premium, professional trading platform (see
 HANDOFF.md for the product mandate). Every design-facing phase should

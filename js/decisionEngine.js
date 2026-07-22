@@ -552,14 +552,14 @@ const DecisionEngine = (() => {
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px">
           ${finalCard}
           <div style="flex:2;min-width:220px">
-            <div class="card-title">🤖 סיכום AI (מבוסס נתונים אמיתיים בלבד)</div>
+            <div class="card-title">סיכום מבוסס-נתונים (חוקים, לא מודל שפה)</div>
             <div style="font-size:13px;line-height:1.7;color:var(--text-2)">${_aiSummary(sym, ctx)}</div>
           </div>
         </div>
 
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
           ${_scoreCard('📊 Market Technical Score', 'מבוסס על המניה בלבד — נתונים אמיתיים', technical)}
-          ${_scoreCard('🧠 Trade Discipline Score', 'מבוסס עליך — היסטוריית מסחר אמיתית', discipline)}
+          ${_scoreCard(' Trade Discipline Score', 'מבוסס עליך — היסטוריית מסחר אמיתית', discipline)}
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:14px">
@@ -597,7 +597,7 @@ const DecisionEngine = (() => {
     if (newsScore.insufficient) {
       return `
         <div class="card" style="margin:0 0 14px;border-color:var(--gold)">
-          <div class="card-title">📰 News Analysis</div>
+          <div class="card-title"> News Analysis</div>
           <div style="font-size:12px;color:var(--text-3)">${newsScore.reason}</div>
         </div>`;
     }
@@ -610,7 +610,7 @@ const DecisionEngine = (() => {
       </div>`).join('');
     return `
       <div class="card" style="margin:0 0 14px">
-        <div class="card-title">📰 News Analysis — ציון ${newsScore.score} (ביטחון: ${newsScore.confidence})</div>
+        <div class="card-title"> News Analysis — ציון ${newsScore.score} (ביטחון: ${newsScore.confidence})</div>
         ${headlines || '<div style="color:var(--text-3);font-size:12px">אין כתבות אחרונות</div>'}
         <div style="margin-top:8px">${_detailRows(newsScore.details.slice(1))}</div>
       </div>`;
@@ -622,7 +622,7 @@ const DecisionEngine = (() => {
     if (!hist.length) {
       return `
         <div class="memory-card" style="border-color:var(--border)">
-          <div class="memory-title">🧠 Personal Learning Engine — ${sym}</div>
+          <div class="memory-title"> Personal Learning Engine — ${sym}</div>
           <div style="font-size:12px;color:var(--text-3)">אין עסקאות היסטוריות ב-${sym}. אין מה ללמוד ממנו עדיין.</div>
         </div>`;
     }
@@ -645,7 +645,7 @@ const DecisionEngine = (() => {
 
     return `
       <div class="memory-card">
-        <div class="memory-title">🧠 Personal Learning Engine — ${sym} (${hist.length} עסקאות היסטוריות)</div>
+        <div class="memory-title"> Personal Learning Engine — ${sym} (${hist.length} עסקאות היסטוריות)</div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
           ${[

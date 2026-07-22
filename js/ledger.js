@@ -86,7 +86,7 @@ const Ledger = (() => {
   function _statusBadges(r) {
     const badges = [];
     if (r.isOpen)      badges.push(`<span class="badge badge-blue">Open</span>`);
-    if (r.isWatching)  badges.push(`<span class="badge badge-purple">Watching</span>`);
+    if (r.isWatching)  badges.push(`<span class="badge badge-muted">Watching</span>`);
     if (r.hasHistory)  badges.push(`<span class="badge badge-muted">${r.tradeCount} עסקאות</span>`);
     return badges.join(' ');
   }
@@ -155,9 +155,8 @@ const Ledger = (() => {
 
     el.innerHTML = `
       <div class="ledger-page">
-        <div class="ledger-header">
-          <div class="cockpit-title">Ledger</div>
-          <div class="cockpit-sub">כל סימבול — מעקב, פוזיציה פתוחה, או היסטוריה — במקום אחד</div>
+        <div class="ledger-header" style="margin-bottom:10px">
+          <div class="lede" style="font-size:13px;color:var(--text-2)">כל סימבול — מעקב, פוזיציה פתוחה, או היסטוריה — בשורה אחת. לחיצה על שורה פותחת פירוט.</div>
         </div>
 
         <div class="ledger-filters">

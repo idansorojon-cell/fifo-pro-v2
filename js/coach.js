@@ -113,14 +113,14 @@ const Coach = (() => {
     if (!el) return;
 
     if (!APP.trades.length && !APP.positions.length) {
-      el.innerHTML = `<div class="cockpit-page"><div class="cockpit-header"><div class="cockpit-title">Coach</div></div><div style="color:var(--text-3);padding:20px 0">אין מספיק נתונים לניתוח עדיין.</div></div>`;
+      el.innerHTML = `<div class="cockpit-page"><div style="color:var(--text-3);padding:20px 0">אין מספיק נתונים לניתוח עדיין.</div></div>`;
       return;
     }
 
     const d = buildInsights();
 
     const priorityHTML = d.topAction
-      ? `<div class="cockpit-action cockpit-action--${d.topAction.severity}">${icon(d.topAction.severity === 'high' ? 'octagon' : 'alert-triangle')}<span>${d.topAction.text}</span></div>`
+      ? `<div class="cockpit-action cockpit-action--${d.topAction.severity}">${icon(d.topAction.severity === 'high' ? 'octagon' : 'alert-triangle')}<span>${d.topAction.text}</span>${d.topAction.symbol ? `<button class="coach-cta" onclick="actOnRisk('${d.topAction.symbol}')">טפל ${icon('chevron')}</button>` : ''}</div>`
       : `<div class="cockpit-action cockpit-action--ok">${icon('check-circle')}<span>לא זוהתה פוזיציה שדורשת תשומת לב מיידית כרגע — זו התשובה, לא ניחוש.</span></div>`;
 
     const positionsHTML = d.perPosition.length
@@ -159,11 +159,6 @@ const Coach = (() => {
 
     el.innerHTML = `
       <div class="cockpit-page">
-        <div class="cockpit-header">
-          <div class="cockpit-title">Coach</div>
-          <div class="cockpit-sub">תוכנית מול מציאות מול היסטוריה — כל תובנה מגובה בעדות, או שנאמר בפירוש שאין מספיק נתונים</div>
-        </div>
-
         <div class="cockpit-actions">
           ${priorityHTML}
         </div>

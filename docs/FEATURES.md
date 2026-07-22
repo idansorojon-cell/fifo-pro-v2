@@ -1,134 +1,170 @@
-# FIFO PRO — Current Features
+# FIFO PRO 2.0 — Current Features
 
-Organized by navigation category, matching the app's own hub structure.
+_Rewritten for FIFO PRO 2.0 ("Quiet Terminal"). The v1 hub→tab model
+(5 categories, ~26 tabs) was replaced by 7 flat destinations + one
+unified Trade Ticket. Every v1 capability was preserved — reorganized,
+not removed. See the "v1 → v2 map" at the bottom._
 
-## דשבורד (Dashboard) category
+## Navigation model
 
-### Mission Control (home screen — `#tab-hub-dashboard`, `#mission-control`)
-The landing screen. Shows, using live data only (no full tables/charts):
-- Open P&L across all live positions (+ live-position count, % of cost)
-- Today / Week / Month realized P&L (from closed trades)
-- Open positions summary (count + symbols)
-- Biggest-risk open position (largest loss %, tagged with risk-status label)
-- One short AI Coach insight sentence (consecutive-loss streak, no-stop
-  pattern, win-rate based encouragement/warning — cheap heuristics, not the
-  full AI Coach analysis)
-- Alert badge (see Alerts, under Positions below)
-- Nav cards below linking into: דשבורד ראשי, סיכום יומי, יעדים, התקדמות,
-  ציר זמן, ציון מסחר
+A right-docked icon rail (desktop) / bottom nav (mobile) with 7 flat
+destinations: **Home · Positions · Trades · Performance · Research ·
+Coach · Chat**. Settings moved to the avatar menu (rail bottom /
+topbar on mobile). `navigate(dest)` in `js/app.js` is the router;
+`switchTab()` remains as a redirect shim for legacy names.
 
-Re-renders after every price poll (every 15s) so Open P&L / biggest-risk
-stay live without re-rendering anything else.
+## Home (`#screen-home`, `js/home.js`)
 
-### דשבורד ראשי (Main dashboard — `#tab-dashboard`)
-KPI grid, portfolio health card, Equity Curve chart, Monthly Net P&L chart,
-Drawdown chart, goal card. Rendered lazily on first visit (see
-ARCHITECTURE.md — Lazy rendering).
+Replaces v1's four home screens (Cockpit, Mission Control, main
+Dashboard, Daily Brief) with ONE surface, action-first:
 
-### סיכום יומי (Daily Brief — `#tab-brief`)
-Hero card: greeting, date, KPIs (Open P&L, month net, goal %, open
-positions, month trades, win rate), one-line AI coach message, "what
-changed since last visit" (based on `Auth.getLastVisit()`), today's risks
-(positions down >8% or near stop), watchlist mini-strip with live prices.
+- **Attention queue** — ranked action items from live position risk
+  (reuses `Cockpit.buildActionItems()`: no-stop-while-losing first,
+  then high/warn risk).
+- **One hero number** — Open P&L (unrealized, live-dot, refreshed by
+  the 15s poll), with an expandable breakdown of realized
+  today/week/month — computed in ONE place (`Home._realizedWindows`),
+  ending v1's four parallel re-derivations.
+- **4 context chips** — open positions count, Win Rate, monthly-goal %,
+  exposure % (uses Settings portfolioSize).
+- **Positions preview** (first 3, click-through) and **one Coach line**
+  (`Cockpit.riskAwareInsight`, falls back to `_shortCoachInsight`).
 
-### יעדים (Goals — `#tab-goals`)
-Monthly goal ring (SVG progress ring), simulation (trading days left,
-required $/day, current avg/trade, projected month-end), editable monthly
-goal input, month-history table.
+## Positions (`#tab-positions`, `js/positions.js`)
 
-### התקדמות (Progress — `#tab-progress`)
-Win Rate over time, 3-month rolling average net, Profit Factor over time,
-"strongest week of month" chart.
+- v2 card (`.pcard`): status pill, mono live price + backend-gated
+  daily % (`changePctValid` — never recomputed client-side), pre/AH
+  chips (neutral color), **R:R gauge** (stop → entry tick → target with
+  live-price marker; missing stop/target stated plainly in amber),
+  **entry thesis** (position notes) visible while the position is open,
+  qty/value/P&L row ($ + ₪ + %), full-width edit/remove actions.
+- Edit modal: target/stop/notes only (FIFO facts read-only) via
+  `upsertPositionMeta`. Remove = SELL-at-cost correction (zero P&L),
+  unchanged. Alerts (target/stop/-5%, once-per-day dedup, badge +
+  dropdown) unchanged.
 
-### ציר זמן (Performance Timeline — `#tab-ptimeline`)
-Month-by-month cards: net, win/loss counts, win rate, trade-grade badge,
-main mistake / main strength / suggested improvement per month. **Collapses
-to the latest 3 months by default**, with a "הצג עוד" toggle to expand —
-re-collapses every time the screen is re-entered.
+## Trades (`#tab-trades`, `js/trades.js` + `js/ledger.js`)
 
-### ציון מסחר (Daily Grade — `#tab-grade`)
-Per-day trading grade/score (execution, risk, discipline, psychology).
+One screen, two modes (segmented control):
 
-## מסחר (Trading) category
+- **לפי עסקה** — the closed-trades table (search/symbol/month filters,
+  sort, CSV, 20-row paging). **Rows expand inline** to the trade's
+  journal entry (entry/exit reason, stop/plan adherence, lesson,
+  emotion, note) with an edit button into the journal modal; a blue dot
+  marks journaled trades. The v1 disabled edit/delete icons are gone —
+  the expanded row states that recorded-trade corrections happen in the
+  operations sheet.
+- **לפי סימבול** — the Ledger (one row per symbol: watching/open/
+  history, expandable detail), rendered by the unchanged Ledger module
+  into `#tab-ledger`, now nested inside Trades.
 
-### פוזיציות פתוחות (Open Positions — `#tab-positions`)
-Card grid (one card per open position), each showing: symbol, live-dot
-indicator, risk-status pill (🔴 סיכון גבוה / 🟠 אזהרה / 🟢 תקין — colored
-left border matches), live price, daily % change (gated on the backend's
-`changePctValid` flag — never recomputed client-side), pre/after-market
-price if available, quantity, entry price, current value, P&L % and P&L $
-(both USD and ILS), target/stop-loss with distance %, notes, edit/delete
-actions. Summary bar above the grid: total cost, current value, Open P&L
-$/%, live-count. R:R calculator in the add/edit modal.
+The standalone Journal screen was absorbed; `Journal` module's modals
+still do the editing (via `upsertTradeMeta`, composite-key matched).
 
-**Alerts:** target-hit / stop-hit / down-5% conditions are recomputed every
-15s poll but only **toast once per day per (symbol, type, threshold)** —
-deduped via `localStorage`. A persistent "🔴 N התראות" badge in the header
-always reflects the current active-alert count; clicking it opens a
-dropdown listing every active alert.
+## Trade Ticket (`#trade-ticket` slide-over, `js/tradeTicket.js`)
 
-### היסטוריית עסקאות (Trades — `#tab-trades`)
-Sortable/filterable table of closed trades (search, symbol filter, month
-filter). CSV export. **Shows latest 20 rows by default** with a "טען עוד"
-(load more) button — not the full history at once.
+ONE entry point replacing Add-Trade modal + New-Position modal + Quick
+Trade screen. Three intents (symbol preserved when switching):
 
-### כניסה מהירה (Quick Trade — `#tab-quicktrade`)
-Fast single-form trade entry: live price lookup by symbol, buy/sell
-calculator, position sizer (portfolio size / risk % / stop price →
-recommended share count).
+- **פתיחת פוזיציה** — live price lookup, sizing + real R:R (from the
+  actual target) in the same flow, optional target/stop, and the entry
+  thesis captured at entry (→ position notes). Writes BUY via
+  `appendOperation` + optional `upsertPositionMeta`.
+- **סגירת פוזיציה** — pick an open position (qty prefilled), tax-true
+  net preview, journal fields IN THE SAME FLOW — attached post-reload
+  via `upsertTradeMeta` to every trade derived from the exit. Writes
+  SELL via `appendOperation` (server still rejects oversells).
+- **רישום עסקה** — historical BUY+SELL pair via `addTradeOperation`.
 
-### רשימת מעקב (Watchlist — `#tab-watchlist`)
-Symbols to watch with live prices, notes, add/remove.
+Plus a Research handoff: "בדוק קודם במנוע ההחלטות" pre-fills the
+Decision Engine with the typed symbol/entry/stop/target/qty.
 
-### יומן מסחר (Journal — `#tab-journal`)
-Per-trade journal: entry/exit reason, respected-stop, followed-plan,
-lesson, emotion. **Shows latest 20 rows by default** with a "טען עוד"
-button, same pattern as Trades.
+## Performance (`#screen-performance`, `js/performance.js`)
 
-## ניתוח (Analysis) category
+One segmented screen replacing eight v1 analysis screens:
 
-- **ניתוח גרפי** (`#tab-analysis`) — net P&L and win rate charts by symbol.
-- **ביצועים** (Performance Center, `#tab-performance`) — professional
-  metrics, symbol intelligence, sector exposure.
-- **תובנות** (Insights, `#tab-insights`) — auto-generated insights, advanced
-  stats, day-of-week / hold-duration / position-size profit breakdowns,
-  Mistake Detector grid.
-- **Trade Replay** (`#tab-replay`) — visual month-by-month trade timeline.
-- **Heatmap תיק** (Portfolio Heatmap, `#tab-portheatmap`) — contribution to
-  total P&L by symbol, sized/colored by magnitude.
-- **לוח שנה** (Calendar Heatmap, `#tab-heatmap`) — daily P&L calendar,
-  year selector.
-- **לפי סימבול** (Symbol Notes, `#tab-symnotes`) — per-symbol aggregated
-  insights/lessons, searchable.
+- **סקירה** — 8 canonical KPI tiles (each metric ONCE, straight from
+  `calcStats()`): total net, WR, PF, expectancy, Sharpe, MaxDD, avg
+  hold, max streaks — plus equity curve / monthly net / drawdown charts.
+- **לפי סימבול** — per-symbol net/WR charts + summary table, portfolio
+  heatmap, symbol notes (searchable).
+- **לפי זמן** — calendar heatmap (year selector), WR/rolling-avg/PF/
+  week-of-month charts, monthly Performance Timeline.
+- **משמעת** — Mistake Detector (9 canonical rules from
+  `Utils.detectMistakes`), day-of-week/hold/size behaviour charts,
+  Daily Grade.
+- **Replay** — Trade Replay, unchanged.
 
-## בינה מלאכותית (AI) category
+Deliberately dropped as duplicative/dead (audit-confirmed): the v1
+insight-cards + adv-stats (duplicated the same metrics on one screen),
+sym-intel (duplicated the per-symbol table), sector-exposure (was a
+placeholder — no sector data exists), dash-hero/KPI-grid (Home +
+Overview cover them).
 
-- **מנוע החלטות** (Decision Engine, `#tab-decision`) — pre-trade analysis:
-  Market Technical Score (real market data; shows "Insufficient market
-  data" if unavailable, never invented) + Trade Discipline Score (from the
-  user's own trade history) + news summary. Explicitly does not replace
-  judgment.
-- **מאמן AI** (AI Coach, `#tab-coach`) — full behavioral analysis: trading
-  style detection (day/swing/position trader), holding-losers /
-  early-exits / chasing / no-stop pattern detection, revenge-trading
-  detection, best/worst symbols, weekly action items. Rendered lazily only
-  when this tab is opened (not on boot — see ARCHITECTURE.md).
-- **שיחה עם AI** (AI Chat, `#tab-aichat`) — free-form chat, context includes
-  trades/positions/stats/watchlist, proxied through Apps Script to the
-  Anthropic API (key never in the browser).
+## Research (`#screen-research`)
 
-## הגדרות (Settings) category
+Watchlist + Decision Engine merged into one pre-trade flow: the DE form
+(symbol/entry/stop/target/qty/portfolio → Technical + Discipline + News
+scores; "Insufficient market data" when real data is missing, never
+invented) + a "פתח טיקט מסחר עם הנתונים" handoff button + the live
+Watchlist grid with add/remove/refresh.
 
-- **הגדרות מערכת** (`#tab-settings`) — password change (backend auth flow
-  still exists, currently unused while `AUTH_DISABLED = true`), theme,
-  monthly goal, module toggles.
+## Coach (`#screen-coach`)
+
+The two v1 coach screens became one destination with two panes:
+
+- **היום — מבוסס עדויות** (primary; `js/coach.js`) — live-position
+  findings, every claim numerically backed or explicitly "not enough
+  data"; the honest "can't answer" section retained.
+- **דפוסים היסטוריים** (`js/aiCoach.js`) — full-history style/pattern
+  analysis, strengths/weaknesses, weekly actions.
+
+The screen states plainly that both are **deterministic calculations,
+not a language model**.
+
+## Chat (`#tab-aichat`, `js/aiChat.js`)
+
+The one genuinely LLM-backed feature (Claude via Apps Script proxy;
+key never in the browser). Now opens with an explicit data-availability
+disclosure: what the model receives (summary stats, open positions with
+live P&L, watchlist, last 10 journal lessons) and what it does not
+(live market data beyond your positions, news) + a cross-check note.
+
+## Settings (`#tab-settings`, `js/settings.js`)
+
+Unchanged module, reached via the avatar menu. Theme, monthly goal,
+portfolio/risk defaults, live-data controls, alerts toggle, backup/CSV/
+import, security (password, sessions, Viewer management + per-viewer
+positions permission), about.
 
 ## Cross-cutting
 
-- **Dark/Light mode** toggle, persisted to `localStorage`.
-- **CSV export** of all closed trades.
-- **RTL Hebrew UI** throughout.
-- **PWA**: installable, offline-capable static shell (data itself requires
-  network — Apps Script is never cached).
-- **Mobile-first responsive layout** — bottom nav bar replaces the top nav
-  category bar on small screens; grids collapse to 1–2 columns.
+- **Quiet Terminal design system** (`css/system.css`) — see
+  DESIGN_SYSTEM.md. Dark default + full light theme (`body.light`).
+- Mono tabular numerals on every aligned figure; RTL Hebrew throughout
+  with `<bdi>` isolation on mixed-direction values.
+- Boot loading skeleton; `:focus-visible` on all interactive elements;
+  40px mobile touch targets on row actions.
+- PWA (`sw.js` cache v34+), CSV export, once-a-day alert dedup — all
+  unchanged.
+
+## v1 → v2 map
+
+| v1 screen | v2 home |
+|---|---|
+| Cockpit / Mission Control / דשבורד ראשי / סיכום יומי | Home |
+| יעדים (goals ring/sim) | Home chip (goal %) + Settings (editing); ring/simulation retired |
+| פוזיציות פתוחות | Positions |
+| היסטוריית עסקאות | Trades → לפי עסקה |
+| Ledger | Trades → לפי סימבול |
+| יומן מסחר | Trades → inline per row + modal |
+| כניסה מהירה / + עסקה / + פוזיציה | Trade Ticket |
+| ניתוח גרפי / Heatmap תיק / לפי סימבול | Performance → לפי סימבול |
+| תובנות (charts+mistakes) / ציון מסחר | Performance → משמעת |
+| התקדמות / ציר זמן / לוח שנה | Performance → לפי זמן |
+| ביצועים (perf-grid) | Performance → סקירה |
+| Trade Replay | Performance → Replay |
+| רשימת מעקב / מנוע החלטות | Research |
+| מאמן AI / Coach—מבוסס עדויות | Coach (two panes) |
+| שיחה עם AI | Chat |
+| הגדרות (nav category) | Avatar menu → Settings |
