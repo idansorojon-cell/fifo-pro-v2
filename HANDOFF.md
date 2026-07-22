@@ -74,11 +74,15 @@ Start preview `fifo-premium-preview` (port 5179) → clear SW+caches
 11. **Mobile width + light theme**: quick visual pass.
 12. Console: no red errors.
 
-Then: `git -C <worktree> switch main && git merge premium-redesign &&
-git push origin main` → cache-busted live check (`?bust=<ts>` on
-`sw.js`, expect `fifopro-v34`) → live smoke (login + Home + Positions).
-Rollback if needed: `git revert -m 1 <merge>` or reset to `cf1d454` and
-force-push (owner's call).
+Then: `./tools/bump-version.sh 2.0.0` (already stamped — re-run only to
+cut a fresh build id) → `git -C <worktree> switch main && git merge
+premium-redesign && git push origin main` → live check: fetch
+`version.json?ts=<now>` and confirm it matches the just-released build →
+live smoke (login + Home + Positions). An old still-open session should
+show the mandatory update overlay within ~15 min (or on next
+foreground/online). Rollback if needed: `git revert -m 1 <merge>` or
+reset to `cf1d454` and force-push (owner's call); then bump-version so
+returning clients update back down.
 
 
 ## 4b. Real-device mobile checklist (only you can run these)
