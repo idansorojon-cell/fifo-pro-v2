@@ -52,38 +52,37 @@ Ask before deleting code.
 
 Always keep the project modular.
 
-Structure:
+Structure (FIFO PRO 2.0 — "Quiet Terminal"):
 
 ```
 /
-index.html
+index.html          shell: rail + topbar + panels + Trade Ticket + modals
 
 /css
-style.css
-mobile.css
+style.css           v1 base (largely shadowed)
+mobile.css          v1 responsive overrides
+system.css          ← canonical v2 design system (loaded LAST, wins cascade)
 
 /js
-app.js
-api.js
-dashboard.js
-charts.js
-positions.js
-watchlist.js
-journal.js
-analytics.js
-decisionEngine.js
-aiCoach.js
-aiChat.js
-utils.js
+utils.js            calcStats + helpers (PRODUCTION MATH — do not touch)
+auth.js  api.js     session/roles · ALL network calls (unchanged from v1)
+app.js              state, boot, flat navigate() router + legacy shims
+home.js             unified Home (Cockpit+MissionControl+Dashboard+Brief)
+tradeTicket.js      unified Trade Ticket slide-over (3 old entry points)
+performance.js      segmented Performance screen (8 old screens)
+positions.js  trades.js  ledger.js  journal.js  watchlist.js
+charts.js  analytics.js  decisionEngine.js  learningEngine.js
+coach.js  aiCoach.js  aiChat.js  dailyGrade.js
+tradeReplay.js  performanceTimeline.js  settings.js
+cockpit.js          module kept for buildActionItems/riskAwareInsight
+dashboard.js  quicktrade.js   dormant (markup removed; null-guarded)
 
-/assets
-
-manifest.json
-sw.js
-AppScript.gs
-CLAUDE.md
-README_AI.md
+manifest.json  sw.js  AppScript_FULL.gs  CLAUDE.md  docs/
 ```
+
+Navigation: 7 flat destinations (Home/Positions/Trades/Performance/
+Research/Coach/Chat) + avatar-menu Settings. `navigate(dest)` routes;
+`switchTab(name)` redirects every legacy tab name.
 
 ---
 

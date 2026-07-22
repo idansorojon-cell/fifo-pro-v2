@@ -1,5 +1,24 @@
 # FIFO PRO — AI Context (read this before making changes)
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — corrections to this file
+>
+> 1. **Auth is ENABLED** (`AUTH_DISABLED = false` everywhere, real login
+>    overlay, owner/viewer roles server-side). The "auth intentionally
+>    disabled" decision below described June-2026 state and was reversed
+>    on 2026-07-06 — do not "restore" the bypass.
+> 2. **Navigation is flat** (7 destinations, js/app.js `navigate`).
+>    The hub→tab decisions below are historical. `switchTab` names all
+>    still work via redirect shims.
+> 3. Still true and load-bearing: the two-spreadsheet data model,
+>    `changePctValid` gating, alert dedup keys, "Finnhub only",
+>    annotation-overlay persistence (never synthetic ids), manual Apps
+>    Script deploys, SW cache-version bumps, "verify live, don't assume".
+> 4. Local preview for THIS branch: launch config `fifo-premium-preview`
+>    (port 5179, worktree `fifo/fifo-premium-redesign`). The old
+>    `fifo-pro` config points at v1 (`fifo/files`) and its node path is
+>    broken on this machine — see DEVELOPMENT_RULES.md.
+
+
 This file exists so a new AI session doesn't have to rediscover decisions,
 gotchas, and conventions the hard way. If you're an AI assistant working on
 this repo, read this fully before editing anything.

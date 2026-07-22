@@ -1,5 +1,21 @@
 # FIFO PRO — Technical Debt & Known Limitations
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — additions
+>
+> - **Auth sections below are stale**: auth is enabled since 2026-07-06.
+> - **Dormant-but-loaded modules** (deliberate): dashboard.js,
+>   quicktrade.js (calculator superseded by the Trade Ticket), the
+>   Journal table path. All null-guard on removed markup; kept to avoid
+>   touching analytical code in the redesign. Candidates for removal in
+>   a post-merge slimming pass.
+> - **style.css largely shadowed** by system.css (loaded last). The two
+>   `!important` blocks system.css still overrides are marked in
+>   system.css comments; removing the old blocks post-merge lets the
+>   `!important` drop too.
+> - The persistence architecture, tax-fix history, and endpoint
+>   contracts below are unchanged and still authoritative.
+
+
 ## Tax calculation — losing trades were not receiving their 25% tax offset (FIXED, redeployed and confirmed live by the trader)
 
 **Found via a full-history audit** (user noticed May 2026's net total didn't

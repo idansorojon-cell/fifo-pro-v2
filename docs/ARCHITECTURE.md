@@ -1,5 +1,39 @@
 # FIFO PRO — Architecture
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — read this first
+>
+> The presentation/navigation layer described below was replaced on the
+> `premium-redesign` branch. What changed and what didn't:
+>
+> **New structure:**
+> ```
+> css/system.css     ← "Quiet Terminal" design system (loaded LAST, wins cascade;
+>                       redefines every legacy token + adds semantic ones)
+> js/home.js         ← unified Home (replaces Cockpit/Mission Control/Dashboard/Brief)
+> js/tradeTicket.js  ← unified Trade Ticket slide-over (replaces 3 entry points)
+> js/performance.js  ← segmented Performance screen (replaces 8 analysis screens)
+> ```
+> **Routing:** flat `navigate(dest)` over 7 destinations (home/positions/
+> trades/performance/research/coach/chat) + avatar-menu Settings.
+> `switchTab()` survives as a redirect shim for every legacy tab name.
+> `_renderTab` now dispatches only positions/trades/aichat/settings; the
+> Performance segments render via `Perf`, Trades modes via `Trades.setMode`.
+> `renderAll()`/`renderMissionControl()` both refresh Home (the price-poll
+> hook is unchanged in positions.js).
+>
+> **Unchanged (0 diff lines vs v1):** utils.js (calcStats/FIFO/tax),
+> api.js, auth.js, AppScript_FULL.gs, charts.js, analytics.js,
+> decisionEngine.js, aiCoach.js, aiChat.js, dailyGrade.js,
+> learningEngine.js, tradeReplay.js, performanceTimeline.js, journal.js,
+> dashboard.js (dormant), settings.js, quicktrade.js (dormant),
+> cockpit.js (module reused by Home/Coach; its panel is gone).
+> The lazy-render rule, the state model (window.APP), the SW
+> cache-version rule, and the annotation-overlay persistence pattern all
+> still apply exactly as documented below.
+>
+> Everything below this banner describes v1 and is kept for history.
+
+
 ## Folder structure
 
 ```

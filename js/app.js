@@ -430,89 +430,26 @@ function closeTradeTicket() {
 }
 
 // ── Per-screen render dispatch ──────────────────────────────
-// The exact original switchTab() render map, extracted so both the
-// legacy switchTab shim (sub-screens) and navigate()/_renderDest
-// (destinations) share one code path. Unchanged from v1.
+// v2: only four names can ever reach here — every other legacy tab name
+// is redirected by switchTab() to its unified destination (Home /
+// Performance segments / Trades modes / Research / Coach / Ticket)
+// before this dispatch runs. The v1 cases for absorbed screens were
+// removed with their markup; their render calls now live in
+// _renderDest / Perf._renderSegment / Trades.setMode.
 function _renderTab(name) {
-  const st = getStats();
   switch (name) {
-    case 'dashboard':
-      Dashboard.render(st);
-      Charts.renderEquity(st);
-      Charts.renderMonthly(st);
-      Charts.renderDrawdown(st);
-      break;
-    case 'trades':
-      Trades.render();
-      Trades.updateFilters();
-      break;
-    case 'journal':
-      Journal.render();
-      break;
     case 'positions':
       Positions.render(); // show entry-price cards immediately; live prices fill in below
       if (APP.positions.length > 0 && Object.keys(APP.liveData).length === 0)
         Positions.refreshPrices();
       Positions.connectWS();
       break;
-    case 'watchlist':
-      Watchlist.render();
-      if (APP.watchlist.length > 0) Watchlist.refresh();
-      break;
-    case 'ledger':
-      Ledger.render();
-      break;
-    case 'decision':
-      DecisionEngine.renderStarter();
-      break;
-    case 'coach':
-      AICoach.render();
-      break;
-    case 'coach-evidence':
-      Coach.render();
+    case 'trades':
+      Trades.render();
+      Trades.updateFilters();
       break;
     case 'aichat':
       AIChat.init();
-      break;
-    case 'quicktrade':
-      QuickTrade.reset();
-      break;
-    case 'progress':
-      Analytics.renderProgress(st);
-      break;
-    case 'heatmap':
-      Analytics.renderHeatmap(st);
-      break;
-    case 'insights':
-      Analytics.renderInsights(st);
-      break;
-    case 'symnotes':
-      Analytics.renderSymNotes();
-      break;
-    case 'analysis':
-      Charts.renderSymbol(st);
-      break;
-    case 'performance':
-      Analytics.renderPerformance(st);
-      break;
-    case 'goals':
-      Dashboard.renderGoalsTab(st);
-      renderSmartGoals(st);
-      break;
-    case 'brief':
-      renderDailyBrief();
-      break;
-    case 'replay':
-      if (typeof TradeReplay !== 'undefined') TradeReplay.render();
-      break;
-    case 'grade':
-      if (typeof DailyGrade !== 'undefined') DailyGrade.render();
-      break;
-    case 'ptimeline':
-      if (typeof PerformanceTimeline !== 'undefined') PerformanceTimeline.render();
-      break;
-    case 'portheatmap':
-      renderPortfolioHeatmap();
       break;
     case 'settings':
       if (typeof Settings !== 'undefined') Settings.render();
@@ -565,202 +502,10 @@ function exportCSV() {
   a.click();
 }
 
-// ── Daily Brief ─────────────────────────────────────────────
-function renderDailyBrief() {
-  const el = document.getElementById('brief-content');
-  if (!el) return;
-
-  const st  = getStats();
-  const now = new Date();
-  const days = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
-  const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-  const dateStr = `יום ${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
-
-  const curM = Utils.currentMonthKey();
-  const monthTrades = APP.trades.filter(t => t.month === curM);
-  const monthNet    = monthTrades.reduce((s,t) => s+t.net, 0);
-  const goalPct     = APP.monthGoal > 0 ? Math.min(120, Math.round(monthNet / APP.monthGoal * 100)) : 0;
-  const openPnl     = APP.positions.reduce((s,p) => {
-    const live = APP.liveData[p.symbol];
-    return s + (live?.price ? (live.price - p.avg_price) * p.qty : 0);
-  }, 0);
-
-  // What changed since last visit
-  const lastVisit = Auth.getLastVisit();
-  const newTrades = lastVisit ? APP.trades.filter(t => {
-    const d = Utils.parseDD(t.sell_date);
-    return d.getTime() > lastVisit.ts;
-  }).length : 0;
-
-  // Risks for today
-  const risks = [];
-  APP.positions.forEach(p => {
-    const live = APP.liveData[p.symbol];
-    if (live && live.price) {
-      const pnlPct = ((live.price - p.avg_price) / p.avg_price) * 100;
-      if (pnlPct < -8) risks.push(`${p.symbol}: ירד ${pnlPct.toFixed(1)}% מהכניסה`);
-      if (p.stop_loss && live.price < p.stop_loss * 1.02)
-        risks.push(`${p.symbol}: קרוב לסטופ ($${p.stop_loss})`);
-    }
-  });
-
-  // AI coach sentence based on performance
-  let coachMsg = '';
-  if (st.winRate >= 65 && st.totalNet > 0)
-    coachMsg = 'ביצועים מצוינים! שמור על המשמעת והמשך לפי התוכנית.';
-  else if (st.winRate < 50)
-    coachMsg = 'Win Rate מתחת ל-50%. שקול לצמצם גודל פוזיציות עד לשיפור הדיוק.';
-  else if (monthNet < 0)
-    coachMsg = 'חודש מאתגר. זה זמן טוב לעיין ביומן ולזהות תבניות.';
-  else
-    coachMsg = 'בקצב טוב. זכור: עקביות עדיפה על ניסיון לתפוס עסקה גדולה.';
-
-  el.innerHTML = `
-    <div class="brief-hero">
-      <div class="brief-greeting">שלום, בוקר טוב 👋</div>
-      <div class="brief-date">${dateStr}</div>
-
-      <div class="brief-kpis">
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">P&L פתוח</div>
-          <div class="brief-kpi-val ${openPnl >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(openPnl))}</div>
-        </div>
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">רווח החודש</div>
-          <div class="brief-kpi-val ${monthNet >= 0 ? 'green' : 'red'}">${Utils.f$(Math.round(monthNet))}</div>
-        </div>
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">יעד חודשי</div>
-          <div class="brief-kpi-val">${goalPct}% (${Utils.f$(APP.monthGoal)})</div>
-        </div>
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">פוזיציות פתוחות</div>
-          <div class="brief-kpi-val">${APP.positions.length}</div>
-        </div>
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">עסקאות החודש</div>
-          <div class="brief-kpi-val">${monthTrades.length}</div>
-        </div>
-        <div class="brief-kpi">
-          <div class="brief-kpi-label">Win Rate כולל</div>
-          <div class="brief-kpi-val ${st.winRate >= 55 ? 'green' : 'red'}">${st.winRate}%</div>
-        </div>
-      </div>
-
-      <div class="brief-coach">
-        <span class="brief-coach-icon">${icon('cpu')}</span>
-        <strong>AI Coach:</strong> ${coachMsg}
-      </div>
-
-      ${newTrades > 0 ? `
-        <div class="brief-changes">
-          <div class="brief-change-item">${icon('list')} ${newTrades} עסקאות חדשות מהכניסה האחרונה</div>
-        </div>
-      ` : ''}
-
-      ${risks.length ? `
-        <div class="brief-risk">
-          <strong style="color:var(--red);display:inline-flex;align-items:center;gap:5px">${icon('alert-triangle')} סיכוני היום:</strong>
-          <ul style="margin-top:6px;padding-right:16px;font-size:12px">
-            ${risks.map(r => `<li>${r}</li>`).join('')}
-          </ul>
-        </div>
-      ` : ''}
-    </div>
-
-    ${APP.watchlist.length ? `
-      <div class="card">
-        <div class="card-title">👁 Watchlist — כדאי לשים לב</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${APP.watchlist.slice(0,8).map(w => {
-            const live = APP.liveData[w.symbol];
-            const price = live?.price;
-            const chgPct = live?.changePctValid ? live.changePct : null;
-            return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:8px 12px;font-size:13px">
-              <strong>${w.symbol}</strong>
-              ${price ? `<span style="margin-right:8px;color:var(--text-3)">$${price.toFixed(2)}</span>` : ''}
-              ${chgPct != null ? `<span class="${chgPct >= 0 ? 'green' : 'red'}">${Utils.fpct(chgPct)}</span>` : ''}
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-    ` : ''}
-  `;
-}
-
-// ── Smart Goals ──────────────────────────────────────────────
-function renderSmartGoals(st) {
-  const el = document.getElementById('goals-content');
-  if (!el) return;
-
-  const now       = new Date();
-  const curM      = Utils.currentMonthKey();
-  const monthTrades = APP.trades.filter(t => t.month === curM);
-  const monthNet  = monthTrades.reduce((s,t) => s+t.net, 0);
-  const goal      = APP.monthGoal || 5000;
-  const pct       = goal > 0 ? Math.min(120, Math.max(0, (monthNet / goal) * 100)) : 0;
-  const remaining = goal - monthNet;
-
-  // Trading days remaining in month
-  const lastDay   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const daysLeft  = Math.max(0, Math.ceil((lastDay - now) / 86400000));
-  const tdLeft    = Math.max(1, Math.round(daysLeft * 5/7));
-
-  // How much per trading day needed
-  const perDay    = remaining > 0 && tdLeft > 0 ? remaining / tdLeft : 0;
-
-  // Current avg per trade
-  const avgTrade  = monthTrades.length > 0 ? monthNet / monthTrades.length : (st.avgNet || 0);
-
-  // Simulation: at current average, where do we end?
-  const totalTradingDays = Math.round(lastDay.getDate() * 5/7);
-  const elapsedTD = totalTradingDays - tdLeft;
-  const projectedEnd = elapsedTD > 0 && avgTrade
-    ? monthNet + (avgTrade * (monthTrades.length / Math.max(1, elapsedTD)) * tdLeft)
-    : monthNet;
-
-  const isOnTrack  = monthNet >= goal * (1 - daysLeft / lastDay.getDate());
-  const paceClass  = pct >= 100 ? 'ahead' : isOnTrack ? 'on-track' : 'behind';
-  const paceText   = pct >= 100 ? '🎯 הגעת ליעד!' : isOnTrack ? '✓ בקצב טוב' : '⚡ מתחת לקצב';
-
-  const strokeLen  = 2 * Math.PI * 80; // r=80
-  const offset     = strokeLen - (Math.min(100, pct) / 100) * strokeLen;
-  const ringColor  = pct >= 100 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : 'var(--gold)';
-
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-title">🎯 יעד חודשי — ${Utils.monthLabel(curM)}</div>
-
-      <div class="goal-ring-wrap">
-        <svg class="goal-ring-svg" viewBox="0 0 180 180">
-          <circle cx="90" cy="90" r="80" fill="none" stroke="var(--surface-3)" stroke-width="12"/>
-          <circle cx="90" cy="90" r="80" fill="none" stroke="${ringColor}" stroke-width="12"
-            stroke-dasharray="${strokeLen}" stroke-dashoffset="${offset}"
-            stroke-linecap="round" style="transition:stroke-dashoffset 0.8s ease"/>
-        </svg>
-        <div class="goal-ring-center">
-          <div class="goal-ring-pct" style="color:${ringColor}">${Math.round(pct)}%</div>
-          <div class="goal-ring-label">מהיעד</div>
-        </div>
-      </div>
-
-      <div class="flex-between mb-12">
-        <div style="font-size:13px;color:var(--text-3)">
-          ${Utils.f$(Math.round(monthNet))} מתוך ${Utils.f$(goal)}
-        </div>
-        <div class="goal-pace ${paceClass}">${paceText}</div>
-      </div>
-
-      <div class="card" style="margin-bottom:0;background:var(--surface-2)">
-        <div class="card-title">📊 סימולציה</div>
-        <div class="goal-sim-row"><span class="goal-sim-label">ימי מסחר שנשארו</span><span class="goal-sim-val">${tdLeft}</span></div>
-        <div class="goal-sim-row"><span class="goal-sim-label">נדרש ליום מסחר</span><span class="goal-sim-val ${remaining > 0 ? '' : 'green'}">${remaining > 0 ? Utils.f$(Math.round(perDay)) : 'הושג ✓'}</span></div>
-        <div class="goal-sim-row"><span class="goal-sim-label">ממוצע לעסקה (החודש)</span><span class="goal-sim-val">${Utils.f$(Math.round(avgTrade))}</span></div>
-        <div class="goal-sim-row"><span class="goal-sim-label">תחזית לסוף החודש</span><span class="goal-sim-val ${projectedEnd >= goal ? 'green' : 'red'}">${Utils.f$(Math.round(projectedEnd))}</span></div>
-      </div>
-    </div>
-  `;
-}
+// ── Daily Brief / Smart Goals — REMOVED in FIFO PRO 2.0 ─────
+// Both screens were merged into Home (js/home.js); their render
+// functions had zero remaining callers (verified by grep before
+// deletion in Wave J).
 
 // ── Portfolio Heatmap ────────────────────────────────────────
 function renderPortfolioHeatmap() {
@@ -839,12 +584,13 @@ function renderPortfolioHeatmap() {
   `;
 }
 
-// ── Mission Control — the home screen ─────────────────────────
-// One concise summary instead of the full dashboard/tables/AI-coach
-// dumped onto the screen at once. Real numbers, not just nav shortcuts.
-// Re-run after every price poll (see positions.js refreshPrices) so
-// Open P&L / biggest-risk stay current without re-rendering anything else.
-
+// ── Mission Control (v1 home) — merged into Home ─────────────
+// _shortCoachInsight is KEPT: Cockpit.riskAwareInsight (used by Home
+// and Coach) falls back to it when no live position risk exists.
+// _biggestRiskPosition and the old Mission Control template were
+// removed in Wave J — Home renders the unified home surface, and
+// renderMissionControl below stays only as the delegation hook the
+// 15s price poll (positions.js) still calls.
 function _shortCoachInsight(st) {
   const { trades } = APP;
   if (trades.length < 3) return 'הוסף עוד עסקאות כדי לקבל תובנת AI Coach.';
@@ -865,106 +611,9 @@ function _shortCoachInsight(st) {
   return `${icon('bulb')} בקצב טוב. עקביות עדיפה על ניסיון לתפוס עסקה גדולה.`;
 }
 
-function _biggestRiskPosition() {
-  let worst = null, worstScore = -Infinity;
-  APP.positions.forEach(p => {
-    const live = APP.liveData[p.symbol];
-    if (!live?.price) return;
-    const pnlPct = (live.price - p.avg_price) / p.avg_price * 100;
-    const score  = -pnlPct; // higher score = bigger loss = bigger risk
-    if (score > worstScore) { worstScore = score; worst = { p, live, pnlPct }; }
-  });
-  return worst;
-}
 
 function renderMissionControl() {
-  // v2: Mission Control merged into Home. This function is still the
-  // live-refresh hook the 15s price poll calls (positions.js), so route
-  // it to Home. The legacy body below is unreachable and kept only for
-  // reference until the Wave J cleanup removes it.
   if (typeof Home !== 'undefined') Home.render();
-  return;
-  const el = document.getElementById('mission-control');
-  if (!el) return;
-
-  const st = getStats();
-
-  // Open P&L across all live positions
-  let openPnl = 0, openCost = 0, liveCount = 0;
-  APP.positions.forEach(p => {
-    const live = APP.liveData[p.symbol];
-    openCost += p.avg_price * p.qty;
-    if (live?.price) { openPnl += (live.price - p.avg_price) * p.qty; liveCount++; }
-  });
-
-  // Today / Week / Month P&L from closed trades
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart  = new Date(todayStart.getTime() - 6 * 86400000);
-  const curMonth   = Utils.currentMonthKey();
-
-  let todayNet = 0, weekNet = 0, monthNet = 0;
-  APP.trades.forEach(t => {
-    const d = Utils.parseDD(t.sell_date);
-    if (d >= todayStart) todayNet += t.net;
-    if (d >= weekStart)  weekNet  += t.net;
-    if (t.month === curMonth) monthNet += t.net;
-  });
-
-  const risk     = _biggestRiskPosition();
-  const riskInfo = risk ? Positions.riskStatus(risk.p, risk.live) : null;
-  const insight  = _shortCoachInsight(st);
-
-  // Hierarchy, top to bottom: hero (Open P&L, dominant) -> context strip
-  // (today/week/month, subordinate) -> status row (positions + risk,
-  // risk gets a colored edge reusing the exact pos-card--<level> classes
-  // already used on Positions cards, so severity reads the same way
-  // everywhere) -> AI Coach. All values above are unchanged; only the
-  // markup/layout differs from the previous flat 6-box grid.
-  el.innerHTML = `
-    <div class="mc-hero">
-      <div class="mc-hero-label">Open P&L — פוזיציות פתוחות בלבד <span class="mc-live-dot" title="מתעדכן כל 15 שניות"></span></div>
-      <div class="mc-hero-value ${openPnl>=0?'green':'red'}">${Utils.f$(Math.round(openPnl))}</div>
-      <div class="mc-hero-sub">${liveCount}/${APP.positions.length} פוזיציות live${openCost?' · '+Utils.fpct(openPnl/openCost*100):''}</div>
-    </div>
-
-    <div class="mc-strip">
-      <div class="mc-strip-item">
-        <div class="mc-strip-label">היום</div>
-        <div class="mc-strip-value ${todayNet>=0?'green':'red'}">${Utils.f$(Math.round(todayNet))}</div>
-      </div>
-      <div class="mc-strip-item">
-        <div class="mc-strip-label">השבוע</div>
-        <div class="mc-strip-value ${weekNet>=0?'green':'red'}">${Utils.f$(Math.round(weekNet))}</div>
-      </div>
-      <div class="mc-strip-item">
-        <div class="mc-strip-label">החודש</div>
-        <div class="mc-strip-value ${monthNet>=0?'green':'red'}">${Utils.f$(Math.round(monthNet))}</div>
-      </div>
-    </div>
-
-    <div class="mc-grid mc-grid-2">
-      <div class="mc-card">
-        <div class="mc-label">${icon('trending-up')} פוזיציות פתוחות</div>
-        ${APP.positions.length
-          ? `<div class="mc-value-sm">${APP.positions.length}</div><div class="mc-sub">${APP.positions.map(p=>p.symbol).join(', ')}</div>`
-          : `<div class="mc-sub">אין פוזיציות פתוחות</div>`}
-      </div>
-      <div class="mc-card mc-risk-card" style="${riskInfo ? 'border-right-color:'+riskInfo.color : ''}">
-        <div class="mc-label">${icon('alert-triangle')} הסיכון הגדול ביותר</div>
-        ${risk
-          ? `<div class="mc-value-sm ${risk.pnlPct>=0?'green':'red'}">${risk.p.symbol} ${Utils.fpct(risk.pnlPct)}</div>
-             <div class="mc-sub" style="display:flex;align-items:center;gap:4px;color:${riskInfo.color}">${riskInfo.label}</div>`
-          : `<div class="mc-sub">אין נתוני סיכון עדיין</div>`}
-      </div>
-    </div>
-
-    <div class="mc-card mc-coach">
-      <div class="mc-label">${icon('cpu')} AI Coach</div>
-      <div class="mc-coach-msg">${insight}</div>
-      <button class="btn btn-ghost btn-sm" onclick="switchCategory('ai', document.querySelector('.nav-cat[data-cat=\\'ai\\']')); switchTab('coach')">פתח AI Coach מלא ←</button>
-    </div>
-  `;
 }
 
 // ── Phase 3: hide/show static owner-only controls ─────────────

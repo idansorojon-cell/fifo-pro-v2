@@ -1,5 +1,24 @@
 # FIFO PRO — Roadmap / Outstanding Work
 
+> ## ⚡ FIFO PRO 2.0 (2026-07-22) — status update
+>
+> - "Restore authentication" (P0 below): **DONE** 2026-07-06 (login +
+>   viewer role, server-enforced).
+> - The Design & UX overhaul section below: **superseded** by the 2.0
+>   Design Transformation (branch `premium-redesign`) — new IA, design
+>   system, unified Home/Trades/Performance/Research/Coach + Trade
+>   Ticket. See FEATURES.md.
+> - Still open after 2.0: Trades' edit/delete of a recorded trade
+>   (unchanged product decision, P0 below); SW network-first for HTML
+>   (P1); automated tests (P3); Script.html/Style.html cleanup (P1).
+> - New, introduced by 2.0 (deliberate, low-priority): dormant modules
+>   kept loaded for their null-guarded renderers (dashboard.js,
+>   quicktrade.js, journal.js table path); goals ring/simulation retired
+>   (goal % chip on Home + editing in Settings); legacy CSS in
+>   style.css now largely shadowed by system.css — a slimming pass is
+>   safe post-merge but was deliberately not done pre-merge.
+
+
 Grouped by priority. Nothing here has been started unless explicitly noted.
 
 ## P0 — Security / correctness (do before wider use)
