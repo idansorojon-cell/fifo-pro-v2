@@ -260,96 +260,140 @@ async function seedToSheets() {
 // user is actually looking at already re-renders itself directly at
 // each mutation's call site (e.g. Trades.submit calls Trades.render()).
 function renderAll() {
-  renderMissionControl();
+  // v2: Home is the single live "home" surface (Mission Control + Cockpit
+  // + Dashboard + Daily Brief merged). Kept cheap; the currently-open
+  // screen already re-renders itself at each mutation call site.
+  if (typeof Home !== 'undefined') Home.render();
 }
 
-// ── Category tracking ───────────────────────────────────────
-APP.currentCategory = 'dashboard';
-APP.lastTab = {
-  dashboard: 'hub-dashboard',
-  trading:   'hub-trading',
-  analysis:  'hub-analysis',
-  ai:        'hub-ai',
-  settings:  'hub-settings'
+// ══════════════════════════════════════════════════════════════
+// FIFO PRO 2.0 — flat navigation (7 destinations)
+// ──────────────────────────────────────────────────────────────
+// Replaces the old 5-category hub→tab model with 7 top-level
+// destinations. navigate(dest) shows exactly one. switchTab /
+// switchCategory / showCockpit are kept as thin back-compat shims so
+// every existing caller (in-render links, price-poll refresh, etc.)
+// keeps working while each destination's internals are rebuilt.
+// ══════════════════════════════════════════════════════════════
+APP.currentCategory = null;   // legacy field, retained for any reader
+APP.currentDest     = 'home';
+APP.lastTab         = {};     // legacy shim target (harmless)
+
+const DEST_TITLE = {
+  home:'Home', positions:'Positions', trades:'Trades',
+  performance:'Performance', research:'Research',
+  coach:'Coach', chat:'Chat', settings:'הגדרות'
+};
+// Destination → the panel element it shows. Some point at an existing
+// v1 panel until that destination's own screen is built in a later wave.
+const DEST_PANEL = {
+  home:'screen-home', positions:'tab-positions', trades:'tab-trades',
+  performance:'tab-insights', research:'tab-watchlist',
+  coach:'tab-coach-evidence', chat:'tab-aichat', settings:'tab-settings'
 };
 
-// Category display names for breadcrumb
-const CAT_LABELS = {
-  dashboard: 'דשבורד', trading: 'מסחר', analysis: 'ניתוח',
-  ai: 'בינה מלאכותית', settings: 'הגדרות'
+function navigate(dest) {
+  if (!DEST_PANEL[dest]) dest = 'home';
+  APP.currentDest = dest;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(DEST_PANEL[dest]);
+  if (panel) panel.classList.add('active');
+  document.querySelectorAll('.rail-item, .bn-item').forEach(b =>
+    b.classList.toggle('active', b.dataset.dest === dest));
+  const title = document.getElementById('screen-title');
+  if (title) title.textContent = DEST_TITLE[dest] || dest;
+  closeAvatarMenu();
+  window.scrollTo(0, 0);
+  _renderDest(dest);
+}
+
+// Render a destination by delegating to the existing per-screen render
+// dispatch (_renderTab) — the safest path, it reuses the exact v1 logic.
+function _renderDest(dest) {
+  if (dest === 'home') { if (typeof Home !== 'undefined') Home.render(); return; }
+  const tabFor = {
+    positions:'positions', trades:'trades', performance:'insights',
+    research:'watchlist', coach:'coach-evidence', chat:'aichat', settings:'settings'
+  };
+  _renderTab(tabFor[dest] || dest);
+}
+
+// ── Back-compat shims ───────────────────────────────────────
+function showCockpit()  { navigate('home'); }
+function openSettings() { navigate('settings'); }
+const _CAT_TO_DEST = { dashboard:'home', trading:'positions', analysis:'performance', ai:'coach', settings:'settings' };
+function switchCategory(cat) { navigate(_CAT_TO_DEST[cat] || 'home'); }
+
+// Which destination "owns" each legacy tab name (for chrome/active state).
+const _TAB_TO_DEST = {
+  positions:'positions', trades:'trades', journal:'trades', ledger:'trades', quicktrade:'trades',
+  watchlist:'research', decision:'research',
+  insights:'performance', performance:'performance', progress:'performance', analysis:'performance',
+  heatmap:'performance', portheatmap:'performance', symnotes:'performance', replay:'performance',
+  grade:'performance', ptimeline:'performance',
+  dashboard:'home', brief:'home', goals:'home',
+  coach:'coach', 'coach-evidence':'coach', aichat:'chat', settings:'settings'
 };
-const TAB_LABELS = {
-  dashboard:'דשבורד ראשי', brief:'סיכום יומי', goals:'יעדים',
-  progress:'התקדמות', ptimeline:'ציר זמן', grade:'ציון מסחר',
-  positions:'פוזיציות', trades:'עסקאות', quicktrade:'כניסה מהירה',
-  watchlist:'רשימת מעקב', journal:'יומן', ledger:'Ledger',
-  analysis:'ניתוח גרפי', performance:'ביצועים', insights:'תובנות',
-  replay:'Trade Replay', portheatmap:'Heatmap תיק',
-  heatmap:'לוח שנה', symnotes:'לפי סימבול',
-  decision:'מנוע החלטות', coach:'מאמן AI', aichat:'שיחה עם AI',
-  'coach-evidence':'Coach — מבוסס עדויות',
-  settings:'הגדרות מערכת'
-};
-
-// ── Category switching ──────────────────────────────────────
-function switchCategory(cat, btn, fromBottomNav) {
-  APP.currentCategory = cat;
-  document.querySelectorAll('.nav-cat').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll(`.nav-cat[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
-  document.querySelectorAll(`.bn-item[data-cat="${cat}"]`).forEach(b => b.classList.add('active'));
-  // Show the hub panel for this category
+// Legacy tab navigation — still shows the specific sub-panel (many are
+// absorbed into a destination in a later wave) and renders it, so every
+// existing switchTab('x') caller keeps working.
+function switchTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  const hub = document.getElementById('tab-hub-' + cat);
-  if (hub) hub.classList.add('active');
-  _hideBreadcrumb();
-  // Reset lastTab so next time we enter the category, we always land on hub first
-  APP.lastTab[cat] = 'hub-' + cat;
-}
-
-// ── Cockpit (FIFO PRO 2.0, Phase 1) ──────────────────────────
-// Cockpit sits outside the 5 existing nav categories — it's the new
-// default landing screen, reachable at any time via the header logo.
-// Reuses the exact same generic "hide every .panel, show one" pattern
-// switchCategory already uses, so it needs no change to that function.
-function showCockpit() {
-  APP.currentCategory = null;
-  document.querySelectorAll('.nav-cat').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  const el = document.getElementById('tab-cockpit');
-  if (el) el.classList.add('active');
-  _hideBreadcrumb();
-  if (typeof Cockpit !== 'undefined') Cockpit.render();
-}
-
-// ── Breadcrumb helpers ──────────────────────────────────────
-function _showBreadcrumb(tabName) {
-  const bc    = document.getElementById('breadcrumb');
-  const catEl = document.getElementById('breadcrumb-cat-label');
-  const tabEl = document.getElementById('breadcrumb-tab-label');
-  if (!bc) return;
-  if (catEl) catEl.textContent = CAT_LABELS[APP.currentCategory] || APP.currentCategory;
-  if (tabEl) tabEl.textContent = TAB_LABELS[tabName] || tabName;
-  bc.style.display = 'flex';
-}
-function _hideBreadcrumb() {
-  const bc = document.getElementById('breadcrumb');
-  if (bc) bc.style.display = 'none';
-}
-
-// ── Tab switching ───────────────────────────────────────────
-function switchTab(name, btn) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  if (btn) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-  }
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
-  APP.lastTab[APP.currentCategory] = name;
-  _showBreadcrumb(name);
+  const dest = _TAB_TO_DEST[name];
+  if (dest) {
+    APP.currentDest = dest;
+    document.querySelectorAll('.rail-item, .bn-item').forEach(b =>
+      b.classList.toggle('active', b.dataset.dest === dest));
+    const title = document.getElementById('screen-title');
+    if (title) title.textContent = DEST_TITLE[dest] || name;
+  }
+  closeAvatarMenu();
+  window.scrollTo(0, 0);
+  _renderTab(name);
+}
 
+// Legacy breadcrumb helpers — no-ops now (breadcrumb removed in v2)
+function _showBreadcrumb() {}
+function _hideBreadcrumb() {}
+
+// ── Avatar menu ─────────────────────────────────────────────
+function toggleAvatarMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const m = document.getElementById('avatar-menu');
+  if (m) m.classList.toggle('open');
+}
+function closeAvatarMenu() {
+  const m = document.getElementById('avatar-menu');
+  if (m) m.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('avatar-menu');
+  if (!m || !m.classList.contains('open')) return;
+  if (m.contains(e.target) || e.target.closest('.rail-avatar')) return;
+  m.classList.remove('open');
+});
+
+// ── Trade Ticket open/close — body built in js/tradeTicket.js (Wave E).
+// Until that module exists, falls back to the existing Add-Trade modal.
+function openTradeTicket(opts) {
+  if (typeof TradeTicket !== 'undefined') { TradeTicket.open(opts); return; }
+  if (typeof Trades !== 'undefined') Trades.openAddForm();
+}
+function closeTradeTicket() {
+  if (typeof TradeTicket !== 'undefined') { TradeTicket.close(); return; }
+  const s = document.getElementById('ticket-scrim');
+  const t = document.getElementById('trade-ticket');
+  if (s) s.classList.remove('open');
+  if (t) t.classList.remove('open');
+}
+
+// ── Per-screen render dispatch ──────────────────────────────
+// The exact original switchTab() render map, extracted so both the
+// legacy switchTab shim (sub-screens) and navigate()/_renderDest
+// (destinations) share one code path. Unchanged from v1.
+function _renderTab(name) {
   const st = getStats();
   switch (name) {
     case 'dashboard':
@@ -794,6 +838,12 @@ function _biggestRiskPosition() {
 }
 
 function renderMissionControl() {
+  // v2: Mission Control merged into Home. This function is still the
+  // live-refresh hook the 15s price poll calls (positions.js), so route
+  // it to Home. The legacy body below is unreachable and kept only for
+  // reference until the Wave J cleanup removes it.
+  if (typeof Home !== 'undefined') Home.render();
+  return;
   const el = document.getElementById('mission-control');
   if (!el) return;
 

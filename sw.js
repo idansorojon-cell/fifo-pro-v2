@@ -95,8 +95,14 @@
 // missing those three screens entirely (they were only ever cached
 // opportunistically by the fetch handler on first successful network
 // fetch, never precached at install time like every other module).
-const CACHE_NAME   = 'fifopro-v28';
-const STATIC_CACHE = 'fifopro-static-v28';
+// Bumped v28 -> v29: FIFO PRO 2.0 Wave A — new "Quiet Terminal" design
+// system (css/system.css) + flat 7-destination navigation shell (rail +
+// topbar + avatar menu, replacing the 5-category hub→tab model) + the new
+// unified Home screen (js/home.js, merging Cockpit/Mission Control/
+// Dashboard/Daily Brief). index.html, js/app.js changed. New files
+// css/system.css + js/home.js added to the precache list below.
+const CACHE_NAME   = 'fifopro-v29';
+const STATIC_CACHE = 'fifopro-static-v29';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
@@ -107,7 +113,9 @@ const STATIC_ASSETS = [
   'index.html',
   'css/style.css',
   'css/mobile.css',
+  'css/system.css',
   'js/utils.js',
+  'js/home.js',
   'js/learningEngine.js',
   'js/api.js',
   'js/app.js',
