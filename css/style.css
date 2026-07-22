@@ -534,6 +534,29 @@ input:focus, select:focus, textarea:focus {
 }
 input::placeholder, textarea::placeholder { color: var(--text-3); }
 
+/* ── Keyboard focus (buttons/tabs/nav/cards) ────────────────
+   Previously only inputs/selects/textareas had any focus affordance —
+   every clickable control (buttons, tabs, category nav, hub cards,
+   bottom-nav items) rendered identically whether keyboard-focused or
+   not. :focus-visible (not :focus) so mouse clicks stay silent and only
+   keyboard/assistive-tech navigation shows the ring — degrades
+   harmlessly to no ring on browsers without :focus-visible support,
+   same as before this rule existed. */
+.btn:focus-visible,
+.btn-icon:focus-visible,
+.tab:focus-visible,
+.nav-cat:focus-visible,
+.hub-card:focus-visible,
+.bn-item:focus-visible,
+.sort-btn:focus-visible,
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-group label {
   font-size: 11px;
@@ -1208,6 +1231,18 @@ input[type=date] { direction: ltr; text-align: right; }
   background: var(--bg);
   background-image: radial-gradient(ellipse at 50% -20%, rgba(78,204,168,0.12) 0%, transparent 60%);
 }
+
+#boot-skeleton {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 100px;
+  background: var(--bg);
+}
+.boot-skeleton-inner { width: 100%; max-width: 480px; padding: 0 20px; }
 
 .login-card {
   background: var(--surface);
@@ -2369,11 +2404,20 @@ select.s-input { cursor: pointer; }
 .goal-pace.ahead    { background: var(--blue-dim);  color: var(--blue); }
 
 /* ── Skeleton Loading ───────────────────────────────────── */
+/* Single definition (was previously defined twice — here and again near
+   "Loading skeleton" below — with conflicting background/animation; the
+   second definition never fired since it was unused, but the conflict
+   would have silently resolved to whichever block was cascade-last the
+   moment either was ever wired up. Merged into one, using the shimmer
+   gradient since it reads as a real "loading" motion rather than a flat
+   pulse, kept the -text/-kpi/-card/-row size modifiers from the first
+   block since those are the ones referenced by name elsewhere.) */
 .skeleton {
-  background: var(--surface-2);
-  border-radius: var(--r-md);
-  animation: skeletonPulse 1.5s ease infinite;
   display: block;
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 .skeleton-text { height: 14px; margin-bottom: 8px; }
 .skeleton-kpi  { height: 80px; border-radius: var(--r-lg); }
@@ -2462,15 +2506,6 @@ select.s-input { cursor: pointer; }
 
 /* ── Drawdown ────────────────────────────────────────────── */
 .dd-wrap { position: relative; height: 180px; margin-bottom: 4px; }
-
-/* ── Loading skeleton ───────────────────────────────────── */
-.skeleton {
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: var(--r-md);
-  height: 20px;
-}
 
 /* ── Tooltip (custom) ───────────────────────────────────── */
 [data-tip] {

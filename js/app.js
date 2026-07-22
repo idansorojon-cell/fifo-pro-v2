@@ -833,7 +833,7 @@ function renderMissionControl() {
   // markup/layout differs from the previous flat 6-box grid.
   el.innerHTML = `
     <div class="mc-hero">
-      <div class="mc-hero-label">Open P&L <span class="mc-live-dot" title="מתעדכן כל 15 שניות"></span></div>
+      <div class="mc-hero-label">Open P&L — פוזיציות פתוחות בלבד <span class="mc-live-dot" title="מתעדכן כל 15 שניות"></span></div>
       <div class="mc-hero-value ${openPnl>=0?'green':'red'}">${Utils.f$(Math.round(openPnl))}</div>
       <div class="mc-hero-sub">${liveCount}/${APP.positions.length} פוזיציות live${openCost?' · '+Utils.fpct(openPnl/openCost*100):''}</div>
     </div>
@@ -898,6 +898,16 @@ function updateSeedBanner() {
   b.style.display = (APP.trades.length === 0 && API.isConfigured()) ? 'flex' : 'none';
 }
 
+// ── Boot skeleton (bridges the load() network gap — see index.html) ──
+function _showBootSkeleton() {
+  const el = document.getElementById('boot-skeleton');
+  if (el) el.style.display = 'flex';
+}
+function _hideBootSkeleton() {
+  const el = document.getElementById('boot-skeleton');
+  if (el) el.style.display = 'none';
+}
+
 // ── Init ────────────────────────────────────────────────────
 async function _initApp() {
   // Dark mode — default ON (trading terminal), safe to read before auth
@@ -907,11 +917,17 @@ async function _initApp() {
   const btn = document.getElementById('dark-btn');
   if (btn) btn.innerHTML = (APP.darkMode ? icon('sun') + ' Light' : icon('moon') + ' Dark');
 
+  // Cover the gap between "boot started" and "real data rendered" with an
+  // honest loading state instead of the static (empty) Dashboard panel
+  // markup that used to be silently visible here for however long
+  // API.loadAll() takes. Hidden in every exit path below, success or not.
+  _showBootSkeleton();
+
   // load() clears in-memory state first, then fetches from the authenticated backend.
   // If it returns false (401 or network failure), do NOT render — the login screen
   // will already be shown by the 401 handler. Bail out here.
   const ok = await load();
-  if (!ok) return;
+  if (!ok) { _hideBootSkeleton(); return; }
 
   applyRoleUI();
   updateSeedBanner();
@@ -922,6 +938,7 @@ async function _initApp() {
   // Mission Control is unchanged and one click away via the "דשבורד" nav
   // category, exactly as before.
   showCockpit();
+  _hideBootSkeleton();
 
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();

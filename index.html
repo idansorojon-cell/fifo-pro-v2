@@ -173,6 +173,26 @@
   </div>
 </div>
 
+<!-- Boot loading skeleton — bridges the gap between login/AUTH_DISABLED
+     boot and the first real render (API.loadAll() resolving). Previously
+     this window showed the static (empty) Dashboard panel markup that
+     happens to be index.html's default-active panel, then snapped to
+     Cockpit once data arrived — a flash of the wrong screen rather than
+     an honest loading state. Shown/hidden only in js/app.js's _initApp();
+     no calculation/data logic touched. -->
+<div id="boot-skeleton">
+  <div class="boot-skeleton-inner">
+    <div class="skeleton skeleton-text" style="width:120px;height:22px;margin:0 auto 28px"></div>
+    <div class="skeleton skeleton-row" style="margin-bottom:10px"></div>
+    <div class="skeleton skeleton-row" style="margin-bottom:24px;width:80%"></div>
+    <div class="skeleton skeleton-kpi" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:12px">
+      <div class="skeleton skeleton-card" style="flex:1"></div>
+      <div class="skeleton skeleton-card" style="flex:1"></div>
+    </div>
+  </div>
+</div>
+
 <div class="app" id="app">
 
   <!-- ── Sync Status Bar ─────────────────────────────── -->

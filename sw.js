@@ -79,8 +79,24 @@
 // permissions) — index.html, js/app.js, js/auth.js, js/api.js,
 // js/utils.js, js/settings.js, js/cockpit.js, js/dashboard.js,
 // js/positions.js, js/watchlist.js, js/journal.js, js/trades.js.
-const CACHE_NAME   = 'fifopro-v27';
-const STATIC_CACHE = 'fifopro-static-v27';
+// Bumped v27 -> v28: Premium-feel pass (Product Design audit) —
+// index.html/css/style.css/css/mobile.css/js/app.js/js/positions.js/
+// js/watchlist.js/js/ledger.js changed (merged a conflicting duplicate
+// .skeleton definition, wired a real boot-loading skeleton in place of
+// the flash-of-static-Dashboard-panel that used to show during
+// API.loadAll(), added keyboard :focus-visible states app-wide, fixed
+// undersized mobile row-action touch targets, resolved gold/purple
+// color-token double-meanings, clarified Mission Control's "Open P&L"
+// label vs Cockpit's combined-P&L hero). Also added js/cockpit.js,
+// js/ledger.js, js/coach.js to STATIC_ASSETS below — a real pre-existing
+// gap found while making this edit: all three (FIFO PRO 2.0 additions)
+// were missing from this precache list, so a fresh install going offline
+// before ever completing one successful online load would have been
+// missing those three screens entirely (they were only ever cached
+// opportunistically by the fetch handler on first successful network
+// fetch, never precached at install time like every other module).
+const CACHE_NAME   = 'fifopro-v28';
+const STATIC_CACHE = 'fifopro-static-v28';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
@@ -111,6 +127,9 @@ const STATIC_ASSETS = [
   'js/tradeReplay.js',
   'js/performanceTimeline.js',
   'js/settings.js',
+  'js/cockpit.js',
+  'js/ledger.js',
+  'js/coach.js',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
 ];
 

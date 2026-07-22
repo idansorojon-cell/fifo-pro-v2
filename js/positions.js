@@ -122,13 +122,13 @@ const Positions = (() => {
         </div>
 
         ${live?.preMarket ? `
-          <div style="font-size:11px;padding:2px 8px;background:var(--gold-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--gold)">
+          <div style="font-size:11px;padding:2px 8px;background:var(--surface-3);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--text-2)">
             🌅 Pre: <b><bdi>${fprice(live.preMarket)}</bdi></b>
             ${dayChgValid ? `<bdi> (${live.preMarket>live.prevClose?'+':''}${((live.preMarket-live.prevClose)/live.prevClose*100).toFixed(2)}%)</bdi>` : ''}
           </div>` : ''}
 
         ${live?.postMarket ? `
-          <div style="font-size:11px;padding:2px 8px;background:var(--purple-dim);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--purple)">
+          <div style="font-size:11px;padding:2px 8px;background:var(--surface-3);border-radius:var(--r-sm);display:inline-block;margin-top:3px;color:var(--text-2)">
             🌙 AH: <b><bdi>${fprice(live.postMarket)}</bdi></b>
           </div>` : ''}
 

@@ -157,8 +157,8 @@ const Watchlist = (() => {
             ${chg>=0?'▲':'▼'} ${Math.abs(chg).toFixed(2)}%
           </div>` : ''}
 
-        ${pre  ? `<div class="wl-meta" style="color:var(--gold)">🌅 Pre: $${pre.toFixed(2)}</div>`   : ''}
-        ${post ? `<div class="wl-meta" style="color:var(--purple)">🌙 AH: $${post.toFixed(2)}</div>` : ''}
+        ${pre  ? `<div class="wl-meta">🌅 Pre: $${pre.toFixed(2)}</div>`   : ''}
+        ${post ? `<div class="wl-meta">🌙 AH: $${post.toFixed(2)}</div>` : ''}
         ${vol  ? `<div class="wl-meta">Vol: ${(vol/1e6).toFixed(1)}M</div>`                          : ''}
 
         ${inTrades.length ? `

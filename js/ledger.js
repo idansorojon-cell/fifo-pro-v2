@@ -86,7 +86,7 @@ const Ledger = (() => {
   function _statusBadges(r) {
     const badges = [];
     if (r.isOpen)      badges.push(`<span class="badge badge-blue">Open</span>`);
-    if (r.isWatching)  badges.push(`<span class="badge badge-purple">Watching</span>`);
+    if (r.isWatching)  badges.push(`<span class="badge badge-muted">Watching</span>`);
     if (r.hasHistory)  badges.push(`<span class="badge badge-muted">${r.tradeCount} עסקאות</span>`);
     return badges.join(' ');
   }
