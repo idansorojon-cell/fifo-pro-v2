@@ -113,7 +113,7 @@ const Coach = (() => {
     if (!el) return;
 
     if (!APP.trades.length && !APP.positions.length) {
-      el.innerHTML = `<div class="cockpit-page"><div class="cockpit-header"><div class="cockpit-title">Coach</div></div><div style="color:var(--text-3);padding:20px 0">אין מספיק נתונים לניתוח עדיין.</div></div>`;
+      el.innerHTML = `<div class="cockpit-page"><div style="color:var(--text-3);padding:20px 0">אין מספיק נתונים לניתוח עדיין.</div></div>`;
       return;
     }
 
@@ -159,11 +159,6 @@ const Coach = (() => {
 
     el.innerHTML = `
       <div class="cockpit-page">
-        <div class="cockpit-header">
-          <div class="cockpit-title">Coach</div>
-          <div class="cockpit-sub">תוכנית מול מציאות מול היסטוריה — כל תובנה מגובה בעדות, או שנאמר בפירוש שאין מספיק נתונים</div>
-        </div>
-
         <div class="cockpit-actions">
           ${priorityHTML}
         </div>

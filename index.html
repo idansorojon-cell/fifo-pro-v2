@@ -358,10 +358,43 @@
   <!-- LEDGER — moved inside the unified Trades screen (by-symbol mode);
        see #tab-trades above. -->
 
-  <!-- WATCHLIST -->
-  <div id="tab-watchlist" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;color:var(--text-3)">מעקב סימבולים — Live</div>
+  <!-- RESEARCH (v2) — merges Watchlist + Decision Engine into one
+       pre-trade flow: search one symbol → price, score, notes, history →
+       straight into the Trade Ticket without re-typing anything. -->
+  <div id="screen-research" class="panel">
+    <div class="screen-head">
+      <div class="eyebrow">מחקר לפני עסקה</div>
+      <h1>Research</h1>
+      <div class="lede">רשימת מעקב + מנוע החלטות — זרימה אחת · מהציון ישר לטיקט המסחר</div>
+    </div>
+
+    <!-- Decision Engine (existing module, ids unchanged) -->
+    <div class="card">
+      <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
+      <div class="de-grid">
+        <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
+        <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
+        <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
+        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="DecisionEngine.run()"><svg class="icon"><use href="#icon-search"/></svg> נתח מניה</button>
+        <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
+        <button class="btn btn-ghost" data-owner-only onclick="openTradeTicket({intent:'open', symbol:(document.getElementById('de-symbol')?.value||'').toUpperCase(), entry:document.getElementById('de-entry')?.value, stop:document.getElementById('de-stop')?.value, target:document.getElementById('de-target')?.value, qty:document.getElementById('de-qty')?.value})"><svg class="icon"><use href="#icon-plus"/></svg> פתח טיקט מסחר עם הנתונים</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
+        שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
+        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום מבוסס-חוקים.
+        לא מחליף שיקול דעת.
+      </div>
+    </div>
+    <div id="decision-result"></div>
+    <div id="trade-memory"></div>
+
+    <!-- Watchlist (existing module, ids unchanged) -->
+    <div class="sec-head" style="margin-top:22px"><h3>רשימת מעקב — Live</h3>
       <div style="display:flex;gap:8px">
         <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
@@ -510,54 +543,63 @@
        AI CATEGORY
   ═══════════════════════════════════════════════════ -->
 
-  <!-- DECISION ENGINE -->
-  <div id="tab-decision" class="panel">
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
-      <div class="de-grid">
-        <div class="form-group"><label>סימבול</label><input id="de-symbol" placeholder="ONDS" style="text-transform:uppercase;font-weight:700;font-size:16px"></div>
-        <div class="form-group"><label>מחיר כניסה</label><input id="de-entry" type="number" step="0.01" placeholder="אופציונלי"></div>
-        <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
-        <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
-        <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
-        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
+  <!-- DECISION ENGINE — moved into the unified Research screen above. -->
+
+  <!-- COACH (v2) — one Coach, evidence-first. The evidence Coach
+       (js/coach.js, deterministic, every claim backed by data or an
+       explicit "not enough data") is the primary pane; the historical
+       pattern analysis (js/aiCoach.js, also fully deterministic) is the
+       second pane. Honest labeling: neither calls an LLM — the only
+       real AI in the product is Chat below, and each screen now says so. -->
+  <div id="screen-coach" class="panel">
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">אימון</div>
+        <h1>Coach</h1>
+        <div class="lede">כל תובנה מגובה בעדות מספרית, או שנאמר בפירוש שאין מספיק נתונים · חישוב דטרמיניסטי, לא מודל שפה</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="DecisionEngine.run()"><svg class="icon"><use href="#icon-search"/></svg> נתח מניה</button>
-        <button class="btn btn-ghost"   onclick="DecisionEngine.fillFromWatchlist()">מהWatchlist</button>
-      </div>
-      <div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6">
-        שני ציונים עצמאיים: <strong>Market Technical Score</strong> (המניה בלבד, נתונים אמיתיים — אם חסרים יוצג "Insufficient market data")
-        ו-<strong>Trade Discipline Score</strong> (אתה — תמיד מבוסס על היסטוריית המסחר האמיתית שלך). בנוסף: ניתוח חדשות וסיכום AI.
-        לא מחליף שיקול דעת.
+      <div class="segmented" id="coach-seg">
+        <button class="active" data-cseg="evidence" onclick="CoachScreen.setSeg('evidence')">היום — מבוסס עדויות</button>
+        <button data-cseg="patterns" onclick="CoachScreen.setSeg('patterns')">דפוסים היסטוריים</button>
       </div>
     </div>
-    <div id="decision-result"></div>
-    <div id="trade-memory"></div>
+
+    <!-- Pane: evidence coach (js/coach.js renders into #tab-coach-evidence) -->
+    <div id="coach-pane-evidence" class="trades-pane active">
+      <div id="tab-coach-evidence"></div>
+    </div>
+
+    <!-- Pane: historical patterns (js/aiCoach.js targets these ids) -->
+    <div id="coach-pane-patterns" class="trades-pane">
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-cpu"/></svg> ניתוח אופי המסחר — חישוב דפוסים על כל ההיסטוריה</div>
+        <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
+      </div>
+      <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
+      <div id="coach-grid" class="coach-grid"></div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-clipboard"/></svg> פעולות לשבוע הקרוב</div>
+        <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
+      </div>
+    </div>
   </div>
 
-  <!-- AI COACH -->
-  <div id="tab-coach" class="panel">
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-cpu"/></svg> AI Coach — ניתוח אופי המסחר שלך</div>
-      <div id="coach-summary" style="font-size:14px;line-height:1.7;color:var(--text-2)"></div>
-    </div>
-    <div id="coach-report" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px"></div>
-    <div id="coach-grid" class="coach-grid"></div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-clipboard"/></svg> פעולות לשבוע הקרוב</div>
-      <div id="coach-actions" style="font-size:13px;line-height:1.9;color:var(--text-2)"></div>
-    </div>
-  </div>
-
-  <!-- COACH — evidence-based (FIFO PRO 2.0, Phase 3). Renders entirely via
-       Coach.render() (js/coach.js). AI Coach above is unchanged. -->
-  <div id="tab-coach-evidence" class="panel"></div>
-
-  <!-- AI CHAT -->
+  <!-- AI CHAT — the one genuinely LLM-backed feature. The context line
+       below states exactly what data the model receives and its limits. -->
   <div id="tab-aichat" class="panel">
+    <div class="screen-head">
+      <div class="eyebrow">בינה מלאכותית</div>
+      <h1>Chat</h1>
+      <div class="lede">שיחה חופשית עם מודל שפה (Claude) על המסחר שלך</div>
+    </div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text-2);line-height:1.7">
+        <b>מה המודל רואה:</b> הסטטיסטיקות המסוכמות שלך, הפוזיציות הפתוחות (כולל P&L חי), רשימת המעקב, ועד 10 לקחים אחרונים מהיומן.
+        <b>מה הוא לא רואה:</b> נתוני שוק חיים מעבר לפוזיציות שלך, חדשות, או כל מידע מחוץ למערכת.
+        התשובות נוצרות על ידי מודל שפה — הצליבו מספרים מול המסכים עצמם לפני החלטה.
+      </div>
+    </div>
     <div style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text-3);margin-bottom:4px;display:flex;align-items:center;gap:6px"><svg class="icon"><use href="#icon-message"/></svg> AI Chat — שאל שאלות על המסחר שלך</div>
       <div class="chat-suggestions" id="chat-suggestions"></div>
     </div>
     <div class="chat-container">

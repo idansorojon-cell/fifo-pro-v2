@@ -288,8 +288,8 @@ const DEST_TITLE = {
 // v1 panel until that destination's own screen is built in a later wave.
 const DEST_PANEL = {
   home:'screen-home', positions:'tab-positions', trades:'tab-trades',
-  performance:'screen-performance', research:'tab-watchlist',
-  coach:'tab-coach-evidence', chat:'tab-aichat', settings:'tab-settings'
+  performance:'screen-performance', research:'screen-research',
+  coach:'screen-coach', chat:'tab-aichat', settings:'tab-settings'
 };
 
 function navigate(dest) {
@@ -312,9 +312,21 @@ function navigate(dest) {
 function _renderDest(dest) {
   if (dest === 'home')        { if (typeof Home !== 'undefined') Home.render(); return; }
   if (dest === 'performance') { if (typeof Perf !== 'undefined') Perf.render(); return; }
+  if (dest === 'research') {
+    // Unified Research = Decision Engine + Watchlist on one screen.
+    DecisionEngine.renderStarter();
+    Watchlist.render();
+    if (APP.watchlist.length > 0) Watchlist.refresh();
+    return;
+  }
+  if (dest === 'coach') {
+    // Unified Coach: evidence-first primary + historical-patterns pane.
+    Coach.render();
+    AICoach.render();
+    return;
+  }
   const tabFor = {
-    positions:'positions', trades:'trades',
-    research:'watchlist', coach:'coach-evidence', chat:'aichat', settings:'settings'
+    positions:'positions', trades:'trades', chat:'aichat', settings:'settings'
   };
   _renderTab(tabFor[dest] || dest);
 }
@@ -347,6 +359,8 @@ function switchTab(name) {
   if (name === 'ledger')     { navigate('trades'); Trades.setMode('bysymbol'); return; }
   if (name === 'quicktrade') { openTradeTicket(); return; }
   if (name === 'dashboard' || name === 'brief' || name === 'goals') { navigate('home'); return; }
+  if (name === 'watchlist' || name === 'decision') { navigate('research'); return; }
+  if (name === 'coach' || name === 'coach-evidence') { navigate('coach'); return; }
   const perfSeg = {
     performance:'overview', insights:'discipline', grade:'discipline',
     progress:'time', ptimeline:'time', heatmap:'time',
@@ -373,6 +387,16 @@ function switchTab(name) {
 // Legacy breadcrumb helpers — no-ops now (breadcrumb removed in v2)
 function _showBreadcrumb() {}
 function _hideBreadcrumb() {}
+
+// ── Coach screen segment toggle (evidence / historical patterns) ──
+const CoachScreen = {
+  setSeg(seg) {
+    document.getElementById('coach-pane-evidence')?.classList.toggle('active', seg === 'evidence');
+    document.getElementById('coach-pane-patterns')?.classList.toggle('active', seg === 'patterns');
+    document.querySelectorAll('#coach-seg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.cseg === seg));
+  }
+};
 
 // ── Avatar menu ─────────────────────────────────────────────
 function toggleAvatarMenu(ev) {
