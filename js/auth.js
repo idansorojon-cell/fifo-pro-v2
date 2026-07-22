@@ -259,7 +259,11 @@ const Auth = (() => {
     const overlay = document.getElementById('login-overlay');
     const app     = document.getElementById('app');
     if (overlay) overlay.style.display = 'none';
-    if (app)     app.style.display = 'block';
+    // 'flex' (not 'block') — #app is the v2 flex shell (rail + main). An
+    // inline 'block' here overrides the .app-shell{display:flex} rule and
+    // stacks the rail above the content off-screen. (Only exposed on a
+    // real login; synthetic QA set display:flex directly and masked it.)
+    if (app)     app.style.display = 'flex';
   }
 
   // ── Init ────────────────────────────────────────────────

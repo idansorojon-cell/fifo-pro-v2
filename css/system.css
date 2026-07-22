@@ -488,7 +488,11 @@ body.light .rail-new { color: #fff; }
   transform: translateX(-102%); transition: transform var(--t-med);
 }
 [dir="rtl"] .slideover { transform: translateX(102%); }
-.slideover.open { transform: translateX(0); }
+/* a11y: when closed, remove from the tab order + screen-reader tree (it
+   was only transform-hidden, so its inputs/buttons stayed focusable).
+   visibility toggles after the slide-out so the transition still plays. */
+.slideover { visibility: hidden; transition: transform var(--t-med), visibility 0s linear var(--t-med); }
+.slideover.open { transform: translateX(0); visibility: visible; transition: transform var(--t-med), visibility 0s; }
 .slideover-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .slideover-body { padding: 18px 20px; overflow: auto; flex: 1; }
 .slideover-foot { padding: 14px 20px; border-top: 1px solid var(--border); }
