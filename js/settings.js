@@ -746,7 +746,7 @@ const Settings = (() => {
     const file = input?.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
         const data = JSON.parse(e.target.result);
         if (!data.trades) throw new Error('קובץ לא תקין — חסר trades');

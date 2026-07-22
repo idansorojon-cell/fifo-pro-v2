@@ -120,7 +120,7 @@ const Coach = (() => {
     const d = buildInsights();
 
     const priorityHTML = d.topAction
-      ? `<div class="cockpit-action cockpit-action--${d.topAction.severity}">${icon(d.topAction.severity === 'high' ? 'octagon' : 'alert-triangle')}<span>${d.topAction.text}</span></div>`
+      ? `<div class="cockpit-action cockpit-action--${d.topAction.severity}">${icon(d.topAction.severity === 'high' ? 'octagon' : 'alert-triangle')}<span>${d.topAction.text}</span>${d.topAction.symbol ? `<button class="coach-cta" onclick="actOnRisk('${d.topAction.symbol}')">טפל ${icon('chevron')}</button>` : ''}</div>`
       : `<div class="cockpit-action cockpit-action--ok">${icon('check-circle')}<span>לא זוהתה פוזיציה שדורשת תשומת לב מיידית כרגע — זו התשובה, לא ניחוש.</span></div>`;
 
     const positionsHTML = d.perPosition.length

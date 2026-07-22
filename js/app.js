@@ -430,6 +430,21 @@ function switchTab(name) {
 function _showBreadcrumb() {}
 function _hideBreadcrumb() {}
 
+
+// ── Direct action from a risk alert ──────────────────────────
+// The attention queue / risk pill isn't just a link — it opens the exact
+// fix: the position editor, focused on the stop field for a no-stop
+// position. "פעולה ישירה מתוך התראת סיכון" from the product brief.
+function actOnRisk(symbol) {
+  const p = (APP.positions || []).find(x => x.symbol === symbol);
+  if (!p) { navigate('positions'); return; }
+  navigate('positions');
+  setTimeout(() => {
+    if (typeof Positions !== 'undefined') Positions.openEdit(p.id);
+    setTimeout(() => document.getElementById('pf-stop')?.focus(), 120);
+  }, 40);
+}
+
 // ── Coach screen segment toggle (evidence / historical patterns) ──
 const CoachScreen = {
   setSeg(seg) {

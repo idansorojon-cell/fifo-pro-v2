@@ -76,10 +76,10 @@ const Home = (() => {
       return `<div class="attn-empty">${icon('check-circle')} אין פוזיציות שדורשות תשומת לב מיידית כרגע.</div>`;
     }
     return `<div class="attn">${items.map(i => `
-      <button class="attn-item" onclick="navigate('positions')">
+      <button class="attn-item" onclick="actOnRisk('${i.symbol}')">
         <span class="sev ${i.severity === 'high' ? 'high' : 'mid'}"></span>
         <span>${i.text}</span>
-        <span class="chev">${icon('chevron')}</span>
+        <span class="attn-cta">${i.severity === 'high' ? 'טפל עכשיו' : 'בדוק'} ${icon('chevron')}</span>
       </button>`).join('')}</div>`;
   }
 

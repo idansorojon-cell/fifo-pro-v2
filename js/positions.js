@@ -104,7 +104,7 @@ const Positions = (() => {
     }
     // Missing stop and/or target — state it plainly rather than draw a fake bar.
     const parts = [];
-    if (!stop)   parts.push(`<span class="pcard-warn">${icon('alert-triangle')} אין סטופ מוגדר</span>`);
+    if (!stop)   parts.push(`<span class="pcard-warn">${icon('alert-triangle')} אין סטופ מוגדר</span>${Auth.isViewer() ? '' : ` <button class="pcard-setstop" onclick="event.stopPropagation(); actOnRisk('${p.symbol}')">${icon('octagon')} הגדר סטופ</button>`}`);
     else         parts.push(`<span>סטופ <b><bdi>${fprice(stop)}</bdi></b></span>`);
     if (target)  parts.push(`<span>יעד <b><bdi>${fprice(target)}</bdi></b></span>`);
     else         parts.push(`<span class="pcard-warn">אין יעד</span>`);
