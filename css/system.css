@@ -342,6 +342,7 @@ body.light .rail-new { color: #fff; }
 .screen-head .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
 .screen-head h1 { font-size: 20px; font-weight: 700; }
 .screen-head .lede { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.screen-head--row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 
 /* Avatar dropdown menu */
 .avatar-menu {
@@ -517,6 +518,41 @@ body.light .rail-new { color: #fff; }
 .home-pos-pnl.pos { color: var(--signal); }
 .home-pos-pnl.neg { color: var(--alarm); }
 .live-dot { width: 6px; height: 6px; border-radius: 99px; background: var(--signal); display: inline-block; animation: qt-pulse 2.4s ease infinite; }
+
+/* ── Positions v2 ───────────────────────────────────────── */
+.pos-summary-strip {
+  display: flex; gap: 24px; flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 14px 18px; margin-bottom: 16px;
+}
+.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.pcard { background: var(--paper); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; }
+.pcard-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.pcard-sym { font-weight: 800; font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
+.pcard-price-row { display: flex; align-items: baseline; gap: 10px; }
+.pcard-price { font-size: 22px; font-weight: 700; }
+.pcard-price.pos { color: var(--signal); } .pcard-price.neg { color: var(--alarm); }
+.pcard-daychg { font-size: 12px; font-weight: 600; }
+.pcard-daychg.pos { color: var(--signal); } .pcard-daychg.neg { color: var(--alarm); }
+.pcard-chip { font-size: 11px; padding: 2px 8px; background: var(--paper-3); border-radius: var(--r-sm); display: inline-block; margin-top: 4px; color: var(--text-2); }
+.pcard-chip b { font-family: var(--font-mono); }
+.pcard .rr-gauge { margin-top: 14px; }
+.pcard-fill { position: absolute; top: 0; bottom: 0; border-radius: 99px; opacity: 0.4; }
+.rr-gauge-marker { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 99px; background: var(--text-1); border: 2px solid var(--paper); transform: translate(50%,-50%); }
+.pcard-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text-3); transform: translateX(50%); opacity: 0.6; }
+.rr-labels--flat { margin-top: 4px; gap: 12px; }
+.pcard-warn { color: var(--amber); display: inline-flex; align-items: center; gap: 4px; }
+.pcard-warn .icon { width: 12px; height: 12px; }
+.pcard-thesis { font-size: 12px; color: var(--text-3); font-style: italic; margin-top: 12px; border-inline-start: 2px solid var(--border-2); padding-inline-start: 9px; }
+.pcard-stats { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 14px; gap: 10px; }
+.pcard-stat-l { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 2px; }
+.pcard-stat-v { font-size: 14px; font-weight: 700; }
+.pcard-stat-v.pos { color: var(--signal); } .pcard-stat-v.neg { color: var(--alarm); }
+.pcard-pl { text-align: end; }
+.pcard-pl-sub { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.pcard-actions { display: flex; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.pcard-actions .btn-icon { flex: 1; gap: 6px; font-size: 12px; font-weight: 600; padding: 8px; }
+.pcard-actions .btn-icon .icon { width: 15px; height: 15px; }
 
 /* ── Reduced motion ─────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {

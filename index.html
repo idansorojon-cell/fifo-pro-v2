@@ -573,20 +573,22 @@
        TRADING CATEGORY
   ═══════════════════════════════════════════════════ -->
 
-  <!-- POSITIONS -->
+  <!-- POSITIONS (v2) -->
   <div id="tab-positions" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:13px;color:var(--text-3)">פוזיציות פתוחות</div>
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">מסחר</div>
+        <h1>פוזיציות פתוחות</h1>
+        <div class="lede">מחיר חי · P&amp;L · סיכון · R:R · תזת הכניסה גלויה כל עוד הפוזיציה פתוחה</div>
+      </div>
       <div style="display:flex;gap:8px">
         <button id="pos-refresh-btn" class="btn btn-ghost btn-sm" onclick="Positions.refreshPrices(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" data-owner-only onclick="Positions.openForm()" title="פוזיציה חדשה — נכתבת כפעולת BUY ביומן הפעולות"><svg class="icon"><use href="#icon-plus"/></svg> פוזיציה חדשה</button>
       </div>
     </div>
-    <div id="pos-summary" style="display:none;background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);padding:14px 18px;margin-bottom:14px;display:flex;gap:24px;flex-wrap:wrap"></div>
+    <div id="pos-summary" class="pos-summary-strip" style="display:none"></div>
     <div id="pos-grid" class="pos-grid"></div>
-    <div style="font-size:11px;color:var(--text-3);margin-top:8px">
-      * מחירים דרך Finnhub. Pre/AH מוצג כשזמין.
-    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:10px">* מחירים דרך Finnhub. Pre/After-market מוצג כשזמין.</div>
   </div>
 
   <!-- TRADES -->
