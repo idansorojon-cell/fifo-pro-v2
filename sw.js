@@ -101,8 +101,8 @@
 // unified Home screen (js/home.js, merging Cockpit/Mission Control/
 // Dashboard/Daily Brief). index.html, js/app.js changed. New files
 // css/system.css + js/home.js added to the precache list below.
-const CACHE_NAME   = 'fifopro-v31';
-const STATIC_CACHE = 'fifopro-static-v31';
+const CACHE_NAME   = 'fifopro-v32';
+const STATIC_CACHE = 'fifopro-static-v32';
 
 // NOTE: paths are relative (no leading "/") so they resolve correctly
 // both at a domain root AND under a GitHub Pages project subpath
@@ -116,6 +116,7 @@ const STATIC_ASSETS = [
   'css/system.css',
   'js/utils.js',
   'js/home.js',
+  'js/tradeTicket.js',
   'js/learningEngine.js',
   'js/api.js',
   'js/app.js',

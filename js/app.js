@@ -339,9 +339,11 @@ const _TAB_TO_DEST = {
 // existing switchTab('x') caller keeps working.
 function switchTab(name) {
   // Screens absorbed into a unified destination redirect there —
-  // journal + ledger are now modes/content of the Trades screen.
-  if (name === 'journal') { navigate('trades'); return; }
-  if (name === 'ledger')  { navigate('trades'); Trades.setMode('bysymbol'); return; }
+  // journal + ledger are now modes/content of the Trades screen, and
+  // quicktrade is the Trade Ticket slide-over.
+  if (name === 'journal')    { navigate('trades'); return; }
+  if (name === 'ledger')     { navigate('trades'); Trades.setMode('bysymbol'); return; }
+  if (name === 'quicktrade') { openTradeTicket(); return; }
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
