@@ -22,6 +22,17 @@
 
 const Home = (() => {
 
+
+  // Signed money display, bidi-safe. Zero is NEUTRAL (mist), not profit-
+  // green — a $0 day is not a win. Always <bdi>-wrapped: mixed LTR
+  // ($, digits, +/-) inside RTL text otherwise reorders the sign
+  // ("+$94" renders "$94+").
+  function _money(v) {
+    const r = Math.round(v);
+    return `<bdi>${r > 0 ? '+' : ''}${f$(r)}</bdi>`;
+  }
+  function _tone(v) { return Math.round(v) > 0 ? 'pos' : Math.round(v) < 0 ? 'neg' : 'zero'; }
+
   function _greeting() {
     const g = (typeof timeGreeting === 'function') ? timeGreeting() : 'שלום';
     const name = (typeof Auth !== 'undefined' && Auth.getDisplayName) ? Auth.getDisplayName() : '';
@@ -68,7 +79,7 @@ const Home = (() => {
       <button class="attn-item" onclick="navigate('positions')">
         <span class="sev ${i.severity === 'high' ? 'high' : 'mid'}"></span>
         <span>${i.text}</span>
-        <span class="chev">${icon('trending-up')}</span>
+        <span class="chev">${icon('chevron')}</span>
       </button>`).join('')}</div>`;
   }
 
@@ -87,7 +98,7 @@ const Home = (() => {
           <span class="qpill ${cls}">${label}</span>
         </div>
         <div class="home-pos-price num">${price ? fprice(price) : '—'}</div>
-        <div class="home-pos-pnl num ${pnl==null?'':(pnl>=0?'pos':'neg')}">${pnl!=null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}${pnlPct!=null ? ` · ${fpct(pnlPct)}` : ''}</div>
+        <div class="home-pos-pnl num ${pnl==null?'':_tone(pnl)}">${pnl!=null ? _money(pnl) : '—'}${pnlPct!=null ? ` · <bdi>${fpct(pnlPct)}</bdi>` : ''}</div>
       </button>`;
   }
 
@@ -97,7 +108,7 @@ const Home = (() => {
     else if (typeof _shortCoachInsight === 'function') msg = _shortCoachInsight(st);
     if (!msg) return '';
     return `
-      <div class="sec-head"><h3>Coach</h3><button class="linklike" onclick="navigate('coach')">פתח Coach ←</button></div>
+      <div class="sec-head"><h3>מאמן</h3><button class="linklike" onclick="navigate('coach')">פתח את המאמן ←</button></div>
       <button class="coach-line" onclick="navigate('coach')">
         ${icon('cpu')}<span>${msg}</span>
       </button>`;
@@ -114,7 +125,7 @@ const Home = (() => {
     const hasLive = live.positionsCount > 0;
     const openPnl = live.unrealizedNet;
     const heroSub = hasLive
-      ? `${live.liveCount}/${live.positionsCount} פוזיציות live`
+      ? `<bdi>${live.liveCount}/${live.positionsCount}</bdi> פוזיציות live`
       : 'אין פוזיציות פתוחות';
 
     const winRate = st.winRate != null ? st.winRate : 0;
@@ -133,15 +144,15 @@ const Home = (() => {
 
       <div class="hero-metric">
         <div class="hero-metric-label">Open P&L — פוזיציות פתוחות בלבד <span class="live-dot" title="מתעדכן כל 15 שניות"></span></div>
-        <div class="hero-metric-value ${openPnl>=0?'pos':'neg'}">${(openPnl>=0?'+':'')}${f$(Math.round(openPnl))}</div>
-        <div class="hero-metric-sub">${heroSub}${live.realizedNet!=null ? ` · ריאלי מצטבר <span class="num">${f$(Math.round(live.combinedNet - live.unrealizedNet))}</span>` : ''}</div>
+        <div class="hero-metric-value ${_tone(openPnl)}">${_money(openPnl)}</div>
+        <div class="hero-metric-sub">${heroSub}${live.realizedNet!=null ? ` · ריאלי מצטבר <span class="num"><bdi>${f$(Math.round(live.combinedNet - live.unrealizedNet))}</bdi></span>` : ''}</div>
         <button class="hero-expand" id="home-hero-expand" onclick="Home.toggleBreakdown()">
           ${icon('trending-down')} פירוק רווח ריאלי: היום · השבוע · החודש
         </button>
         <div class="hero-detail" id="home-hero-detail" hidden>
-          <div class="hero-detail-item"><div class="l">ריאלי היום</div><div class="v ${rw.today>=0?'':'neg'}" style="color:${rw.today>=0?'var(--signal)':'var(--alarm)'}">${(rw.today>=0?'+':'')}${f$(Math.round(rw.today))}</div></div>
-          <div class="hero-detail-item"><div class="l">ריאלי השבוע</div><div class="v" style="color:${rw.week>=0?'var(--signal)':'var(--alarm)'}">${(rw.week>=0?'+':'')}${f$(Math.round(rw.week))}</div></div>
-          <div class="hero-detail-item"><div class="l">ריאלי החודש</div><div class="v" style="color:${rw.month>=0?'var(--signal)':'var(--alarm)'}">${(rw.month>=0?'+':'')}${f$(Math.round(rw.month))}</div></div>
+          <div class="hero-detail-item"><div class="l">ריאלי היום</div><div class="v ${_tone(rw.today)}">${_money(rw.today)}</div></div>
+          <div class="hero-detail-item"><div class="l">ריאלי השבוע</div><div class="v ${_tone(rw.week)}">${_money(rw.week)}</div></div>
+          <div class="hero-detail-item"><div class="l">ריאלי החודש</div><div class="v ${_tone(rw.month)}">${_money(rw.month)}</div></div>
         </div>
       </div>
 

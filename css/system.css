@@ -602,6 +602,39 @@ body.light .rail-new { color: #fff; }
 .pcard-actions .btn-icon { flex: 1; gap: 6px; font-size: 12px; font-weight: 600; padding: 8px; }
 .pcard-actions .btn-icon .icon { width: 15px; height: 15px; }
 
+
+/* ── Value tones (pos / neg / zero-neutral) ─────────────── */
+.hero-metric-value.zero, .hero-detail-item .v.zero, .home-pos-pnl.zero { color: var(--text-3); }
+.hero-detail-item .v.pos { color: var(--signal); }
+.hero-detail-item .v.neg { color: var(--alarm); }
+.attn-item .chev .icon { width: 14px; height: 14px; }
+
+/* ── Mistake Detector v2 (quiet cards, no emoji, count-first) ── */
+.mistake-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.mq-card {
+  background: var(--paper-2); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 3px;
+}
+.mq-card.issue { border-inline-start: 3px solid var(--alarm); }
+.mq-card.some  { border-inline-start: 3px solid var(--amber); }
+.mq-card.clean { border-inline-start: 3px solid var(--border-2); }
+.mq-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mq-name { font-size: 12px; font-weight: 700; color: var(--text-1); display: flex; align-items: center; gap: 6px; }
+.mq-name .icon { width: 14px; height: 14px; color: var(--text-3); }
+.mq-count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 800; }
+.mq-card.issue .mq-count { color: var(--alarm); }
+.mq-card.some  .mq-count { color: var(--amber); }
+.mq-card.clean .mq-count { color: var(--text-3); }
+.mq-desc { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+
+/* Coach patterns pane (aiCoach) — quiet the v1 card borders */
+#coach-report .card { border-color: var(--border) !important; }
+#coach-report .card-title { color: var(--text-2) !important; }
+.coach-card { background: var(--paper-2); border: 1px solid var(--border); border-radius: var(--r-md); }
+
+/* Settings v2 header — replaces the v1 gear-hero */
+.settings-hero { display: none !important; }
+
 /* ── Reduced motion ─────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .qt-status .dot.ok, .slideover, .scrim, .hero-expand .icon, .live-dot { animation: none !important; transition: none !important; }

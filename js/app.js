@@ -280,9 +280,9 @@ APP.currentDest     = 'home';
 APP.lastTab         = {};     // legacy shim target (harmless)
 
 const DEST_TITLE = {
-  home:'Home', positions:'Positions', trades:'Trades',
-  performance:'Performance', research:'Research',
-  coach:'Coach', chat:'Chat', settings:'הגדרות'
+  home:'בית', positions:'פוזיציות', trades:'עסקאות',
+  performance:'ביצועים', research:'מחקר',
+  coach:'מאמן', chat:'צ\'אט', settings:'הגדרות'
 };
 // Destination → the panel element it shows. Some point at an existing
 // v1 panel until that destination's own screen is built in a later wave.

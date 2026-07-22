@@ -81,17 +81,17 @@ const Settings = (() => {
     <div class="settings-page">
 
       <!-- ── Page title ── -->
-      <div class="settings-hero">
-        <div class="settings-hero-icon">⚙️</div>
-        <div>
-          <div class="settings-hero-title">הגדרות מערכת</div>
-          <div class="settings-hero-sub">התאמה אישית מלאה של FIFO PRO</div>
+      <div class="screen-head">
+        <div class="eyebrow">חשבון</div>
+        <h1>הגדרות</h1>
+        <div class="lede">התאמה אישית מלאה של FIFO PRO</div>
+      </div>
         </div>
       </div>
 
       <!-- ════ 1. כללי ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🌐</span> כללי</div>
+        <div class="settings-section-title"> כללי</div>
         <div class="settings-card">
 
           <div class="settings-row">
@@ -157,7 +157,7 @@ const Settings = (() => {
 
       <!-- ════ 2. יעדים ומסחר ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🎯</span> יעדים מסחריים</div>
+        <div class="settings-section-title"> יעדים מסחריים</div>
         <div class="settings-card">
           ${_numRow('monthlyGoal','יעד חודשי ($)','יעד הרווח החודשי שלך',p.monthlyGoal,'$')}
           <!-- FUNCTIONAL CLEANUP: hidden — weeklyGoal/dailyGoal are never read
@@ -174,7 +174,7 @@ const Settings = (() => {
 
       <!-- ════ 3. ניהול סיכון ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🛡️</span> ניהול סיכון</div>
+        <div class="settings-section-title"> ניהול סיכון</div>
         <div class="settings-card">
           ${_numRow('riskPct','% סיכון לעסקה','אחוז מקסימלי מהתיק לסיכון',p.riskPct,'%',0.1,5,0.1)}
           <!-- SPRINT 0: hidden — stopLossPct/takeProfitPct/defaultRR/taxPct encode
@@ -220,7 +220,7 @@ const Settings = (() => {
            session-aware version belongs in FIFO PRO 2.0's Cockpit, not this
            generic HH:MM picker. Not deleted, kept intact below.
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🕐</span> שעות מסחר מועדפות</div>
+        <div class="settings-section-title"> שעות מסחר מועדפות</div>
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-row-info">
@@ -243,7 +243,7 @@ const Settings = (() => {
 
       <!-- ════ 5. נתוני שוק חיים ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">📡</span> נתוני שוק חיים</div>
+        <div class="settings-section-title"> נתוני שוק חיים</div>
         <div class="settings-card">
 
           <div class="settings-row">
@@ -288,7 +288,7 @@ const Settings = (() => {
               <span class="settings-row-label">מחק Cache</span>
               <span class="settings-row-sub">מאלץ טעינה מחדש מהשרת</span>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="Settings.clearCache()">🗑 נקה Cache</button>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.clearCache()">${icon('x')} נקה Cache</button>
           </div>
 
         </div>
@@ -301,7 +301,7 @@ const Settings = (() => {
            and AI Chat doesn't consult a detail-level preference. Building that
            is new feature work, not a wiring fix. Not deleted, kept for 2.0.
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🤖</span> בינה מלאכותית</div>
+        <div class="settings-section-title"> בינה מלאכותית</div>
         <div class="settings-card">
 
           <div class="settings-row">
@@ -338,7 +338,7 @@ const Settings = (() => {
 
       <!-- ════ 7. התראות ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🔔</span> התראות</div>
+        <div class="settings-section-title"> התראות</div>
         <div class="settings-card">
           <div class="settings-note">התראות מוצגות בתוך האפליקציה. Push Notifications דורשות הגדרה נפרדת.</div>
           ${_toggleRow('alertStop','התראת Stop Loss','פוזיציה קרובה לסטופ או פגיעה בו — משפיע בפועל על מערכת ההתראות',p.alertStop)}
@@ -369,7 +369,7 @@ const Settings = (() => {
            Not deleted — section title, card, and all 5 _moduleToggle calls
            remain intact below.
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🧩</span> מודולים</div>
+        <div class="settings-section-title"> מודולים</div>
         <div class="settings-card">
           ${_moduleToggle('weekSummary','סיכום שבועי','כרטיסי סיכום בדשבורד',p)}
           ${_moduleToggle('portfolioHealth','בריאות תיק','ניתוח סיכון וחשיפה',p)}
@@ -383,7 +383,7 @@ const Settings = (() => {
 
       <!-- ════ 9. גיבוי ונתונים ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">💾</span> גיבוי ונתונים</div>
+        <div class="settings-section-title"> גיבוי ונתונים</div>
         <div class="settings-card">
 
           <div class="settings-row">
@@ -416,7 +416,7 @@ const Settings = (() => {
               <span class="settings-row-label">סנכרון עם Google Sheets</span>
               <span class="settings-row-sub">טעינה מחדש מהשרת</span>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="Settings.syncNow()">🔄 סנכרן עכשיו</button>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.syncNow()">${icon('refresh')} סנכרן עכשיו</button>
           </div>
 
           <div class="settings-row">
@@ -424,7 +424,7 @@ const Settings = (() => {
               <span class="settings-row-label">בדיקת תקינות נתונים</span>
               <span class="settings-row-sub">בדיקת עסקאות לשגיאות ואי-עקביות</span>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="Settings.validateData()">🔍 בדוק נתונים</button>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.validateData()">${icon('search')} בדוק נתונים</button>
           </div>
 
           <div id="s-validate-result" style="display:none;margin-top:8px;padding:10px;border-radius:var(--r-md);font-size:12px"></div>
@@ -434,7 +434,7 @@ const Settings = (() => {
 
       <!-- ════ 10. אבטחה ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">🔐</span> אבטחה</div>
+        <div class="settings-section-title"> אבטחה</div>
         <div class="settings-card">
 
           ${Auth.getRole() === 'owner' ? `
@@ -499,7 +499,7 @@ const Settings = (() => {
               <span class="settings-row-label">בטל כל הSessionים</span>
               <span class="settings-row-sub">מנתק את כל המכשירים המחוברים באחת</span>
             </div>
-            <button class="btn btn-danger btn-sm" onclick="Settings.revokeAllSessions()">🔒 נתק הכל</button>
+            <button class="btn btn-danger btn-sm" onclick="Settings.revokeAllSessions()">נתק הכל</button>
           </div>
           <div id="revoke-msg" style="margin:0 16px 12px;font-size:12px"></div>
 
@@ -560,7 +560,7 @@ const Settings = (() => {
 
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-primary btn-sm" onclick="Settings.saveViewerCredentials()">שמור</button>
-              <button class="btn btn-ghost btn-sm" id="viewer-lock-btn" onclick="Settings.toggleViewerEnabled()">🔒 נעל</button>
+              <button class="btn btn-ghost btn-sm" id="viewer-lock-btn" onclick="Settings.toggleViewerEnabled()">נעל</button>
               <button class="btn btn-ghost btn-sm" onclick="Settings.hideViewerManage()">ביטול</button>
             </div>
             <div id="viewer-msg" style="margin-top:8px;font-size:12px"></div>
@@ -572,7 +572,7 @@ const Settings = (() => {
 
       <!-- ════ 11. אודות ════ -->
       <div class="settings-section">
-        <div class="settings-section-title"><span class="ss-icon">ℹ️</span> אודות FIFO PRO</div>
+        <div class="settings-section-title"> אודות FIFO PRO</div>
         <div class="settings-card settings-about">
           <div class="about-brand">
             <div class="about-brand-name">FIFO <span>PRO</span></div>
@@ -836,7 +836,7 @@ const Settings = (() => {
     if (nameEl && !nameEl.value) nameEl.value = res.displayName || '';
     if (ownerNameEl && !ownerNameEl.value) ownerNameEl.value = res.ownerDisplayName || '';
     if (lockBtn) {
-      lockBtn.textContent = res.enabled ? '🔒 נעל' : '🔓 שחרר';
+      lockBtn.textContent = res.enabled ? 'נעל' : 'שחרר';
       lockBtn.dataset.enabled = res.enabled ? '1' : '0';
       lockBtn.disabled = !res.configured; // nothing to lock/unlock before a viewer exists
     }

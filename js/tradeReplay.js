@@ -34,7 +34,7 @@ const TradeReplay = (() => {
       <div class="replay-page">
         <div class="replay-header">
           <div>
-            <div style="font-size:18px;font-weight:700">🎬 Trade Replay</div>
+            <div style="font-size:18px;font-weight:700">Trade Replay</div>
             <div style="font-size:13px;color:var(--text-3)">ציר זמן ויזואלי של המסחר שלך</div>
           </div>
           <div class="replay-month-picker">
@@ -156,8 +156,8 @@ const TradeReplay = (() => {
           <div class="tc-header">
             <div style="display:flex;align-items:center;gap:10px">
               <div class="tc-sym">${t.symbol}</div>
-              ${isBig ? `<div class="badge ${isWin ? 'badge-green' : 'badge-red'}">🔥 ${Math.abs(t.pct).toFixed(0)}%</div>` : ''}
-              ${isLong ? `<div class="badge badge-blue">⏳ ${t.hold_days}d</div>` : ''}
+              ${isBig ? `<div class="badge ${isWin ? 'badge-green' : 'badge-red'}">${Math.abs(t.pct).toFixed(0)}%</div>` : ''}
+              ${isLong ? `<div class="badge badge-blue">${t.hold_days} ימים</div>` : ''}
             </div>
             <div class="tc-pnl" style="color:${color}">${f$(Math.round(t.net))}</div>
           </div>
@@ -230,7 +230,7 @@ const TradeReplay = (() => {
 
     // Great wins
     const bigWins = trades.filter(t => t.pct > 20 && t.net > 0);
-    if (bigWins.length >= 2) patterns.push({ icon: '🚀', text: `${bigWins.length} עסקאות >20%`, type: 'success' });
+    if (bigWins.length >= 2) patterns.push({ icon: icon('trending-up'), text: `${bigWins.length} עסקאות >20%`, type: 'success' });
 
     // Plan follower
     const planRate = trades.filter(t => t.followed_plan === 'כן').length / trades.length;

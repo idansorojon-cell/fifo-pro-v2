@@ -6,9 +6,9 @@
 
 const Charts = (() => {
   const { f$, fpct, GREEN: G, RED: R, BLUE: B } = Utils;
-  const GREEN  = 'rgba(78,204,168,';
-  const RED    = 'rgba(255,107,107,';
-  const BLUE   = 'rgba(100,181,246,';
+  const GREEN  = 'rgba(51,196,143,'   // v2 --signal;
+  const RED    = 'rgba(240,100,95,'   // v2 --alarm;
+  const BLUE   = 'rgba(95,147,199,'   // v2 --info;
 
   function dark() { return APP.darkMode; }
 
@@ -19,13 +19,13 @@ const Charts = (() => {
   function defaults() {
     const d = dark();
     return {
-      ticks:   { color: d?'#8892a4':'#999', font:{size:10} },
+      ticks:   { color: d?'#9aa3b2':'#737d8c', font:{size:10} },
       grid:    { color: d?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.05)' },
       tooltip: {
-        bodyColor:       d?'#e8ecf4':'#333',
-        titleColor:      d?'#e8ecf4':'#333',
-        backgroundColor: d?'#1a2035':'#fff',
-        borderColor:     d?'#2a3044':'#eee',
+        bodyColor:       d?'#eef1f5':'#12151c',
+        titleColor:      d?'#eef1f5':'#12151c',
+        backgroundColor: d?'#1d222c':'#fff',
+        borderColor:     d?'#2a3140':'#e2e5ea',
         borderWidth: 1,
         padding: 8,
         callbacks: { label: c => f$(c.raw) }

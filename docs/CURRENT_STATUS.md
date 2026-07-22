@@ -64,6 +64,6 @@ The pre-merge checklist is in HANDOFF.md.
 
 ## Service worker
 
-Cache at `fifopro-v34` on this branch. New precached files:
+Cache at `fifopro-v35` on this branch. New precached files:
 `css/system.css`, `js/home.js`, `js/tradeTicket.js`,
 `js/performance.js` (+ the v28 fix that added cockpit/ledger/coach.js).

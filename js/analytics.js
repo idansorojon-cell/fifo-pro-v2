@@ -102,23 +102,27 @@ const Analytics = (() => {
     const det = Utils.detectMistakes(trades);
 
     const mistakes = [
-      { icon:'😱', name:'FOMO',             count:det.fomo,         threshold:3, desc:'נכנסת בפחד להפסיד, יצאת בהפסד' },
-      { icon:'🏃', name:'Chase',            count:det.chase,        threshold:2, desc:'רדפת אחרי מניה מתוקפת' },
-      { icon:'🚪', name:'Early Exit',       count:det.earlyExit,    threshold:5, desc:'יצאת עם רווח קטן (<3%)' },
-      { icon:'🤲', name:'Holding Losers',   count:det.holdingLosers,threshold:3, desc:'החזקת הפסדים >7 ימים' },
-      { icon:'📉', name:'Adding to Losers', count:det.addingLosers, threshold:2, desc:'הוספת לפוזיציה מפסידה' },
-      { icon:'🛑', name:'No Stop',          count:det.noStop,       threshold:3, desc:'מסחר ללא סטופ לוס' },
-      { icon:'💰', name:'Oversized',        count:det.oversized,    threshold:2, desc:'פוזיציה גדולה מדי שהפסידה' },
-      { icon:'😤', name:'Revenge Trading',  count:det.revenge,      threshold:2, desc:'הפסד אחרי הפסד גדול יותר' },
-      { icon:'🔄', name:'Overtrading',      count:det.overtrading,  threshold:2, desc:'יותר מ-4 עסקאות ביום' },
+      { icon:'zap',            name:'FOMO',            he:'פומו',              count:det.fomo,         threshold:3, desc:'נכנסת בפחד להפסיד, יצאת בהפסד' },
+      { icon:'trending-up',    name:'Chase',           he:'רדיפה',             count:det.chase,        threshold:2, desc:'רדפת אחרי מניה מתוקפת' },
+      { icon:'logout',         name:'Early Exit',      he:'יציאה מוקדמת',      count:det.earlyExit,    threshold:5, desc:'יצאת עם רווח קטן (<3%)' },
+      { icon:'trending-down',  name:'Holding Losers',  he:'החזקת הפסדים',      count:det.holdingLosers,threshold:3, desc:'החזקת הפסדים מעל 7 ימים' },
+      { icon:'plus',           name:'Adding to Losers',he:'הוספה להפסד',       count:det.addingLosers, threshold:2, desc:'הוספת לפוזיציה מפסידה' },
+      { icon:'octagon',        name:'No Stop',         he:'ללא סטופ',          count:det.noStop,       threshold:3, desc:'מסחר ללא סטופ לוס' },
+      { icon:'ruler',          name:'Oversized',       he:'גודל חריג',         count:det.oversized,    threshold:2, desc:'פוזיציה גדולה מדי שהפסידה' },
+      { icon:'alert-triangle', name:'Revenge',         he:'מסחר נקמה',         count:det.revenge,      threshold:2, desc:'הפסד מיד אחרי הפסד גדול יותר' },
+      { icon:'refresh',        name:'Overtrading',     he:'מסחר יתר',          count:det.overtrading,  threshold:2, desc:'יותר מ-4 עסקאות ביום' },
     ];
 
+    // v2 "quiet" cards: sprite icon, Hebrew-primary name, count-driven
+    // side accent (alarm ≥ threshold, amber 1..threshold-1, neutral 0).
+    // Same detection data, calmer presentation.
     el.innerHTML = mistakes.map(m => `
-      <div class="mistake-card ${m.count >= m.threshold ? 'has-issue' : m.count===0?'no-issue':''}">
-        <div class="mistake-icon">${m.icon}</div>
-        <div class="mistake-name">${m.name}</div>
-        <div class="mistake-count ${m.count>=m.threshold?'red':m.count===0?'green':'gold'}">${m.count}</div>
-        <div class="mistake-sub">${m.desc}</div>
+      <div class="mq-card ${m.count >= m.threshold ? 'issue' : m.count === 0 ? 'clean' : 'some'}">
+        <div class="mq-top">
+          <span class="mq-name">${icon(m.icon)} ${m.he} <span style="color:var(--text-3);font-weight:500">· ${m.name}</span></span>
+          <span class="mq-count">${m.count}</span>
+        </div>
+        <div class="mq-desc">${m.desc}</div>
       </div>
     `).join('');
   }
