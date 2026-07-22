@@ -490,7 +490,7 @@ const Settings = (() => {
               <span class="settings-row-label">יציאה מהמערכת</span>
               <span class="settings-row-sub">מסיר Session מהדפדפן ומהשרת</span>
             </div>
-            <button class="btn btn-danger btn-sm" onclick="if(confirm('לצאת מהמערכת?')) Auth.logout()">⎋ Logout</button>
+            <button class="btn btn-danger btn-sm" onclick="uiConfirm('לצאת מהמערכת?', { title:'יציאה', confirmText:'צא' }).then(ok => { if (ok) Auth.logout(); })">Logout</button>
           </div>
 
           ${Auth.getRole() === 'owner' ? `
@@ -750,7 +750,7 @@ const Settings = (() => {
       try {
         const data = JSON.parse(e.target.result);
         if (!data.trades) throw new Error('קובץ לא תקין — חסר trades');
-        if (!confirm(`הקובץ מ-${data.exportDate?.split('T')[0] || 'גיבוי'} מכיל ${data.trades.length} עסקאות, אך רק ההגדרות (${'prefs' in data ? 'קיימות' : 'לא קיימות'} בקובץ) ישוחזרו — עסקאות/פוזיציות/Watchlist תמיד נטענות מ-Google Sheets ולא ישתנו. להמשיך?`)) return;
+        if (!(await uiConfirm(`הקובץ מ-${data.exportDate?.split('T')[0] || 'גיבוי'} מכיל ${data.trades.length} עסקאות, אך רק ההגדרות ישוחזרו — עסקאות/פוזיציות/Watchlist תמיד נטענות מ-Google Sheets ולא ישתנו.`, { title:'שחזור הגדרות', confirmText:'המשך' }))) return;
         if (data.prefs) savePrefs(data.prefs);
         API.setStatus('✓ הגדרות יובאו (עסקאות/פוזיציות לא הושפעו — הן תמיד מגיעות מ-Google Sheets)', 'ok');
       } catch(err) {

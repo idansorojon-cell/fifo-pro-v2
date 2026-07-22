@@ -235,7 +235,7 @@ async function seedToSheets() {
       return;
     }
   } catch {}
-  if (!confirm('לטעון 108 עסקאות היסטוריות?')) { API.showSpinner(false); return; }
+  if (!(await uiConfirm('לטעון 108 עסקאות היסטוריות לגיליון?', { title:'טעינת היסטוריה', confirmText:'טען' }))) { API.showSpinner(false); return; }
   API.setStatus('מעלה נתונים...', 'info');
   const res = await API.seedAll(SEED);
   if (res.ok) {
@@ -246,6 +246,48 @@ async function seedToSheets() {
     API.setStatus('❌ ' + res.error, 'error');
   }
   API.showSpinner(false);
+}
+
+
+// ── uiConfirm — v2 styled confirmation dialog ────────────────
+// Promise<boolean> replacement for native confirm(): Quiet Terminal
+// card, focus on the primary action, Escape = cancel, danger variant
+// for destructive actions. Content is set via textContent (message may
+// embed user data — never innerHTML).
+function uiConfirm(message, opts = {}) {
+  return new Promise(resolve => {
+    let el = document.getElementById('confirm-overlay');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'confirm-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `
+      <div class="confirm-card">
+        <div class="confirm-title"></div>
+        <div class="confirm-msg"></div>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost" data-act="cancel">ביטול</button>
+          <button class="btn ${opts.danger ? 'btn-danger' : 'btn-primary'}" data-act="ok"></button>
+        </div>
+      </div>`;
+    el.querySelector('.confirm-title').textContent = opts.title || 'אישור פעולה';
+    el.querySelector('.confirm-msg').textContent = message;
+    el.querySelector('[data-act="ok"]').textContent = opts.confirmText || 'אישור';
+    const done = (v) => { el.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      if (e.key === 'Enter')  { e.preventDefault(); done(true); }
+    };
+    el.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'ok') done(true);
+      else if (act === 'cancel' || e.target === el) done(false);
+    });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(el);
+    setTimeout(() => el.querySelector('[data-act="ok"]')?.focus(), 40);
+  });
 }
 
 // ── Render all tabs ─────────────────────────────────────────
@@ -636,6 +678,12 @@ function updateSeedBanner() {
   // Hide if trades already exist — no need to show upload prompt
   b.style.display = (APP.trades.length === 0 && API.isConfigured()) ? 'flex' : 'none';
 }
+
+// ── Offline indicator (topbar pill; writes are additionally guarded
+// by VersionGuard + the API layer's own error handling) ─────────
+window.addEventListener('offline', () => document.body.classList.add('is-offline'));
+window.addEventListener('online',  () => document.body.classList.remove('is-offline'));
+if (!navigator.onLine) document.body.classList.add('is-offline');
 
 // ── Boot skeleton (bridges the load() network gap — see index.html) ──
 function _showBootSkeleton() {

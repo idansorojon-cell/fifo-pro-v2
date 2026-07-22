@@ -657,7 +657,7 @@ const Positions = (() => {
   async function remove(id) {
     const p = APP.positions.find(x => x.id === id);
     if (!p) return;
-    if (!confirm(`למחוק את הפוזיציה ${p.symbol}? הפעולה תיכתב כמכירה מלאה של ${fnum(p.qty)} מניות במחיר העלות (${fprice(p.avg_price)}) ביומן הפעולות — ללא השפעה על הרווח/הפסד.`)) return;
+    if (!(await uiConfirm(`הפוזיציה ${p.symbol} תיסגר בכתיבת מכירה מלאה של ${fnum(p.qty)} מניות במחיר העלות (${fprice(p.avg_price)}) ביומן הפעולות — ללא השפעה על הרווח/הפסד.`, { title:'הסרת פוזיציה', danger:true, confirmText:'הסר פוזיציה' }))) return;
 
     API.setStatus('מוחק פוזיציה — נכתב כפעולת SELL במחיר עלות ביומן הפעולות...', 'info');
     API.showSpinner(true);

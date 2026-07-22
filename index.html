@@ -168,19 +168,21 @@
   <div class="login-card">
     <div class="login-brand">
       <div class="login-brand-name">FIFO <span>PRO</span></div>
-      <div class="login-brand-sub">Trading Dashboard</div>
+      <div class="login-brand-sub">Trading Terminal</div>
     </div>
     <form class="login-form" onsubmit="event.preventDefault(); Auth.handleLoginSubmit();">
-      <div class="login-input-wrap">
-        <input type="text" id="login-username" placeholder="שם משתמש" autocomplete="username">
+      <div class="login-field">
+        <label for="login-username">שם משתמש</label>
+        <input type="text" id="login-username" autocomplete="username">
       </div>
-      <div class="login-input-wrap">
-        <input type="password" id="login-password" placeholder="סיסמה" autocomplete="current-password">
+      <div class="login-field">
+        <label for="login-password">סיסמה</label>
+        <input type="password" id="login-password" autocomplete="current-password">
       </div>
       <div class="login-error" id="login-error"></div>
-      <button type="submit" class="login-btn" id="login-btn">כניסה</button>
+      <button type="submit" class="btn btn-primary login-btn" id="login-btn">כניסה</button>
     </form>
-    <div class="login-hint">גישה מוגבלת — FIFO PRO</div>
+    <div class="login-hint">גישה מוגבלת · הנתונים מוצפנים בדרך לשרת</div>
   </div>
 </div>
 
@@ -241,6 +243,7 @@
       <div class="topbar-spacer"></div>
       <div class="qt-status" title="סטטוס נתונים חיים">
         <span class="dot" id="ws-dot"></span>
+        <span class="offline-pill">אין חיבור</span>
         <span id="last-updated">—</span>
         <span id="ws-label" style="display:none"></span>
         <span id="sync-spinner" style="display:none" class="spinner"></span>

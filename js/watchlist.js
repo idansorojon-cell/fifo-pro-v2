@@ -41,7 +41,7 @@ const Watchlist = (() => {
   // ── Remove ─────────────────────────────────────────────
 
   async function remove(sym) {
-    if (!confirm('להסיר את ' + sym + '?')) return;
+    if (!(await uiConfirm('להסיר את ' + sym + ' מרשימת המעקב?', { title:'הסרה מהמעקב', danger:true, confirmText:'הסר' }))) return;
     try {
       API.setStatus('מוחק ' + sym + '...', 'info');
       const data = await API.removeWatchlistItem(sym);
