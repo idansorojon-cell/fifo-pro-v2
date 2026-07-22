@@ -591,64 +591,61 @@
     <div style="font-size:11px;color:var(--text-3);margin-top:10px">* מחירים דרך Finnhub. Pre/After-market מוצג כשזמין.</div>
   </div>
 
-  <!-- TRADES -->
+  <!-- TRADES (v2) — merges history + Ledger (by-symbol) + inline Journal -->
   <div id="tab-trades" class="panel">
-    <div class="search-row">
-      <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
-      <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
-      <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
-      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV"><svg class="icon"><use href="#icon-download"/></svg> CSV</button>
-    </div>
-    <div class="card card--flush">
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th class="sort-btn" onclick="Trades.setSort('symbol')">סימבול <span id="s-symbol"></span></th>
-            <th class="sort-btn" onclick="Trades.setSort('sell_date')">מכירה <span id="s-sell_date"></span></th>
-            <th class="sort-btn" onclick="Trades.setSort('qty')">כמות <span id="s-qty"></span></th>
-            <th>קנייה $</th><th>מכירה $</th>
-            <th class="sort-btn" onclick="Trades.setSort('net')">נטו $ <span id="s-net"></span></th>
-            <th>נטו ₪</th>
-            <th class="sort-btn" onclick="Trades.setSort('pct')">% <span id="s-pct"></span></th>
-            <th>ימים</th><th></th>
-          </tr></thead>
-          <tbody id="trades-tbody"></tbody>
-        </table>
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">מסחר</div>
+        <h1>Trades</h1>
+        <div class="lede">כל העסקאות הסגורות · יומן בלחיצה על שורה · תצוגה לפי עסקה או לפי סימבול</div>
       </div>
-      <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <span id="trades-count"></span>
-        <button id="trades-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Trades.loadMore()">טען עוד ⌄</button>
+      <div class="segmented" id="trades-mode">
+        <button class="active" data-mode="bytrade"  onclick="Trades.setMode('bytrade')">לפי עסקה</button>
+        <button data-mode="bysymbol" onclick="Trades.setMode('bysymbol')">לפי סימבול</button>
       </div>
     </div>
+
+    <!-- Pane: by trade -->
+    <div id="trades-pane-bytrade" class="trades-pane active">
+      <div class="search-row">
+        <input id="search-input" type="text" placeholder="חיפוש סימבול / תאריך / הערה..." oninput="Trades.renderDebounced()">
+        <select id="filter-sym"   onchange="Trades.render()"><option value="">כל הסימבולים</option></select>
+        <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV"><svg class="icon"><use href="#icon-download"/></svg> CSV</button>
+      </div>
+      <div class="card card--flush">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th class="sort-btn" onclick="Trades.setSort('symbol')">סימבול <span id="s-symbol"></span></th>
+              <th class="sort-btn" onclick="Trades.setSort('sell_date')">מכירה <span id="s-sell_date"></span></th>
+              <th class="sort-btn" onclick="Trades.setSort('qty')">כמות <span id="s-qty"></span></th>
+              <th>קנייה $</th><th>מכירה $</th>
+              <th class="sort-btn" onclick="Trades.setSort('net')">נטו $ <span id="s-net"></span></th>
+              <th>נטו ₪</th>
+              <th class="sort-btn" onclick="Trades.setSort('pct')">% <span id="s-pct"></span></th>
+              <th>ימים</th><th></th>
+            </tr></thead>
+            <tbody id="trades-tbody"></tbody>
+          </table>
+        </div>
+        <div style="padding:10px 16px;font-size:11px;color:var(--text-3);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span id="trades-count"></span>
+          <button id="trades-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Trades.loadMore()">טען עוד ⌄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pane: by symbol — the Ledger module renders here unchanged
+         (it targets #tab-ledger by id; nesting it makes it the second
+         mode of the unified Trades screen instead of a separate screen). -->
+    <div id="tab-ledger" class="trades-pane"></div>
   </div>
 
-  <!-- JOURNAL -->
-  <div id="tab-journal" class="panel">
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:13px;color:var(--text-3)">יומן מסחר</span>
-      <input id="journal-search" type="text" placeholder="חיפוש..." oninput="Journal.renderDebounced()" style="max-width:160px">
-      <select id="journal-filter-sym"  onchange="Journal.render()" style="max-width:130px"><option value="">כל הסימבולים</option></select>
-      <select id="journal-filter-plan" onchange="Journal.render()" style="max-width:150px">
-        <option value="">כל העסקאות</option>
-        <option value="כן">לפי תוכנית ✓</option>
-        <option value="לא">לא לפי תוכנית</option>
-      </select>
-    </div>
-    <div class="card card--flush">
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th>סימבול</th><th>תאריך</th><th>נטו</th><th>סיבת כניסה</th><th>סיבת יציאה</th>
-            <th>כיבד סטופ</th><th>לפי תוכנית</th><th>לקח</th><th>מצב רגשי</th><th></th>
-          </tr></thead>
-          <tbody id="journal-tbody"></tbody>
-        </table>
-      </div>
-      <div style="padding:10px 16px;text-align:center;border-top:1px solid var(--border)">
-        <button id="journal-load-more" class="btn btn-ghost btn-sm" style="display:none" onclick="Journal.loadMore()">טען עוד ⌄</button>
-      </div>
-    </div>
-  </div>
+  <!-- JOURNAL — absorbed into the unified Trades screen: journal entries
+       render inline per trade row, edited via the existing #modal-journal.
+       Journal.render() null-guards on the removed #journal-tbody, so all
+       its existing callers are safe no-ops. -->
 
   <!-- QUICK TRADE -->
   <div id="tab-quicktrade" class="panel">
@@ -699,8 +696,8 @@
     </div>
   </div>
 
-  <!-- LEDGER (FIFO PRO 2.0, Phase 2) — renders entirely via Ledger.render() -->
-  <div id="tab-ledger" class="panel"></div>
+  <!-- LEDGER — moved inside the unified Trades screen (by-symbol mode);
+       see #tab-trades above. -->
 
   <!-- WATCHLIST -->
   <div id="tab-watchlist" class="panel">

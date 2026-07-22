@@ -36,6 +36,53 @@ const Trades = (() => {
 
   const PAGE_SIZE = 20;
   let visibleCount = PAGE_SIZE;
+  let expandedTrade = null;   // one trade row expanded at a time (inline journal)
+
+  // ── Mode: by-trade / by-symbol (Ledger) ─────────────────────
+  // The unified Trades screen merges the v1 history table, the Ledger
+  // (per-symbol lifecycle), and the Journal (now inline per row).
+  function setMode(mode) {
+    const byTrade  = document.getElementById('trades-pane-bytrade');
+    const bySymbol = document.getElementById('tab-ledger');
+    if (byTrade)  byTrade.classList.toggle('active', mode !== 'bysymbol');
+    if (bySymbol) bySymbol.classList.toggle('active', mode === 'bysymbol');
+    document.querySelectorAll('#trades-mode button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode));
+    if (mode === 'bysymbol' && typeof Ledger !== 'undefined') Ledger.render();
+  }
+
+  // A trade carries journal fields merged server-side (mergeTradeMeta_).
+  const _JFIELDS = ['entry_reason','exit_reason','respected_stop','followed_plan','lesson','emotion'];
+  function _hasJournal(t) { return _JFIELDS.some(f => (t[f]||'').toString().trim()); }
+
+  function _journalDetail(t) {
+    const row = (label, val) => val && String(val).trim()
+      ? `<div class="jd-item"><span class="jd-label">${label}</span><span class="jd-val">${val}</span></div>` : '';
+    const body = [
+      row('סיבת כניסה', t.entry_reason),
+      row('סיבת יציאה', t.exit_reason),
+      row('כיבד סטופ', t.respected_stop),
+      row('לפי תוכנית', t.followed_plan),
+      row('לקח', t.lesson),
+      row('מצב רגשי', t.emotion),
+      t.notes ? row('הערה', t.notes) : '',
+    ].filter(Boolean).join('');
+    const editBtn = Auth.isViewer() ? '' :
+      `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); Journal.openModal(${t.id})">${icon('book')} ${_hasJournal(t)?'ערוך יומן':'הוסף יומן'}</button>`;
+    return `
+      <div class="jdetail">
+        ${body ? `<div class="jd-grid">${body}</div>` : `<div class="jd-empty">אין רשומת יומן לעסקה זו עדיין.</div>`}
+        <div class="jd-foot">
+          ${editBtn}
+          <span class="jd-hint">תיקון פרטי עסקה שנרשמה (מחיר/כמות/תאריך) נעשה ישירות ביומן הפעולות בגיליון.</span>
+        </div>
+      </div>`;
+  }
+
+  function toggleDetail(id) {
+    expandedTrade = expandedTrade === id ? null : id;
+    render(true);
+  }
 
   function render(keepPage) {
     if (!keepPage) visibleCount = PAGE_SIZE;
@@ -70,26 +117,27 @@ const Trades = (() => {
 
     tbody.innerHTML = shown.map(t => {
       const netIls = Math.round(usdToIls(t.net, t.month));
-      return `<tr>
-        <td style="font-weight:700">${t.symbol}</td>
+      const hasJ = _hasJournal(t);
+      const open = expandedTrade === t.id;
+      return `<tr class="trade-row${open?' expanded':''}" onclick="Trades.toggleDetail(${t.id})">
+        <td style="font-weight:700">${t.symbol}${hasJ?' <span class="jdot" title="יש רשומת יומן"></span>':''}</td>
         <td style="color:var(--text-3)">${t.sell_date}</td>
-        <td>${fnum(t.qty)}</td>
-        <td>$${t.buy_price}</td>
-        <td>$${t.sell_price}</td>
-        <td class="${t.net>=0?'green':'red'}" style="font-weight:700">${f$(Math.round(t.net))}</td>
-        <td class="${netIls>=0?'green':'red'}" style="font-weight:700;font-size:11px" title="שער ${rateForMonth(t.month)}">${fILS(netIls)}</td>
+        <td class="num">${fnum(t.qty)}</td>
+        <td class="num">$${t.buy_price}</td>
+        <td class="num">$${t.sell_price}</td>
+        <td class="num ${t.net>=0?'green':'red'}" style="font-weight:700">${f$(Math.round(t.net))}</td>
+        <td class="num ${netIls>=0?'green':'red'}" style="font-weight:700;font-size:11px" title="שער ${rateForMonth(t.month)}">${fILS(netIls)}</td>
         <td><span class="badge ${t.pct>=0?'badge-green':'badge-red'}">${fpct(t.pct)}</span></td>
-        <td style="color:var(--text-3)">${t.hold_days}י'</td>
-        <td>
+        <td class="num" style="color:var(--text-3)">${t.hold_days}י'</td>
+        <td class="actions-cell" onclick="event.stopPropagation()">
           <div class="actions" style="display:flex;gap:4px">
             ${Auth.isViewer() ? '' : `
             <button class="btn-icon" onclick="Journal.openNote(${t.id})"   title="הערה">${icon('note')}</button>
-            <button class="btn-icon" onclick="Journal.openModal(${t.id})"  title="יומן">${icon('book')}</button>`}
-            <button class="btn-icon action-disabled" onclick="Trades.openEdit(${t.id})"    title="ערוך — מבוטל זמנית">${icon('edit')}</button>
-            <button class="btn-icon danger action-disabled" onclick="Trades.remove(${t.id})" title="מחק — מבוטל זמנית">${icon('x')}</button>
+            <button class="btn-icon" onclick="Journal.openModal(${t.id})"  title="יומן מסחר">${icon('book')}</button>`}
+            <span class="row-chev">${open?'⌃':'⌄'}</span>
           </div>
         </td>
-      </tr>`;
+      </tr>${open ? `<tr class="trade-detail"><td colspan="10">${_journalDetail(t)}</td></tr>` : ''}`;
     }).join('');
 
     document.getElementById('trades-count').textContent = `מציג ${shown.length} מתוך ${total} עסקאות`;
@@ -249,6 +297,7 @@ const Trades = (() => {
 
   return {
     render, renderDebounced, updateFilters, setSort, loadMore,
-    openAddForm, openEdit, closeForm, calcPreview, submit, remove
+    openAddForm, openEdit, closeForm, calcPreview, submit, remove,
+    setMode, toggleDetail
   };
 })();

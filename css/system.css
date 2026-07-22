@@ -519,6 +519,24 @@ body.light .rail-new { color: #fff; }
 .home-pos-pnl.neg { color: var(--alarm); }
 .live-dot { width: 6px; height: 6px; border-radius: 99px; background: var(--signal); display: inline-block; animation: qt-pulse 2.4s ease infinite; }
 
+/* ── Trades v2 (unified: history + by-symbol + inline journal) ── */
+.trades-pane { display: none; }
+.trades-pane.active { display: block; }
+.trade-row { cursor: pointer; }
+.trade-row.expanded td { background: var(--paper-2); border-bottom-color: transparent; }
+.row-chev { color: var(--text-3); font-size: 12px; padding: 0 4px; }
+.jdot { display: inline-block; width: 5px; height: 5px; border-radius: 99px; background: var(--info); vertical-align: middle; margin-inline-start: 5px; }
+.trade-detail td { background: var(--paper-2); padding: 0; }
+.jdetail { padding: 14px 18px 16px; }
+.jd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; }
+.jd-item { font-size: 12.5px; }
+.jd-label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 2px; font-weight: 600; }
+.jd-val { color: var(--text-1); }
+.jd-empty { font-size: 12.5px; color: var(--text-3); }
+.jd-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.jd-hint { font-size: 11px; color: var(--text-3); }
+@media (max-width: 760px) { .jd-grid { grid-template-columns: 1fr; } }
+
 /* ── Positions v2 ───────────────────────────────────────── */
 .pos-summary-strip {
   display: flex; gap: 24px; flex-wrap: wrap;
