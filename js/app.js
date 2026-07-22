@@ -682,6 +682,10 @@ async function _initApp() {
   if (APP.positions.length > 0) Positions.refreshPrices();
   startPolling();
 
+  // Mandatory-update guard: boot check + visibility/online/interval
+  // triggers + open-draft restore from a just-completed update.
+  if (typeof VersionGuard !== 'undefined') VersionGuard.init();
+
   Auth.saveLastVisit();
 
   if ('serviceWorker' in navigator) {
