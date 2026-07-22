@@ -263,311 +263,15 @@
          Daily Brief. Renders via Home.render() (js/home.js). -->
     <div id="screen-home" class="panel"></div>
 
-  <!-- ═══════════════════════════════════════════════════
-       FIFO PRO 2.0, Phase 1 — Cockpit (new default landing screen).
-       Built additively: renders entirely via Cockpit.render() (js/cockpit.js).
-       Mission Control below (tab-hub-dashboard) is completely unchanged and
-       still fully reachable via the "דשבורד" nav category — nothing here
-       replaces or hides it.
-  ═══════════════════════════════════════════════════ -->
-  <div id="tab-cockpit" class="panel"></div>
+  <!-- v1 Cockpit / Mission Control / hub panels removed — all merged
+       into the unified Home (js/home.js). The Cockpit MODULE (cockpit.js)
+       remains loaded: Home + Coach reuse buildActionItems()/
+       riskAwareInsight(); its render() null-guards on the removed panel. -->
 
-  <!-- ═══════════════════════════════════════════════════
-       HUB PANELS — Section landing pages
-  ═══════════════════════════════════════════════════ -->
-
-  <!-- HUB: דשבורד — Mission Control -->
-  <div id="tab-hub-dashboard" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-target"/></svg></div>
-      <div>
-        <div class="hub-title">Mission Control</div>
-        <div class="hub-sub">התמונה המלאה במבט אחד</div>
-      </div>
-    </div>
-
-    <!-- ── Mission Control — live summary, no full dashboard/tables ── -->
-    <div id="mission-control"></div>
-
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('dashboard')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-        <span class="hub-card-label">דשבורד ראשי</span>
-        <span class="hub-card-desc">KPIs, גרפים, equity curve</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('brief')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-clipboard"/></svg></span>
-        <span class="hub-card-label">סיכום יומי</span>
-        <span class="hub-card-desc">מה קרה מהביקור האחרון</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('goals')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-target"/></svg></span>
-        <span class="hub-card-label">יעדים</span>
-        <span class="hub-card-desc">מטרה חודשית, התקדמות, סימולציה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('progress')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-        <span class="hub-card-label">התקדמות</span>
-        <span class="hub-card-desc">נתוני ביצועים לאורך זמן</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('ptimeline')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-calendar"/></svg></span>
-        <span class="hub-card-label">ציר זמן</span>
-        <span class="hub-card-desc">חודש אחר חודש — חוזקות וחולשות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('grade')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-award"/></svg></span>
-        <span class="hub-card-label">ציון מסחר</span>
-        <span class="hub-card-desc">ביצוע, ריסק, משמעת, פסיכולוגיה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: מסחר -->
-  <div id="tab-hub-trading" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></div>
-      <div>
-        <div class="hub-title">מסחר</div>
-        <div class="hub-sub">ניהול פוזיציות, עסקאות ורשימות מעקב</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card hub-card-primary" onclick="switchTab('positions')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trending-up"/></svg></span>
-        <span class="hub-card-label">פוזיציות פתוחות</span>
-        <span class="hub-card-desc">מחירים חיים, P&L, stop loss</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('trades')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-list"/></svg></span>
-        <span class="hub-card-label">היסטוריית עסקאות</span>
-        <span class="hub-card-desc">כל העסקאות הסגורות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('quicktrade')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-zap"/></svg></span>
-        <span class="hub-card-label">כניסה מהירה</span>
-        <span class="hub-card-desc">הוסף עסקה בקלות ובמהירות</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('watchlist')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-eye"/></svg></span>
-        <span class="hub-card-label">רשימת מעקב</span>
-        <span class="hub-card-desc">סימבולים, דירוג AI, מחירים חיים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('journal')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-book"/></svg></span>
-        <span class="hub-card-label">יומן מסחר</span>
-        <span class="hub-card-desc">רשומות, מחשבות, לקחים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('ledger')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-list"/></svg></span>
-        <span class="hub-card-label">Ledger</span>
-        <span class="hub-card-desc">מעקב, פוזיציה, היסטוריה — לפי סימבול</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: ניתוח -->
-  <div id="tab-hub-analysis" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-search"/></svg></div>
-      <div>
-        <div class="hub-title">ניתוח</div>
-        <div class="hub-sub">העמק בנתונים — זהה דפוסים ומגמות</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('analysis')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
-        <span class="hub-card-label">ניתוח גרפי</span>
-        <span class="hub-card-desc">גרפים לפי סימבול ותקופה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('performance')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-trophy"/></svg></span>
-        <span class="hub-card-label">ביצועים</span>
-        <span class="hub-card-desc">Win rate, expectancy, risk/reward</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('insights')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-bulb"/></svg></span>
-        <span class="hub-card-label">תובנות</span>
-        <span class="hub-card-desc">דפוסים, ימים, שעות — מה עובד</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('replay')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-film"/></svg></span>
-        <span class="hub-card-label">Trade Replay</span>
-        <span class="hub-card-desc">ציר זמן ויזואלי לפי חודש</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('portheatmap')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-grid"/></svg></span>
-        <span class="hub-card-label">Heatmap תיק</span>
-        <span class="hub-card-desc">תרומת כל סימבול לתיק</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('heatmap')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-calendar"/></svg></span>
-        <span class="hub-card-label">לוח שנה</span>
-        <span class="hub-card-desc">P&L לפי יום — heatmap קלנדרי</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card" onclick="switchTab('symnotes')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-bookmark"/></svg></span>
-        <span class="hub-card-label">לפי סימבול</span>
-        <span class="hub-card-desc">ביצועים מרוכזים לכל מניה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: בינה מלאכותית -->
-  <div id="tab-hub-ai" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-cpu"/></svg></div>
-      <div>
-        <div class="hub-title">בינה מלאכותית</div>
-        <div class="hub-sub">כלי AI לניתוח, אימון וקבלת החלטות</div>
-      </div>
-    </div>
-    <div class="hub-grid hub-grid-ai">
-      <button class="hub-card hub-card-ai" onclick="switchTab('decision')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-target"/></svg></span>
-        <span class="hub-card-label">מנוע החלטות</span>
-        <span class="hub-card-desc">אינדיקטורים, חדשות, המלצת כניסה</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai" onclick="switchTab('coach')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-cpu"/></svg></span>
-        <span class="hub-card-label">מאמן AI</span>
-        <span class="hub-card-desc">ניתוח שגיאות, תובנות, שיפור</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai hub-card-featured" onclick="switchTab('aichat')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-message"/></svg></span>
-        <span class="hub-card-label">שיחה עם AI</span>
-        <span class="hub-card-desc">שאל כל שאלה על המסחר שלך</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-      <button class="hub-card hub-card-ai" onclick="switchTab('coach-evidence')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-search"/></svg></span>
-        <span class="hub-card-label">Coach — מבוסס עדויות</span>
-        <span class="hub-card-desc">תוכנית מול מציאות מול היסטוריה — בלי ניחושים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- HUB: הגדרות -->
-  <div id="tab-hub-settings" class="panel hub-panel">
-    <div class="hub-header">
-      <div class="hub-icon"><svg class="icon"><use href="#icon-settings"/></svg></div>
-      <div>
-        <div class="hub-title">הגדרות</div>
-        <div class="hub-sub">התאמת החשבון, תצוגה ועדפות</div>
-      </div>
-    </div>
-    <div class="hub-grid">
-      <button class="hub-card" onclick="switchTab('settings')">
-        <span class="hub-card-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>
-        <span class="hub-card-label">הגדרות מערכת</span>
-        <span class="hub-card-desc">סיסמה, theme, יעד חודשי, מודולים</span>
-        <span class="hub-card-arrow">←</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       DASHBOARD CATEGORY
-  ═══════════════════════════════════════════════════ -->
-
-  <!-- DASHBOARD (main) -->
-  <div id="tab-dashboard" class="panel active">
-    <!-- Hero status bar -->
-    <div id="dash-hero" class="dash-hero"></div>
-    <div id="weekly-summary" class="week-grid" style="display:none"></div>
-    <div class="kpi-grid" id="kpi-grid"></div>
-    <div class="card" id="portfolio-health"></div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
-      <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> רווח נטו לפי חודש ($)</div>
-      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-trending-down"/></svg> Drawdown Chart</div>
-      <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
-    </div>
-    <div class="card" id="goal-card"></div>
-  </div>
-
-  <!-- DAILY BRIEF -->
-  <div id="tab-brief" class="panel">
-    <div id="brief-content"></div>
-  </div>
-
-  <!-- GOALS (improved) -->
-  <div id="tab-goals" class="panel">
-    <div id="goals-content"></div>
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">יעד חודשי — עדכון</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="number" id="goal-input" data-owner-only style="max-width:130px" placeholder="יעד $">
-        <button class="btn btn-primary btn-sm" data-owner-only onclick="Dashboard.saveGoal()">עדכן</button>
-      </div>
-      <div id="goal-detail"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">היסטוריית חודשים</div>
-      <div class="table-wrap"><table id="month-history-table"></table></div>
-    </div>
-  </div>
-
-  <!-- PROGRESS -->
-  <div id="tab-progress" class="panel">
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">האם אתה משתפר לאורך זמן?</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px" id="progress-kpis"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Win Rate לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
-        <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
-      </div>
-    </div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">Profit Factor לאורך זמן</div>
-        <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">שבוע חזק בחודש</div>
-        <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PERFORMANCE TIMELINE (new) -->
-  <div id="tab-ptimeline" class="panel"></div>
-
-  <!-- DAILY GRADE (new) -->
-  <div id="tab-grade" class="panel"></div>
+  <!-- v1 Dashboard-category panels (main dashboard, daily brief, goals,
+       progress, timeline, daily grade) removed — headline numbers live on
+       Home; charts/analytics live in the unified Performance screen below.
+       Their render functions null-guard on the removed element ids. -->
 
   <!-- ═══════════════════════════════════════════════════
        TRADING CATEGORY
@@ -671,97 +375,135 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       ANALYSIS CATEGORY
+       PERFORMANCE (v2) — one segmented screen replacing the v1
+       analysis screens + the main dashboard's charts. Each pane holds
+       the element ids its existing render functions target; every
+       renderer null-guards, so each pane renders only its own parts.
   ═══════════════════════════════════════════════════ -->
+  <div id="screen-performance" class="panel">
+    <div class="screen-head screen-head--row">
+      <div>
+        <div class="eyebrow">ניתוח</div>
+        <h1>Performance</h1>
+        <div class="lede">כל מדד מוצג פעם אחת · סקירה, לפי סימבול, לפי זמן, משמעת, Replay</div>
+      </div>
+      <div class="segmented" id="perf-seg">
+        <button class="active" data-seg="overview"   onclick="Perf.setSegment('overview')">סקירה</button>
+        <button data-seg="symbol"     onclick="Perf.setSegment('symbol')">לפי סימבול</button>
+        <button data-seg="time"       onclick="Perf.setSegment('time')">לפי זמן</button>
+        <button data-seg="discipline" onclick="Perf.setSegment('discipline')">משמעת</button>
+        <button data-seg="replay"     onclick="Perf.setSegment('replay')">Replay</button>
+      </div>
+    </div>
 
-  <!-- ANALYSIS -->
-  <div id="tab-analysis" class="panel">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Pane: overview -->
+    <div id="pv-overview" class="trades-pane active">
+      <div class="qstat-grid" id="pv-overview-stats" style="margin-bottom:16px"></div>
       <div class="card">
-        <div class="card-title">רווח נטו לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
+        <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
+        <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">Win Rate לפי סימבול</div>
-        <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
+        <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> רווח נטו לפי חודש ($)</div>
+        <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-trending-down"/></svg> Drawdown</div>
+        <div class="dd-wrap"><canvas id="chart-dd"></canvas></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">סיכום לפי סימבול</div>
-      <div class="table-wrap"><table id="sym-table"></table></div>
-    </div>
-  </div>
 
-  <!-- INSIGHTS -->
-  <div id="tab-insights" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">תובנות אוטומטיות מהנתונים שלך</div>
-    <div id="insights-grid" class="insight-grid"></div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">סטטיסטיקות מתקדמות</div>
-        <div id="adv-stats"></div>
+    <!-- Pane: by symbol -->
+    <div id="pv-symbol" class="trades-pane">
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח נטו לפי סימבול</div>
+          <div style="position:relative;height:300px"><canvas id="chart-sym"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Win Rate לפי סימבול</div>
+          <div style="position:relative;height:300px"><canvas id="chart-wr"></canvas></div>
+        </div>
       </div>
       <div class="card">
-        <div class="card-title">רווח לפי יום בשבוע</div>
-        <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+        <div class="card-title">סיכום לפי סימבול</div>
+        <div class="table-wrap"><table id="sym-table"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-grid"/></svg> תרומה לתיק (Heatmap)</div>
+        <div id="portheatmap-content"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:7px"><svg class="icon"><use href="#icon-bookmark"/></svg> תובנות ולקחים לפי סימבול</span>
+          <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
+        </div>
+        <div id="sym-notes-container" class="sym-notes-grid"></div>
       </div>
     </div>
-    <div class="stats-2col">
-      <div class="card">
-        <div class="card-title">רווח לפי משך החזקה</div>
-        <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">רווח לפי גודל פוזיציה</div>
-        <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title"><svg class="icon"><use href="#icon-alert-triangle"/></svg> Mistake Detector</div>
-      <div id="mistake-grid" class="mistake-grid"></div>
-    </div>
-  </div>
 
-  <!-- PERFORMANCE CENTER -->
-  <div id="tab-performance" class="panel">
-    <div style="margin-bottom:16px;font-size:13px;color:var(--text-3)">Performance Center — מדדי ביצוע מקצועיים</div>
-    <div id="perf-grid" class="perf-grid"></div>
-    <div class="stats-2col">
+    <!-- Pane: over time -->
+    <div id="pv-time" class="trades-pane">
       <div class="card">
-        <div class="card-title">Symbol Intelligence</div>
-        <div id="sym-intel"></div>
+        <div class="card-title" style="justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:7px"><svg class="icon"><use href="#icon-calendar"/></svg> לוח שנה — רווח/הפסד יומי</span>
+          <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
+        </div>
+        <div id="heatmap-container"></div>
       </div>
+      <div id="progress-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px"></div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">Win Rate לאורך זמן</div>
+          <div style="position:relative;height:220px"><canvas id="chart-winrate-time"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">רווח חודשי — ממוצע נע 3M</div>
+          <div style="position:relative;height:220px"><canvas id="chart-rolling-avg"></canvas></div>
+        </div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">Profit Factor לאורך זמן</div>
+          <div style="position:relative;height:220px"><canvas id="chart-pf-time"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">שבוע חזק בחודש</div>
+          <div style="position:relative;height:220px"><canvas id="chart-week-of-month"></canvas></div>
+        </div>
+      </div>
+      <div id="tab-ptimeline"></div>
+    </div>
+
+    <!-- Pane: discipline -->
+    <div id="pv-discipline" class="trades-pane">
       <div class="card">
-        <div class="card-title">Sector Exposure</div>
-        <div id="sector-exposure"></div>
+        <div class="card-title"><svg class="icon"><use href="#icon-alert-triangle"/></svg> Mistake Detector</div>
+        <div id="mistake-grid" class="mistake-grid"></div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח לפי יום בשבוע</div>
+          <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">רווח לפי משך החזקה</div>
+          <div class="chart-wrap"><canvas id="chart-hold"></canvas></div>
+        </div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title">רווח לפי גודל פוזיציה</div>
+          <div class="chart-wrap"><canvas id="chart-size"></canvas></div>
+        </div>
+        <div class="card card--flush" style="padding:0"><div id="tab-grade" style="padding:18px 20px"></div></div>
       </div>
     </div>
-  </div>
 
-  <!-- TRADE REPLAY (new) -->
-  <div id="tab-replay" class="panel"></div>
-
-  <!-- CALENDAR HEATMAP -->
-  <div id="tab-heatmap" class="panel">
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">לוח שנה — רווח/הפסד יומי</div>
-      <select id="hm-year" onchange="Analytics.renderHeatmap(getStats())" style="width:auto;padding:5px 8px;max-width:100px"></select>
+    <!-- Pane: replay -->
+    <div id="pv-replay" class="trades-pane">
+      <div id="tab-replay"></div>
     </div>
-    <div id="heatmap-container"></div>
-  </div>
-
-  <!-- PORTFOLIO HEATMAP (new, by symbol) -->
-  <div id="tab-portheatmap" class="panel">
-    <div id="portheatmap-content"></div>
-  </div>
-
-  <!-- SYMBOL NOTES -->
-  <div id="tab-symnotes" class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text-3)">תובנות ולקחים לפי סימבול</div>
-      <input id="symnote-search" type="text" placeholder="חיפוש סימבול..." oninput="Analytics.renderSymNotesDebounced()" style="max-width:160px">
-    </div>
-    <div id="sym-notes-container" class="sym-notes-grid"></div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════
@@ -999,6 +741,7 @@
 <script src="js/settings.js"></script>
 <script src="js/home.js"></script>
 <script src="js/tradeTicket.js"></script>
+<script src="js/performance.js"></script>
 <script src="js/app.js"></script>
 
 </body>

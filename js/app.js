@@ -288,7 +288,7 @@ const DEST_TITLE = {
 // v1 panel until that destination's own screen is built in a later wave.
 const DEST_PANEL = {
   home:'screen-home', positions:'tab-positions', trades:'tab-trades',
-  performance:'tab-insights', research:'tab-watchlist',
+  performance:'screen-performance', research:'tab-watchlist',
   coach:'tab-coach-evidence', chat:'tab-aichat', settings:'tab-settings'
 };
 
@@ -310,9 +310,10 @@ function navigate(dest) {
 // Render a destination by delegating to the existing per-screen render
 // dispatch (_renderTab) — the safest path, it reuses the exact v1 logic.
 function _renderDest(dest) {
-  if (dest === 'home') { if (typeof Home !== 'undefined') Home.render(); return; }
+  if (dest === 'home')        { if (typeof Home !== 'undefined') Home.render(); return; }
+  if (dest === 'performance') { if (typeof Perf !== 'undefined') Perf.render(); return; }
   const tabFor = {
-    positions:'positions', trades:'trades', performance:'insights',
+    positions:'positions', trades:'trades',
     research:'watchlist', coach:'coach-evidence', chat:'aichat', settings:'settings'
   };
   _renderTab(tabFor[dest] || dest);
@@ -339,11 +340,20 @@ const _TAB_TO_DEST = {
 // existing switchTab('x') caller keeps working.
 function switchTab(name) {
   // Screens absorbed into a unified destination redirect there —
-  // journal + ledger are now modes/content of the Trades screen, and
-  // quicktrade is the Trade Ticket slide-over.
+  // journal + ledger are now modes/content of the Trades screen,
+  // quicktrade is the Trade Ticket slide-over, and the whole
+  // dashboard/analysis families live in Home / Performance segments.
   if (name === 'journal')    { navigate('trades'); return; }
   if (name === 'ledger')     { navigate('trades'); Trades.setMode('bysymbol'); return; }
   if (name === 'quicktrade') { openTradeTicket(); return; }
+  if (name === 'dashboard' || name === 'brief' || name === 'goals') { navigate('home'); return; }
+  const perfSeg = {
+    performance:'overview', insights:'discipline', grade:'discipline',
+    progress:'time', ptimeline:'time', heatmap:'time',
+    analysis:'symbol', portheatmap:'symbol', symnotes:'symbol',
+    replay:'replay'
+  };
+  if (perfSeg[name]) { navigate('performance'); Perf.setSegment(perfSeg[name]); return; }
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
