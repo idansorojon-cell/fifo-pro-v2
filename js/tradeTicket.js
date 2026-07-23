@@ -81,7 +81,7 @@ const TradeTicket = (() => {
         <div class="calc-block">
           <div class="calc-title">Sizing + R:R — מחושב חי</div>
           <div class="tk-grid-3">
-            <div class="tk-field"><label>גודל תיק מוגדר ($) <span class="lbl-hint" title="ברירת המחדל מגיעה מהגדרות → גודל תיק מוגדר">מההגדרות</span></label><input id="tk-portfolio" type="number" value="${Settings.get('portfolioSize')}" oninput="TradeTicket.recalc()"></div>
+            <div class="tk-field"><label>גודל תיק מוגדר ($) <span class="lbl-hint" title="ברירת המחדל מגיעה מהגדרות → גודל תיק מוגדר">מההגדרות</span></label><input id="tk-portfolio" type="number" value="${Settings.get('portfolioSize') ?? ''}" placeholder="טרם הוגדר" oninput="TradeTicket.recalc()"></div>
             <div class="tk-field"><label>% סיכון</label><input id="tk-risk" type="number" step="0.1" value="${Settings.get('riskPct')||1}" oninput="TradeTicket.recalc()"></div>
             <div class="tk-field"><label>סטופ ($)</label><input id="tk-stop" type="number" step="0.01" value="${opts.stop||''}" oninput="TradeTicket.recalc()"></div>
           </div>
@@ -198,6 +198,10 @@ const TradeTicket = (() => {
           <div class="tk-calc-row"><span>סיכון למניה / כולל</span><b class="num">$${perShare.toFixed(2)} / ${f$(Math.round(maxRisk))}</b></div>
           ${rr !== null ? `<div class="tk-calc-row"><span>יחס R:R</span><b class="num" style="color:${rr>=2?'var(--signal)':rr>=1?'var(--amber)':'var(--alarm)'}">1:${rr.toFixed(2)}</b></div>` : `<div class="tk-calc-row"><span>יחס R:R</span><span style="color:var(--text-3)">הזן יעד לחישוב</span></div>`}
           <button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="document.getElementById('tk-qty').value=${suggested};TradeTicket.recalc()">השתמש בכמות המומלצת</button>`;
+      } else if (price && stop && price > stop && !portfolio) {
+        // Price+stop are in but the portfolio size was never defined —
+        // say exactly what's missing instead of a generic hint.
+        out.innerHTML = 'גודל התיק טרם הוגדר — <a href="#" onclick="event.preventDefault();switchTab(\'settings\')">הגדר בהגדרות</a> כדי לקבל כמות מומלצת לפי % סיכון';
       } else {
         out.textContent = 'הזן מחיר וסטופ לחישוב כמות מומלצת ו-R:R';
       }

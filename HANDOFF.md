@@ -36,13 +36,31 @@ manually redeploy Apps Script (git push does NOT do this):
   2. Deploy → Manage deployments → edit the EXISTING deployment → New
      version → Deploy (keeps the same /exec URL — do not create a new
      deployment, that would change the URL).
-  3. Verify: open the app → Settings → the badge should read
-     "הגדרות עסקיות מסונכרנות לחשבון"; change גודל תיק → "✓ נשמר בחשבון";
-     the Sheets "Settings" tab gains a `prefs` row.
-  4. Cross-device test: second browser/computer → login → the value
-     appears there.
-No other backend behavior changed; the new setSettings action is
-owner-only automatically (doPost's global viewer deny).
+  3. Then run the 10-step owner test plan (below) against the PREVIEW.
+
+Hardening (2026-07-23, second pass): portfolioSize defaults to NULL —
+67000 was an unverified legacy default and is never shown as real nor
+auto-written; everything dependent shows 'הגדר תיק'/'—' until the owner
+enters a value. Empty server + explicitly-set local values → a visible
+one-time migration prompt (declining is remembered; never silent).
+Saves are PARTIAL (dirty keys only) and the server MERGES + validates
+every key (type/range/allowed values; unknown keys, oversized or
+malformed payloads rejected) and stamps updatedAt. getSettings is
+OWNER-ONLY (viewer consumes no business settings).
+
+Post-deploy owner test plan (Preview only, in order):
+  1. Login with no `prefs` row on the server → nothing shows 67,000;
+     exposure chip = 'הגדר תיק'; if this browser has old local values, a
+     migration prompt appears — decide explicitly.
+  2. Enter the REAL portfolio size in Settings → badge '✓ נשמר בחשבון'.
+  3. Check the Sheets Settings tab → a `prefs` row with that value.
+  4. Full refresh → value persists. 5. Logout+Login → persists.
+  6. Second browser → login → value appears (server-synced).
+  7. Browser A changes גודל תיק, browser B changes % סיכון → verify
+     NEITHER overwrote the other (partial merge).
+  8. Airplane-mode a save → red failure badge, value stays in the form
+     → reconnect → 'נסה שוב' → saved.
+  9. Confirm P&L/FIFO/tax/history unchanged throughout.
 
 ## 2. What FIFO PRO 2.0 is
 

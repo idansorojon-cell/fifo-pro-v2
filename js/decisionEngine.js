@@ -715,7 +715,9 @@ const DecisionEngine = (() => {
     const result = document.getElementById('decision-result');
     const memory = document.getElementById('trade-memory');
     const portfolioEl = document.getElementById('de-portfolio');
-    if (portfolioEl) portfolioEl.value = Settings.get('portfolioSize');
+    // null = the portfolio size was never set — leave the field empty
+    // (placeholder explains) rather than painting a number as if real.
+    if (portfolioEl) portfolioEl.value = Settings.get('portfolioSize') ?? '';
     if (result && !result.innerHTML.trim()) {
       result.innerHTML = `
         <div class="card" style="text-align:center;padding:30px;color:var(--text-3)">

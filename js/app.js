@@ -368,8 +368,9 @@ function _renderDest(dest) {
     Watchlist.render();
     // Portfolio-size field starts from the ONE real setting (editable per
     // analysis; the hardcoded 67000 default was killed 2026-07-23).
+    // null = never defined — stays empty, placeholder explains.
     const pe = document.getElementById('de-portfolio');
-    if (pe && !pe.value) pe.value = Settings.get('portfolioSize');
+    if (pe && !pe.value) { const ps = Settings.get('portfolioSize'); if (ps) pe.value = ps; }
     if (APP.watchlist.length > 0) Watchlist.refresh();
     return;
   }

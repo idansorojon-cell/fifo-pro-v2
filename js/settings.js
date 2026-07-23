@@ -18,7 +18,12 @@ const Settings = (() => {
     monthlyGoal: 5000,
     weeklyGoal: 1200,
     dailyGoal: 250,
-    portfolioSize: 67000,
+    // null = NOT SET. 67000 was only ever an old default, never verified
+    // capital — the owner mandated (2026-07-23) that it must never be
+    // presented as the real portfolio size nor auto-written to the
+    // server. Everything that depends on it shows '—' + "הגדר גודל תיק"
+    // until the owner explicitly enters a value.
+    portfolioSize: null,
     riskPct: 1.0,
     stopLossPct: 2.0,
     takeProfitPct: 4.0,
@@ -73,6 +78,8 @@ const Settings = (() => {
   let _serverAvailable = false;  // deployed backend supports getSettings
   let _saveTimer = null;
   let _saveState = 'idle';       // idle | saving | saved | failed | local-only
+  const _dirty = new Set();      // synced keys changed locally, not yet confirmed by the server
+  const MIGRATION_DECLINED_KEY = 'fifo_settings_migration_declined_v1';
 
   function isReady() { return _serverReady; }
 
@@ -91,11 +98,20 @@ const Settings = (() => {
       if (res && res.ok) {
         _serverAvailable = true;
         if (res.settings && typeof res.settings === 'object') {
+          // Server value is the truth — it overwrites any stale local
+          // cache for every synced key it carries. Local values are only
+          // kept for keys the server has never stored.
           const p = getPrefs();
           SYNCED_KEYS.forEach(k => {
             if (res.settings[k] !== undefined) p[k] = res.settings[k];
           });
           savePrefs(p);
+        } else {
+          // Server reachable but EMPTY (no prefs stored yet). NEVER
+          // auto-write local/default values — the owner decides. If the
+          // local cache holds explicitly-set values (≠ defaults), offer
+          // a one-time visible migration; declining is remembered.
+          _offerMigration();
         }
       } else {
         _serverAvailable = false;
@@ -109,6 +125,29 @@ const Settings = (() => {
     }
   }
 
+  // One-time offer to persist explicitly-set LOCAL values to an EMPTY
+  // server. Never silent: uiConfirm with the actual values listed;
+  // declining is remembered and never re-asked (the values still reach
+  // the server naturally whenever the owner next edits them).
+  function _offerMigration() {
+    try {
+      if (LS.get(MIGRATION_DECLINED_KEY)) return;
+      const p = getPrefs();
+      const userSet = SYNCED_KEYS.filter(k =>
+        p[k] !== undefined && p[k] !== null && p[k] !== DEFAULTS[k]);
+      if (!userSet.length || typeof uiConfirm !== 'function') return;
+      const list = userSet.map(k => `${k}: ${p[k]}`).join(' · ');
+      // Deferred so the boot render isn't blocked by a dialog.
+      setTimeout(async () => {
+        const yes = await uiConfirm(
+          `נמצאו הגדרות מקומיות בדפדפן הזה (${list}) ובחשבון עדיין אין הגדרות שמורות. לשמור אותן בחשבון כך שיסתנכרנו לכל המכשירים?`,
+          { title: 'שמירת הגדרות מקומיות בחשבון', confirmText: 'שמור בחשבון' });
+        if (yes) { userSet.forEach(k => _dirty.add(k)); _scheduleServerSave(); }
+        else LS.set(MIGRATION_DECLINED_KEY, true);
+      }, 1200);
+    } catch (_) {}
+  }
+
   function _scheduleServerSave() {
     if (!_serverAvailable) { _saveState = 'local-only'; _updateSyncBadge(); return; }
     clearTimeout(_saveTimer);
@@ -116,18 +155,35 @@ const Settings = (() => {
     _saveTimer = setTimeout(_saveToServer, 600); // coalesce rapid edits
   }
 
+  // PARTIAL update: send ONLY the dirty keys. The server merges them
+  // into its stored blob, so two browsers editing different fields can
+  // never clobber each other, and this client can never blind-overwrite
+  // newer server values for fields it didn't touch.
   async function _saveToServer() {
     const p = getPrefs();
+    const sending = [..._dirty];
+    if (!sending.length) { _saveState = 'idle'; _updateSyncBadge(); return; }
     const payload = {};
-    SYNCED_KEYS.forEach(k => { payload[k] = p[k] !== undefined ? p[k] : DEFAULTS[k]; });
+    sending.forEach(k => { if (p[k] !== undefined && p[k] !== null) payload[k] = p[k]; });
+    if (!Object.keys(payload).length) { _saveState = 'idle'; _updateSyncBadge(); return; }
     try {
       const res = await API.saveSettings(payload);
       if (res && res.ok) {
-        _saveState = 'saved'; _updateSyncBadge();
-        setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
+        // Server confirmed → its merged blob is the truth; refresh the
+        // local cache from it and clear only the keys we actually sent
+        // (a key edited again mid-flight stays dirty for the next save).
+        if (res.settings && typeof res.settings === 'object') {
+          const cur = getPrefs();
+          SYNCED_KEYS.forEach(k => { if (res.settings[k] !== undefined) cur[k] = res.settings[k]; });
+          savePrefs(cur);
+        }
+        sending.forEach(k => _dirty.delete(k));
+        _saveState = _dirty.size ? 'saving' : 'saved'; _updateSyncBadge();
+        if (_dirty.size) _saveTimer = setTimeout(_saveToServer, 600);
+        else setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
       } else {
-        // The entered value is NOT lost — it lives in local prefs and in
-        // the visible input; only the server copy is stale until retry.
+        // Entered values are NOT lost — they live in local prefs and the
+        // visible inputs, and stay dirty for retry. Never shown as synced.
         _saveState = 'failed'; _updateSyncBadge(res && res.error);
       }
     } catch (e) {
@@ -157,7 +213,7 @@ const Settings = (() => {
     const p = getPrefs();
     p[key] = val;
     savePrefs(p);
-    if (SYNCED_KEYS.includes(key)) _scheduleServerSave();
+    if (SYNCED_KEYS.includes(key)) { _dirty.add(key); _scheduleServerSave(); }
   }
 
   // ── Render ──────────────────────────────────────────────
@@ -716,7 +772,7 @@ const Settings = (() => {
         </div>
         <div class="s-num-wrap">
           ${unit?`<span class="s-unit">${unit}</span>`:''}
-          <input class="s-input s-input-num" type="number" value="${val}" ${mn} ${mx} ${st}
+          <input class="s-input s-input-num" type="number" value="${val ?? ''}" ${val == null ? 'placeholder="טרם הוגדר"' : ''} ${mn} ${mx} ${st}
             onchange="Settings.set('${key}', +this.value);Settings._syncGoal()">
         </div>
       </div>`;

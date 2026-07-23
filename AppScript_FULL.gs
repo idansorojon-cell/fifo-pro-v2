@@ -1423,10 +1423,12 @@ function doGet(e) {
 // else (including addWatchlist/removeWatchlist, which are GET requests
 // but mutate data) is denied by default. See "Persistence architecture"/
 // role model in docs/TECHNICAL_DEBT.md.
+// getSettings is deliberately ABSENT — business settings (portfolio
+// size, risk %) are the owner's private capital policy; the viewer UI
+// consumes none of them. See the SYNCED USER SETTINGS block.
 var VIEWER_ALLOWED_ACTIONS = [
   'getTrades', 'getGoal', 'getPositions', 'getWatchlist',
-  'getPrices', 'getIndicators', 'getNews', 'getOperations',
-  'getSettings'
+  'getPrices', 'getIndicators', 'getNews', 'getOperations'
 ];
 
 function doPost(e) {
@@ -2366,57 +2368,97 @@ function handleSetGoal_(goal) {
 // ════════════════════════════════════════════════════════════
 // SYNCED USER SETTINGS (2.1, 2026-07-23)
 // ════════════════════════════════════════════════════════════
-// Business settings (portfolio size, risk %, etc.) persist in the SAME
-// key/value "Settings" sheet the monthly goal already uses, under one
-// 'prefs' key holding a JSON blob — so they survive logout and sync
-// across devices exactly like the goal does. Writes are owner-only for
-// free (doPost's global viewer deny); reads are allowed to any valid
-// session (getSettings is on the doGet viewer allowlist). Keys are
-// whitelisted server-side — a client can never grow the blob with
-// arbitrary data. The monthly goal itself deliberately STAYS on its
-// existing dedicated goal key/endpoints (one source of truth per value).
-var SYNCED_PREF_KEYS = ['portfolioSize', 'riskPct', 'maxPositionSize',
-                        'autoRefresh', 'refreshInterval', 'alertStop'];
+// Business settings persist in the SAME key/value "Settings" sheet the
+// monthly goal already uses, under one 'prefs' key (JSON) — so they
+// survive logout and sync across devices exactly like the goal does.
+//
+// Security & integrity model (owner-specified):
+//  * setSettings is owner-only for free (doPost's global viewer deny).
+//  * getSettings is OWNER-ONLY too — it is deliberately NOT on the
+//    doGet viewer allowlist: a viewer needs none of the risk-management
+//    settings (portfolio size / risk % are the owner's private capital
+//    policy), and nothing in the viewer UI consumes them — a viewer
+//    session simply runs on local display defaults.
+//  * PARTIAL update semantics: the client sends only the keys that
+//    changed; the server merges into the stored blob. Two browsers
+//    editing different fields can never clobber each other, and a stale
+//    cache can never blind-overwrite newer server values.
+//  * FULL server-side validation per key (type, range, allowed values),
+//    unknown keys and oversized/malformed payloads rejected with a
+//    clear error. The client's validation is a convenience only.
+//  * updatedAt (ISO) is stamped on every successful write.
+// The monthly goal itself deliberately STAYS on its existing dedicated
+// goal key/endpoints (one source of truth per value).
 
-function handleGetSettings_() {
+// Validators return true when valid, or an error string when not.
+var PREF_VALIDATORS = {
+  portfolioSize:   function(v) { return (typeof v === 'number' && isFinite(v) && v > 0 && v <= 100000000) || 'portfolioSize חייב להיות מספר חיובי (עד 100,000,000)'; },
+  riskPct:         function(v) { return (typeof v === 'number' && isFinite(v) && v > 0 && v <= 10) || 'riskPct חייב להיות מספר בין 0 ל-10'; },
+  maxPositionSize: function(v) { return (typeof v === 'number' && isFinite(v) && v >= 0 && v <= 100) || 'maxPositionSize חייב להיות בין 0 ל-100'; },
+  refreshInterval: function(v) { return ([15, 30, 60, 120].indexOf(v) !== -1) || 'refreshInterval חייב להיות אחד מ-15/30/60/120'; },
+  autoRefresh:     function(v) { return (typeof v === 'boolean') || 'autoRefresh חייב להיות boolean'; },
+  alertStop:       function(v) { return (typeof v === 'boolean') || 'alertStop חייב להיות boolean'; },
+};
+
+function readPrefsBlob_() {
   const sh = getSheet_('Settings');
   if (sh.getLastRow() === 0) sh.appendRow(['key', 'value']);
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === 'prefs') {
-      try { return jsonOut_({ ok: true, settings: JSON.parse(data[i][1]) }); }
-      catch (e) { return jsonOut_({ ok: true, settings: null }); }
+      try { return { row: i + 1, prefs: JSON.parse(data[i][1]) || {} }; }
+      catch (e) { return { row: i + 1, prefs: {} }; }
     }
   }
-  return jsonOut_({ ok: true, settings: null }); // nothing stored yet
+  return { row: null, prefs: null }; // nothing stored yet
+}
+
+function handleGetSettings_() {
+  const found = readPrefsBlob_();
+  return jsonOut_({ ok: true, settings: found.prefs });
 }
 
 function handleSetSettings_(data) {
+  // Size guard BEFORE parsing — reject anything abnormally large.
+  const raw = data.settings;
+  if (typeof raw === 'string' && raw.length > 2000) {
+    return jsonOut_({ ok: false, error: 'Settings payload too large' });
+  }
   let incoming;
   try {
-    incoming = (typeof data.settings === 'string') ? JSON.parse(data.settings) : data.settings;
+    incoming = (typeof raw === 'string') ? JSON.parse(raw) : raw;
   } catch (e) {
     return jsonOut_({ ok: false, error: 'Invalid settings JSON' });
   }
-  if (!incoming || typeof incoming !== 'object') {
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
     return jsonOut_({ ok: false, error: 'Missing settings object' });
   }
-  const clean = {};
-  SYNCED_PREF_KEYS.forEach(function(k) {
-    if (incoming[k] !== undefined) clean[k] = incoming[k];
-  });
-  const sh = getSheet_('Settings');
-  if (sh.getLastRow() === 0) sh.appendRow(['key', 'value']);
-  const rows = sh.getDataRange().getValues();
-  const json = JSON.stringify(clean);
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === 'prefs') {
-      sh.getRange(i + 1, 2).setValue(json);
-      return jsonOut_({ ok: true, settings: clean });
+
+  // Validate EVERY incoming key: unknown → reject; known → type/range check.
+  const keys = Object.keys(incoming);
+  if (keys.length === 0) return jsonOut_({ ok: false, error: 'Empty settings update' });
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (!PREF_VALIDATORS[k]) {
+      return jsonOut_({ ok: false, error: 'Unknown setting: ' + k });
+    }
+    const verdict = PREF_VALIDATORS[k](incoming[k]);
+    if (verdict !== true) {
+      return jsonOut_({ ok: false, error: verdict });
     }
   }
-  sh.appendRow(['prefs', json]);
-  return jsonOut_({ ok: true, settings: clean });
+
+  // MERGE into the stored blob (partial update — never blind-overwrite).
+  const found  = readPrefsBlob_();
+  const merged = found.prefs || {};
+  keys.forEach(function(k) { merged[k] = incoming[k]; });
+  merged.updatedAt = new Date().toISOString();
+
+  const sh = getSheet_('Settings');
+  const json = JSON.stringify(merged);
+  if (found.row) sh.getRange(found.row, 2).setValue(json);
+  else sh.appendRow(['prefs', json]);
+  return jsonOut_({ ok: true, settings: merged });
 }
 
 // ════════════════════════════════════════════════════════════

@@ -506,13 +506,17 @@ const Positions = (() => {
     // Was `monthGoal * 13.4` — an unexplainable magic constant that merely
     // reproduced the old $67k default from the $5k goal; killed 2026-07-23
     // per the owner's "every number must be explainable" mandate.
-    const riskPct    = (totalRisk / (Settings.get('portfolioSize') || 1) * 100).toFixed(1);
+    // null (never defined) ⇒ no % is shown at all — $ risk only.
+    const ps         = Settings.get('portfolioSize');
+    const riskPct    = ps > 0 ? (totalRisk / ps * 100).toFixed(1) : null;
     document.getElementById('rr-risk').textContent   = risk   > 0 ? `$${risk.toFixed(2)}`   : '—';
     document.getElementById('rr-reward').textContent = reward > 0 ? `$${reward.toFixed(2)}` : '—';
     const ratioEl = document.getElementById('rr-ratio');
     ratioEl.textContent = ratio > 0 ? `1:${ratio.toFixed(2)}` : '—';
     ratioEl.style.color = ratio >= 2 ? 'var(--green)' : ratio >= 1 ? 'var(--blue)' : 'var(--red)';
-    document.getElementById('rr-total-risk').textContent = qty && risk > 0 ? `$${totalRisk.toFixed(0)} (${riskPct}%)` : '—';
+    document.getElementById('rr-total-risk').textContent = qty && risk > 0
+      ? `$${totalRisk.toFixed(0)}${riskPct !== null ? ` (${riskPct}%)` : ' (הגדר גודל תיק ל-%)'}`
+      : '—';
   }
 
   // ── CRUD ────────────────────────────────────────────────
