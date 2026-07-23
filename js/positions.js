@@ -41,8 +41,8 @@ const Positions = (() => {
     // <bdi> isolates each value's own direction without affecting layout
     // or the underlying number/logic. See docs/TECHNICAL_DEBT.md.
     el.innerHTML = `
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות כוללת</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
+      <div title="Σ(מחיר קנייה ממוצע × כמות) — כמה כסף מושקע בפוזיציות הפתוחות"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות פוזיציות פתוחות</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
+      <div title="Σ(מחיר נוכחי × כמות) — לפי מחירים חיים ככל שזמינים"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי שוק נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
       <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">Open P&L</div>
         <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
           <bdi>${f$(Math.round(totalPnl))}</bdi> ${liveCount ? `<bdi>(${liveCount}/${APP.positions.length} live)</bdi>` : ''}

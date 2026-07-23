@@ -63,11 +63,17 @@ const Home = (() => {
     return { today, week, month };
   }
 
-  function _exposurePct() {
-    const portfolio = (typeof Settings !== 'undefined' && Settings.get('portfolioSize')) || 67000;
+  // חשיפה ביחס לגודל התיק = עלות פוזיציות פתוחות ÷ גודל תיק מוגדר.
+  // Returns null (rendered as a loading dash) until the synced settings
+  // have resolved — never a figure computed from a default the server
+  // was about to override. The ONLY portfolio-size source is the
+  // Settings layer; the old hardcoded 67000 fallback is gone.
+  function _exposure() {
+    if (!Settings.isReady()) return { pct: null, cost: null, portfolio: null };
+    const portfolio = Settings.get('portfolioSize');
     let cost = 0;
     (APP.positions || []).forEach(p => { cost += (p.avg_price || 0) * (p.qty || 0); });
-    return portfolio > 0 ? (cost / portfolio * 100) : 0;
+    return { pct: portfolio > 0 ? (cost / portfolio * 100) : 0, cost, portfolio };
   }
 
   function _attentionHTML() {
@@ -130,7 +136,7 @@ const Home = (() => {
 
     const winRate = st.winRate != null ? st.winRate : 0;
     const goalPct = APP.monthGoal ? Math.round((st.curMonthNet || 0) / APP.monthGoal * 100) : 0;
-    const exposure = _exposurePct();
+    const exp = _exposure();
 
     const posPreview = (APP.positions || []).slice(0, 3).map(_miniPosCard).join('');
 
@@ -160,7 +166,8 @@ const Home = (() => {
         <div class="chip"><div class="chip-label">פוזיציות פתוחות</div><div class="chip-val">${live.positionsCount}</div></div>
         <div class="chip"><div class="chip-label">Win Rate</div><div class="chip-val">${winRate}%</div></div>
         <div class="chip"><div class="chip-label">יעד חודשי</div><div class="chip-val" style="color:${goalPct>=100?'var(--signal)':'inherit'}">${goalPct}%</div></div>
-        <div class="chip"><div class="chip-label">חשיפה</div><div class="chip-val">${exposure.toFixed(0)}%</div></div>
+        <div class="chip" title="${exp.pct === null ? 'טוען הגדרות…' : `עלות פוזיציות פתוחות ${f$(Math.round(exp.cost))} ÷ גודל תיק מוגדר ${f$(exp.portfolio)}`}">
+          <div class="chip-label">חשיפה מגודל התיק</div><div class="chip-val">${exp.pct === null ? '…' : exp.pct.toFixed(0) + '%'}</div></div>
         <div class="chip" onclick="navigate('performance')" style="cursor:pointer" title="ריאלי כולל — לפירוט מלא: ביצועים">
           <div class="chip-label">ריאלי כולל</div><div class="chip-val ${_tone(st.totalNet)}"><bdi>${f$(Math.round(st.totalNet))}</bdi></div></div>
         <div class="chip" onclick="Trades.applyFilter({month:'${st.curMonth}'})" style="cursor:pointer" title="נטו החודש — לחיצה מציגה את עסקאות החודש">

@@ -926,3 +926,12 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
   border: 1px solid var(--border); border-radius: var(--r-full);
   padding: 0 6px; margin-inline-start: 4px; vertical-align: 1px; cursor: help;
 }
+
+/* Settings — server-sync status badge (2.1 Wave T) */
+#settings-sync-badge { margin-top: 8px; min-height: 20px; }
+.sync-b { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; padding: 3px 10px; border-radius: var(--r-full); border: 1px solid var(--border); }
+.sync-idle   { color: var(--text-3); }
+.sync-saving { color: var(--blue);  border-color: var(--blue-dim); }
+.sync-ok     { color: var(--green); border-color: var(--green-dim); background: var(--green-dim); }
+.sync-fail   { color: var(--red);   border-color: var(--red-dim);   background: var(--red-dim); }
+.sync-warn   { color: var(--gold);  border-color: var(--gold-dim);  background: var(--gold-dim); }

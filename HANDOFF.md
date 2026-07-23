@@ -23,6 +23,27 @@ docs live in `/docs` — this is the condensed summary. Updated
   merge to `main` + push (which auto-deploys GitHub Pages). No Apps
   Script redeploy is needed — the backend was not touched.
 
+## 1b. Synced settings — PENDING APPS SCRIPT DEPLOY (owner action)
+
+2.1 adds server-synced business settings (portfolioSize/riskPct/
+maxPositionSize/autoRefresh/refreshInterval/alertStop) stored in the
+same "Settings" sheet as the goal, key `prefs`. The frontend is fully
+deployed-backend-aware: an OLD backend answers getSettings with
+"Unknown action" and the app runs in an honest local-only mode (gold
+badge on the Settings screen). To activate sync, the owner must
+manually redeploy Apps Script (git push does NOT do this):
+  1. Open the Apps Script project → paste the current AppScript_FULL.gs.
+  2. Deploy → Manage deployments → edit the EXISTING deployment → New
+     version → Deploy (keeps the same /exec URL — do not create a new
+     deployment, that would change the URL).
+  3. Verify: open the app → Settings → the badge should read
+     "הגדרות עסקיות מסונכרנות לחשבון"; change גודל תיק → "✓ נשמר בחשבון";
+     the Sheets "Settings" tab gains a `prefs` row.
+  4. Cross-device test: second browser/computer → login → the value
+     appears there.
+No other backend behavior changed; the new setSettings action is
+owner-only automatically (doPost's global viewer deny).
+
 ## 2. What FIFO PRO 2.0 is
 
 "Quiet Terminal": 7 flat destinations — **Home** (merges Cockpit +

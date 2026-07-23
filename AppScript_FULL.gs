@@ -1410,6 +1410,7 @@ function doGet(e) {
       case 'getIndicators':   return handleGetIndicators_(e.parameter.symbol);
       case 'getNews':         return handleGetNews_(e.parameter.symbol);
       case 'getOperations':   return handleGetOperations_(token);
+      case 'getSettings':     return handleGetSettings_();
       case 'getViewerStatus': return handleGetViewerStatus_(token);
       default:                return jsonOut_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -1424,7 +1425,8 @@ function doGet(e) {
 // role model in docs/TECHNICAL_DEBT.md.
 var VIEWER_ALLOWED_ACTIONS = [
   'getTrades', 'getGoal', 'getPositions', 'getWatchlist',
-  'getPrices', 'getIndicators', 'getNews', 'getOperations'
+  'getPrices', 'getIndicators', 'getNews', 'getOperations',
+  'getSettings'
 ];
 
 function doPost(e) {
@@ -1458,6 +1460,7 @@ function doPost(e) {
       case 'delete':         return handleDeleteTrade_(data.id);
       case 'seedAll':        return handleSeedAll_(data.trades);
       case 'setGoal':        return handleSetGoal_(data.goal);
+      case 'setSettings':    return handleSetSettings_(data);
       case 'addPosition':        return handleAddPosition_(data.position);
       case 'updatePosition':     return handleUpdatePosition_(data.position);
       case 'deletePosition':     return handleDeletePosition_(data.id);
@@ -2358,6 +2361,62 @@ function handleSetGoal_(goal) {
   }
   sh.appendRow(['goal', goal]);
   return jsonOut_({ ok: true });
+}
+
+// ════════════════════════════════════════════════════════════
+// SYNCED USER SETTINGS (2.1, 2026-07-23)
+// ════════════════════════════════════════════════════════════
+// Business settings (portfolio size, risk %, etc.) persist in the SAME
+// key/value "Settings" sheet the monthly goal already uses, under one
+// 'prefs' key holding a JSON blob — so they survive logout and sync
+// across devices exactly like the goal does. Writes are owner-only for
+// free (doPost's global viewer deny); reads are allowed to any valid
+// session (getSettings is on the doGet viewer allowlist). Keys are
+// whitelisted server-side — a client can never grow the blob with
+// arbitrary data. The monthly goal itself deliberately STAYS on its
+// existing dedicated goal key/endpoints (one source of truth per value).
+var SYNCED_PREF_KEYS = ['portfolioSize', 'riskPct', 'maxPositionSize',
+                        'autoRefresh', 'refreshInterval', 'alertStop'];
+
+function handleGetSettings_() {
+  const sh = getSheet_('Settings');
+  if (sh.getLastRow() === 0) sh.appendRow(['key', 'value']);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === 'prefs') {
+      try { return jsonOut_({ ok: true, settings: JSON.parse(data[i][1]) }); }
+      catch (e) { return jsonOut_({ ok: true, settings: null }); }
+    }
+  }
+  return jsonOut_({ ok: true, settings: null }); // nothing stored yet
+}
+
+function handleSetSettings_(data) {
+  let incoming;
+  try {
+    incoming = (typeof data.settings === 'string') ? JSON.parse(data.settings) : data.settings;
+  } catch (e) {
+    return jsonOut_({ ok: false, error: 'Invalid settings JSON' });
+  }
+  if (!incoming || typeof incoming !== 'object') {
+    return jsonOut_({ ok: false, error: 'Missing settings object' });
+  }
+  const clean = {};
+  SYNCED_PREF_KEYS.forEach(function(k) {
+    if (incoming[k] !== undefined) clean[k] = incoming[k];
+  });
+  const sh = getSheet_('Settings');
+  if (sh.getLastRow() === 0) sh.appendRow(['key', 'value']);
+  const rows = sh.getDataRange().getValues();
+  const json = JSON.stringify(clean);
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'prefs') {
+      sh.getRange(i + 1, 2).setValue(json);
+      return jsonOut_({ ok: true, settings: clean });
+    }
+  }
+  sh.appendRow(['prefs', json]);
+  return jsonOut_({ ok: true, settings: clean });
 }
 
 // ════════════════════════════════════════════════════════════

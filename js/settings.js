@@ -58,6 +58,97 @@ const Settings = (() => {
   function getPrefs() { return LS.get('fifo_prefs', DEFAULTS); }
   function savePrefs(p) { LS.set('fifo_prefs', p); }
 
+  // ── Server sync layer (2.1, owner mandate 2026-07-23) ────
+  // Business settings must survive refresh / logout / re-login and sync
+  // across devices. They persist server-side in the same "Settings"
+  // key/value sheet the monthly goal uses (key 'prefs', JSON blob) via
+  // API.getSettings/saveSettings. localStorage becomes a CACHE of the
+  // server truth, not the source. Display prefs (theme) stay local by
+  // design. The monthly goal keeps its own existing server path
+  // (getGoal/setGoal) — one source of truth per value, no duplication.
+  const SYNCED_KEYS = ['portfolioSize', 'riskPct', 'maxPositionSize',
+                       'autoRefresh', 'refreshInterval', 'alertStop'];
+
+  let _serverReady = false;      // boot load settled (success OR determined fallback)
+  let _serverAvailable = false;  // deployed backend supports getSettings
+  let _saveTimer = null;
+  let _saveState = 'idle';       // idle | saving | saved | failed | local-only
+
+  function isReady() { return _serverReady; }
+
+  // Boot-time load. Rules (owner-specified):
+  //   1. Server value ALWAYS wins over local for synced keys.
+  //   2. Empty server (nothing stored yet) → keep local; nothing is
+  //      written until the user explicitly saves. Defaults NEVER
+  //      overwrite a stored value in either direction.
+  //   3. An old backend deployment (getSettings → ok:false "Unknown
+  //      action") → honest local-only mode, surfaced in the UI badge.
+  // Never throws — boot must not break on a settings failure.
+  async function loadFromServer() {
+    try {
+      if (typeof API === 'undefined' || !API.isConfigured()) { return; }
+      const res = await API.getSettings();
+      if (res && res.ok) {
+        _serverAvailable = true;
+        if (res.settings && typeof res.settings === 'object') {
+          const p = getPrefs();
+          SYNCED_KEYS.forEach(k => {
+            if (res.settings[k] !== undefined) p[k] = res.settings[k];
+          });
+          savePrefs(p);
+        }
+      } else {
+        _serverAvailable = false;
+      }
+    } catch (_) {
+      _serverAvailable = false;
+    } finally {
+      _serverReady = true;
+      _saveState = _serverAvailable ? 'idle' : 'local-only';
+      _updateSyncBadge();
+    }
+  }
+
+  function _scheduleServerSave() {
+    if (!_serverAvailable) { _saveState = 'local-only'; _updateSyncBadge(); return; }
+    clearTimeout(_saveTimer);
+    _saveState = 'saving'; _updateSyncBadge();
+    _saveTimer = setTimeout(_saveToServer, 600); // coalesce rapid edits
+  }
+
+  async function _saveToServer() {
+    const p = getPrefs();
+    const payload = {};
+    SYNCED_KEYS.forEach(k => { payload[k] = p[k] !== undefined ? p[k] : DEFAULTS[k]; });
+    try {
+      const res = await API.saveSettings(payload);
+      if (res && res.ok) {
+        _saveState = 'saved'; _updateSyncBadge();
+        setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
+      } else {
+        // The entered value is NOT lost — it lives in local prefs and in
+        // the visible input; only the server copy is stale until retry.
+        _saveState = 'failed'; _updateSyncBadge(res && res.error);
+      }
+    } catch (e) {
+      _saveState = 'failed'; _updateSyncBadge(e.message);
+    }
+  }
+
+  function retryServerSave() { if (_serverAvailable) { _saveState = 'saving'; _updateSyncBadge(); _saveToServer(); } }
+
+  function _updateSyncBadge(err) {
+    const el = document.getElementById('settings-sync-badge');
+    if (!el) return;
+    switch (_saveState) {
+      case 'saving':     el.innerHTML = `<span class="sync-b sync-saving">שומר לשרת…</span>`; break;
+      case 'saved':      el.innerHTML = `<span class="sync-b sync-ok">✓ נשמר בחשבון — מסונכרן לכל המכשירים</span>`; break;
+      case 'failed':     el.innerHTML = `<span class="sync-b sync-fail">✕ השמירה לשרת נכשלה${err ? ' — ' + err : ''} (הערך נשמר מקומית) <button class="btn btn-ghost btn-xs" onclick="Settings.retryServerSave()">נסה שוב</button></span>`; break;
+      case 'local-only': el.innerHTML = `<span class="sync-b sync-warn">⚠ מצב מקומי בלבד — ה-Backend הפרוס עדיין ללא סנכרון הגדרות (נדרש deploy). שינויים נשמרים בדפדפן זה בלבד.</span>`; break;
+      default:           el.innerHTML = _serverAvailable ? `<span class="sync-b sync-idle">הגדרות עסקיות מסונכרנות לחשבון</span>` : '';
+    }
+  }
+
   function get(key) {
     const p = getPrefs();
     return p[key] !== undefined ? p[key] : DEFAULTS[key];
@@ -66,6 +157,7 @@ const Settings = (() => {
     const p = getPrefs();
     p[key] = val;
     savePrefs(p);
+    if (SYNCED_KEYS.includes(key)) _scheduleServerSave();
   }
 
   // ── Render ──────────────────────────────────────────────
@@ -85,6 +177,7 @@ const Settings = (() => {
         <div class="eyebrow">חשבון</div>
         <h1>הגדרות</h1>
         <div class="lede">התאמה אישית מלאה של FIFO PRO</div>
+        <div id="settings-sync-badge"></div>
       </div>
         </div>
       </div>
@@ -168,7 +261,7 @@ const Settings = (() => {
           ${_numRow('weeklyGoal','יעד שבועי ($)','יעד הרווח השבועי',p.weeklyGoal,'$')}
           ${_numRow('dailyGoal','יעד יומי ($)','יעד הרווח היומי',p.dailyGoal,'$')}
           -->
-          ${_numRow('portfolioSize','גודל תיק ($)','סך ההון המנוהל — מזין את: חשיפה (בית), כמות מומלצת לפי % סיכון (טיקט מסחר), "סיכון לתיק" (Decision Engine) ומחשבון R:R בפוזיציות',p.portfolioSize,'$')}
+          ${_numRow('portfolioSize','גודל תיק מוגדר ($)','סך ההון המנוהל שאתה קובע — מזין את: חשיפה (בית), כמות מומלצת לפי % סיכון (טיקט מסחר), "סיכון לתיק" (Decision Engine) ומחשבון R:R בפוזיציות. נשמר בחשבון ומסונכרן בין מכשירים',p.portfolioSize,'$')}
         </div>
       </div>
 
@@ -607,6 +700,7 @@ const Settings = (() => {
     </div>`;
 
     if (Auth.getRole() === 'owner') _refreshViewerStatus();
+    _updateSyncBadge(); // the badge div was just re-created — paint current state
   }
 
   // ── Row builders ────────────────────────────────────────
@@ -930,6 +1024,7 @@ const Settings = (() => {
 
   return {
     render, get, set, getPrefs, save, setTheme, toggleModule,
+    loadFromServer, isReady, retryServerSave,
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
     showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,

@@ -19,14 +19,20 @@ const Auth = (() => {
   const LAST_VISIT   = 'fifo_last_visit';
 
   // All localStorage keys that contain private trading data.
-  // fifo_dark (theme) is intentionally excluded — it is not sensitive.
+  // Intentionally excluded from the wipe:
+  //   fifo_dark  — theme, not sensitive.
+  //   fifo_prefs — settings (portfolio size, risk %, goals). Owner
+  //     mandate 2026-07-23: settings must survive logout/login, never
+  //     silently reset to defaults. They contain no trades/positions/
+  //     prices; the server ("Settings" sheet) is their source of truth
+  //     once the 2.1 backend is deployed, and this local copy is the
+  //     cache that also covers the pre-deploy window.
   const PRIVATE_KEYS = [
     'fifo_session_v1',
     'fifo_positions_backup',
     'fifo_watchlist',
     'fifo_trades',
     'fifo_journal',
-    'fifo_prefs',
     'fifo_last_visit',
     'fifo_brief_shown',
     'fifo_aicoach',
@@ -37,9 +43,9 @@ const Auth = (() => {
   function clearPrivateCache() {
     // Remove known private keys
     PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
-    // Also sweep for any unknown fifo_ keys except theme
+    // Also sweep for any unknown fifo_ keys except theme/settings/local-auth
     Object.keys(localStorage)
-      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_local_pw_hash' && k !== 'fifo_local_username')
+      .filter(k => k.startsWith('fifo_') && k !== 'fifo_dark' && k !== 'fifo_prefs' && k !== 'fifo_local_pw_hash' && k !== 'fifo_local_username')
       .forEach(k => localStorage.removeItem(k));
     // Clear any SW cache partitions named 'fifo-*'
     if ('caches' in window) {
