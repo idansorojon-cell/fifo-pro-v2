@@ -358,6 +358,10 @@ function _renderDest(dest) {
     // Unified Research = Decision Engine + Watchlist on one screen.
     DecisionEngine.renderStarter();
     Watchlist.render();
+    // Portfolio-size field starts from the ONE real setting (editable per
+    // analysis; the hardcoded 67000 default was killed 2026-07-23).
+    const pe = document.getElementById('de-portfolio');
+    if (pe && !pe.value) pe.value = Settings.get('portfolioSize');
     if (APP.watchlist.length > 0) Watchlist.refresh();
     return;
   }

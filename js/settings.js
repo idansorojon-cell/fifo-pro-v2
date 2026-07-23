@@ -168,7 +168,7 @@ const Settings = (() => {
           ${_numRow('weeklyGoal','יעד שבועי ($)','יעד הרווח השבועי',p.weeklyGoal,'$')}
           ${_numRow('dailyGoal','יעד יומי ($)','יעד הרווח היומי',p.dailyGoal,'$')}
           -->
-          ${_numRow('portfolioSize','גודל תיק ($)','סך ההון המנוהל',p.portfolioSize,'$')}
+          ${_numRow('portfolioSize','גודל תיק ($)','סך ההון המנוהל — מזין את: חשיפה (בית), כמות מומלצת לפי % סיכון (טיקט מסחר), "סיכון לתיק" (Decision Engine) ומחשבון R:R בפוזיציות',p.portfolioSize,'$')}
         </div>
       </div>
 
@@ -265,7 +265,7 @@ const Settings = (() => {
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">רענון אוטומטי</span>
-              <span class="settings-row-sub">מחירים חיים כל 30 שניות</span>
+              <span class="settings-row-sub">מחירים חיים לפי מרווח הרענון שנבחר למטה</span>
             </div>
             <label class="switch">
               <input type="checkbox" ${p.autoRefresh?'checked':''} onchange="Settings.set('autoRefresh',this.checked);restartPolling()">

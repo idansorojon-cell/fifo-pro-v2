@@ -81,7 +81,7 @@ const TradeTicket = (() => {
         <div class="calc-block">
           <div class="calc-title">Sizing + R:R — מחושב חי</div>
           <div class="tk-grid-3">
-            <div class="tk-field"><label>גודל תיק ($)</label><input id="tk-portfolio" type="number" value="${Settings.get('portfolioSize')||67000}" oninput="TradeTicket.recalc()"></div>
+            <div class="tk-field"><label>גודל תיק ($) <span class="lbl-hint" title="ברירת המחדל מגיעה מהגדרות → גודל תיק">מההגדרות</span></label><input id="tk-portfolio" type="number" value="${Settings.get('portfolioSize')}" oninput="TradeTicket.recalc()"></div>
             <div class="tk-field"><label>% סיכון</label><input id="tk-risk" type="number" step="0.1" value="${Settings.get('riskPct')||1}" oninput="TradeTicket.recalc()"></div>
             <div class="tk-field"><label>סטופ ($)</label><input id="tk-stop" type="number" step="0.01" value="${opts.stop||''}" oninput="TradeTicket.recalc()"></div>
           </div>

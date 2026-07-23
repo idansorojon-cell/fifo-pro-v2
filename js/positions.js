@@ -502,7 +502,11 @@ const Positions = (() => {
     const reward     = target - price;
     const ratio      = risk > 0 ? reward / risk : 0;
     const totalRisk  = risk * (qty || 0);
-    const riskPct    = (totalRisk / (APP.monthGoal > 0 ? APP.monthGoal * 13.4 : Settings.get('portfolioSize')) * 100).toFixed(1);
+    // Denominator = the ONE portfolio-size setting (Settings→portfolioSize).
+    // Was `monthGoal * 13.4` — an unexplainable magic constant that merely
+    // reproduced the old $67k default from the $5k goal; killed 2026-07-23
+    // per the owner's "every number must be explainable" mandate.
+    const riskPct    = (totalRisk / (Settings.get('portfolioSize') || 1) * 100).toFixed(1);
     document.getElementById('rr-risk').textContent   = risk   > 0 ? `$${risk.toFixed(2)}`   : '—';
     document.getElementById('rr-reward').textContent = reward > 0 ? `$${reward.toFixed(2)}` : '—';
     const ratioEl = document.getElementById('rr-ratio');

@@ -46,7 +46,10 @@ const DecisionEngine = (() => {
     await analyzeSymbol(sym, entry, stop, target, qty, portfolio);
   }
 
-  async function analyzeSymbol(sym, entry=0, stop=0, target=0, qty=0, portfolio=67000) {
+  async function analyzeSymbol(sym, entry=0, stop=0, target=0, qty=0, portfolio=0) {
+    // Portfolio size resolves: explicit arg → the on-screen field → the ONE
+    // real setting (Settings→portfolioSize). No hardcoded default.
+    if (!portfolio) portfolio = +document.getElementById('de-portfolio')?.value || Settings.get('portfolioSize');
     if (document.getElementById('de-symbol')) document.getElementById('de-symbol').value = sym;
     if (entry  && document.getElementById('de-entry'))  document.getElementById('de-entry').value  = entry;
     if (stop   && document.getElementById('de-stop'))   document.getElementById('de-stop').value   = stop;

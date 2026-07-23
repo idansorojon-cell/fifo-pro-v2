@@ -84,7 +84,7 @@ const Perf = (() => {
       el.innerHTML = `<div class="tk-empty" style="grid-column:1/-1">אין עסקאות עדיין — המדדים יופיעו אחרי העסקה הסגורה הראשונה.</div>`;
       return;
     }
-    const rows = PerfMetrics.monthlyRows(st);
+    const rows = PerfMetrics.monthlyRows(APP.trades);
     const best  = rows.find(r => r.isBest);
     const worst = rows.find(r => r.isWorst);
     const avgSize = PerfMetrics.avgCost(APP.trades);
@@ -124,16 +124,36 @@ const Perf = (() => {
       ]);
   }
 
-  // ── Monthly performance table ─────────────────────────────
-  // Every month, newest first: trades, win rate, net $, net ₪ (that
-  // month's rate), running cumulative, and a signed bar. Clicking a row
-  // jumps to the Trades screen pre-filtered to that month.
+  // ── Monthly performance table (v2 — a core component) ─────
+  // Every month: trades, win rate, PF, avg/trade, net $ (with an inline
+  // magnitude bar), Δ vs previous month, 3M moving average, net ₪
+  // (month-correct rate), running cumulative. Sortable by every column;
+  // default newest-first. Clicking a row jumps to that month's trades.
+  let _mSort = { col: 'month', dir: -1 };
+
+  function sortMonthly(col) {
+    if (_mSort.col === col) _mSort.dir *= -1;
+    else _mSort = { col, dir: -1 };
+    _renderMonthlyTable(getStats());
+  }
+
   function _renderMonthlyTable(st) {
     const el = document.getElementById('pv-monthly-table');
     if (!el) return;
-    const rows = PerfMetrics.monthlyRows(st);
+    const rows = PerfMetrics.monthlyRows(APP.trades);
     if (!rows.length) { el.innerHTML = ''; return; }
     const maxAbs = Math.max(...rows.map(r => Math.abs(r.net)), 1);
+
+    const sorted = [...rows].sort((a, b) => {
+      const av = a[_mSort.col], bv = b[_mSort.col];
+      // null Δ (first month) always sinks to the bottom
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return av > bv ? _mSort.dir : av < bv ? -_mSort.dir : 0;
+    });
+
+    const delta = v => v === null ? '<span style="color:var(--text-3)">—</span>'
+      : `<bdi class="${v >= 0 ? 'green' : 'red'}">${(v >= 0 ? '+' : '') + f$(v)}</bdi>`;
 
     const tr = r => `
       <tr class="mrow" onclick="Trades.applyFilter({month:'${r.month}'})" title="הצג את עסקאות ${r.label}">
@@ -142,28 +162,42 @@ const Perf = (() => {
         </td>
         <td class="num">${r.trades}</td>
         <td class="num">${r.winRate}%</td>
-        <td class="num ${r.net >= 0 ? 'green' : 'red'}" style="font-weight:700"><bdi>${f$(r.net)}</bdi></td>
+        <td class="num">${r.pf >= 99 ? '∞' : r.pf}</td>
+        <td class="num ${r.avg >= 0 ? 'green' : 'red'}"><bdi>${f$(r.avg)}</bdi></td>
+        <td class="num mnet ${r.net >= 0 ? 'green' : 'red'}"><bdi>${f$(r.net)}</bdi>
+          <div class="mbar ${r.net >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(Math.abs(r.net) / maxAbs * 100)}%"></div>
+        </td>
+        <td class="num">${delta(r.mom)}</td>
+        <td class="num ${r.ma3 >= 0 ? 'green' : 'red'}"><bdi>${f$(r.ma3)}</bdi></td>
         <td class="num ${r.netIls >= 0 ? 'green' : 'red'}"><bdi>${fILS(r.netIls)}</bdi></td>
         <td class="num ${r.cum >= 0 ? 'green' : 'red'}"><bdi>${f$(r.cum)}</bdi></td>
-        <td class="mbar-cell"><div class="mbar ${r.net >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(Math.abs(r.net) / maxAbs * 100)}%"></div></td>
       </tr>`;
 
     const totNet = rows.reduce((s, r) => s + r.net, 0);
     const totIls = rows.reduce((s, r) => s + r.netIls, 0);
     const totTr  = rows.reduce((s, r) => s + r.trades, 0);
 
+    const TH = [
+      ['month', 'חודש'], ['trades', 'עסקאות'], ['winRate', 'Win'], ['pf', 'PF'],
+      ['avg', 'ממוצע/עסקה'], ['net', 'נטו $'], ['mom', 'Δ קודם'], ['ma3', '3M ממוצע'],
+      ['netIls', 'נטו ₪'], ['cum', 'מצטבר'],
+    ];
+    const th = ([col, label]) => `
+      <th class="${col === 'month' ? '' : 'num'} sortable" onclick="Perf.sortMonthly('${col}')"
+          title="מיין לפי ${label}">${label} <span class="msort">${_mSort.col === col ? (_mSort.dir === 1 ? '↑' : '↓') : ''}</span></th>`;
+
     el.innerHTML = `
       <table class="mtable">
-        <thead><tr>
-          <th>חודש</th><th class="num">עסקאות</th><th class="num">Win</th>
-          <th class="num">נטו $</th><th class="num">נטו ₪</th><th class="num">מצטבר</th><th></th>
-        </tr></thead>
-        <tbody>${rows.map(tr).join('')}</tbody>
+        <thead><tr>${TH.map(th).join('')}</tr></thead>
+        <tbody>${sorted.map(tr).join('')}</tbody>
         <tfoot><tr>
           <td>סה"כ</td><td class="num">${totTr}</td><td class="num">${st.winRate}%</td>
+          <td class="num">${st.pf >= 99 ? '∞' : st.pf}</td>
+          <td class="num"><bdi>${f$(Math.round(totNet / Math.max(totTr, 1)))}</bdi></td>
           <td class="num ${totNet >= 0 ? 'green' : 'red'}" style="font-weight:700"><bdi>${f$(totNet)}</bdi></td>
+          <td></td><td></td>
           <td class="num ${totIls >= 0 ? 'green' : 'red'}"><bdi>${fILS(totIls)}</bdi></td>
-          <td class="num"><bdi>${f$(Math.round(st.totalNet))}</bdi></td><td></td>
+          <td class="num"><bdi>${f$(Math.round(st.totalNet))}</bdi></td>
         </tr></tfoot>
       </table>`;
   }
@@ -205,5 +239,5 @@ const Perf = (() => {
       </div>`).join('');
   }
 
-  return { render, setSegment };
+  return { render, setSegment, sortMonthly };
 })();

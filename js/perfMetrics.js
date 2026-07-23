@@ -11,21 +11,40 @@
 const PerfMetrics = (() => {
   const { parseDD, usdToIls, monthLabel } = Utils;
 
-  // ── Monthly table rows ─────────────────────────────────────
-  // st.monthArr is ascending by month and already carries net/trades/wins.
-  // Adds: winRate, ILS net (month-correct rate), running cumulative, and
-  // flags for best/worst month. Returned DESCENDING (newest first) for
-  // display; `cum` is computed in chronological order first.
-  function monthlyRows(st) {
+  // ── Monthly table rows (v2) ────────────────────────────────
+  // Grouped straight from the trades array (same t.month key calcStats
+  // uses), chronological. Per month: trades, win rate, net $ / net ₪
+  // (month-correct rate), Profit Factor (gross wins ÷ |gross losses|,
+  // same definition as the overall PF in calcStats), avg net per trade,
+  // running cumulative, Δ vs previous month, and a trailing 3-month
+  // moving average of net. Returned ASCENDING — display sorts it.
+  function monthlyRows(trades) {
+    const by = {};
+    trades.forEach(t => {
+      if (!t.month) return;
+      const b = by[t.month] || (by[t.month] = { net: 0, c: 0, w: 0, gw: 0, gl: 0 });
+      b.net += t.net; b.c++;
+      if (t.net > 0) { b.w++; b.gw += t.gross; }
+      else if (t.net < 0) { b.gl += Math.abs(t.gross); }
+    });
     let cum = 0;
-    const asc = st.monthArr.map(m => {
-      cum += m.net;
+    const asc = Object.keys(by).sort().map(m => {
+      const b = by[m];
+      cum += b.net;
       return {
-        month: m.month, label: m.label, net: m.net, trades: m.trades,
-        winRate: m.trades ? Math.round(m.wins / m.trades * 100) : 0,
-        netIls: Math.round(usdToIls(m.net, m.month)),
+        month: m, label: monthLabel(m),
+        net: Math.round(b.net), trades: b.c,
+        winRate: Math.round(b.w / b.c * 100),
+        netIls: Math.round(usdToIls(b.net, m)),
+        pf: b.gl > 0 ? +(b.gw / b.gl).toFixed(2) : (b.gw > 0 ? 99 : 0),
+        avg: Math.round(b.net / b.c),
         cum: Math.round(cum),
       };
+    });
+    asc.forEach((r, i) => {
+      r.mom = i > 0 ? r.net - asc[i - 1].net : null;
+      const win = asc.slice(Math.max(0, i - 2), i + 1);
+      r.ma3 = Math.round(win.reduce((s, x) => s + x.net, 0) / win.length);
     });
     if (asc.length) {
       const best  = asc.reduce((a, b) => (b.net > a.net ? b : a));
@@ -34,7 +53,7 @@ const PerfMetrics = (() => {
       // A single positive-only month shouldn't be labeled both best & worst
       if (worst !== best) worst.isWorst = true;
     }
-    return asc.slice().reverse();
+    return asc;
   }
 
   // ── Top winners / losers ───────────────────────────────────
