@@ -81,7 +81,31 @@ const DecisionEngine = (() => {
     const ctx = { technical, discipline, newsScore, personal, final, useEntry, stop, target, livePrice, ind, news };
     resultEl.innerHTML = _renderResult(sym, ctx);
     document.getElementById('trade-memory').innerHTML = _renderTradeMemory(sym, hist);
+    _renderPosContext(sym, livePrice);
     API.setStatus('✓ ניתוח הושלם', 'ok');
+  }
+
+  // ── Open-position context (2.1, additive) ─────────────────
+  // If the analyzed symbol is ALREADY an open position, say so before the
+  // scores — deciding about a ticker you own is a different decision
+  // (add/hold/trim) than a fresh entry. Pure display of existing data.
+  function _renderPosContext(sym, livePrice) {
+    const el = document.getElementById('decision-poscontext');
+    if (!el) return;
+    const p = APP.positions.find(x => x.symbol === sym);
+    if (!p) { el.innerHTML = ''; return; }
+    const price = livePrice || APP.liveData[sym]?.price;
+    const pnl   = price ? (price - p.avg_price) * p.qty : null;
+    const pnlPct = price ? (price - p.avg_price) / p.avg_price * 100 : null;
+    el.innerHTML = `
+      <div class="de-posctx">
+        ${icon('briefcase')} <b>כבר יש לך פוזיציה פתוחה ב-${sym}</b>
+        <span class="num"><bdi>${Utils.fnum(p.qty)} מניות @ ${Utils.fprice(p.avg_price)}</bdi></span>
+        ${pnl !== null ? `<span class="num ${pnl >= 0 ? 'green' : 'red'}"><bdi>${(pnl >= 0 ? '+' : '') + Utils.f$(Math.round(pnl))} (${Utils.fpct(pnlPct)})</bdi></span>` : ''}
+        ${p.target ? `<span class="num">יעד <bdi>${Utils.fprice(p.target)}</bdi></span>` : ''}
+        ${p.stop_loss ? `<span class="num">סטופ <bdi>${Utils.fprice(p.stop_loss)}</bdi></span>` : '<span class="red">אין סטופ</span>'}
+        <span class="de-posctx-note">ההחלטה כאן היא הוספה/החזקה/קיצוץ — לא כניסה חדשה</span>
+      </div>`;
   }
 
   // ════════════════════════════════════════════════════════════

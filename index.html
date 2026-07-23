@@ -378,10 +378,12 @@
   <div id="screen-research" class="panel">
     <div class="screen-head">
       <div class="eyebrow">Research</div>
-      <h1>מחקר לפני עסקה</h1>
-      <div class="lede">רשימת מעקב + מנוע החלטות — זרימה אחת · מהציון ישר לטיקט המסחר</div>
+      <h1>מרכז החלטות</h1>
+      <div class="lede">מנוע החלטות + רשימת מעקב חיה + ההיסטוריה שלך בסימבול — הכל במסך אחד, מהציון ישר לטיקט</div>
     </div>
 
+    <div class="research-grid">
+    <div class="research-main">
     <!-- Decision Engine (existing module, ids unchanged) -->
     <div class="card">
       <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
@@ -404,11 +406,14 @@
         לא מחליף שיקול דעת.
       </div>
     </div>
+    <div id="decision-poscontext"></div>
     <div id="decision-result"></div>
     <div id="trade-memory"></div>
+    </div><!-- /research-main -->
 
-    <!-- Watchlist (existing module, ids unchanged) -->
-    <div class="sec-head" style="margin-top:22px"><h3>רשימת מעקב — Live</h3>
+    <!-- Watchlist rail (existing module, ids unchanged) -->
+    <aside class="research-side">
+    <div class="sec-head"><h3>רשימת מעקב — Live</h3>
       <div style="display:flex;gap:8px">
         <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
@@ -419,6 +424,8 @@
       <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
     </div>
     <div id="watchlist-grid" class="wl-grid"></div>
+    </aside>
+    </div><!-- /research-grid -->
   </div>
 
   <!-- ═══════════════════════════════════════════════════

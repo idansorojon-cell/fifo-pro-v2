@@ -880,3 +880,24 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
   .dist-label { transform: rotate(-45deg); transform-origin: top right; }
   .mbar-cell { display: none; }
 }
+
+/* Research — decision-center layout (2.1 Wave Q) */
+.research-grid { display: grid; grid-template-columns: 1fr 330px; gap: 18px; align-items: start; }
+.research-side { position: sticky; top: 70px; }
+.research-side .wl-grid { grid-template-columns: 1fr; }
+@media (max-width: 1100px) {
+  .research-grid { grid-template-columns: 1fr; }
+  .research-side { position: static; }
+  .research-side .wl-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+}
+
+/* Open-position context strip above Decision Engine results */
+.de-posctx {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--border-2);
+  border-inline-start: 3px solid var(--blue);
+  border-radius: var(--r-md); padding: 10px 14px; margin-bottom: 12px;
+  font-size: 12.5px;
+}
+.de-posctx .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.de-posctx-note { color: var(--text-3); font-size: 11px; width: 100%; }
