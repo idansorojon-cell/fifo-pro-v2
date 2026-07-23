@@ -22,7 +22,7 @@
  */
 
 const Perf = (() => {
-  const { f$, fpct } = Utils;
+  const { f$, fILS, fpct, fnum } = Utils;
 
   let segment = 'overview';
 
@@ -46,6 +46,9 @@ const Perf = (() => {
     switch (segment) {
       case 'overview':
         _renderOverview(st);
+        _renderMonthlyTable(st);
+        _renderTopTrades();
+        _renderDistribution();
         Charts.renderEquity(st);
         Charts.renderMonthly(st);
         Charts.renderDrawdown(st);
@@ -70,9 +73,10 @@ const Perf = (() => {
     }
   }
 
-  // The single place the headline KPI set is rendered — one tile per
-  // metric, no duplicates anywhere else in the app (v1 showed several of
-  // these in up to 8 different screens/widgets).
+  // The single place the headline KPI set is rendered — every metric shown
+  // exactly ONCE, but ALL of them shown, grouped by meaning (profitability /
+  // extremes / risk & behaviour). Density with hierarchy, not minimalism:
+  // the numbers all come from the one getStats() call — nothing recomputed.
   function _renderOverview(st) {
     const el = document.getElementById('pv-overview-stats');
     if (!el) return;
@@ -80,18 +84,125 @@ const Perf = (() => {
       el.innerHTML = `<div class="tk-empty" style="grid-column:1/-1">אין עסקאות עדיין — המדדים יופיעו אחרי העסקה הסגורה הראשונה.</div>`;
       return;
     }
-    const tiles = [
-      ['רווח נטו כולל', f$(Math.round(st.totalNet)), st.totalNet >= 0 ? 'pos' : 'neg'],
-      ['Win Rate', st.winRate + '%', ''],
-      ['Profit Factor', st.pf >= 99 ? '∞' : st.pf, ''],
-      ['Expectancy / עסקה', f$(Math.round(st.expectancy)), st.expectancy >= 0 ? 'pos' : 'neg'],
-      ['Sharpe', st.sharpe, ''],
-      ['Max Drawdown', f$(Math.round(st.maxDD)), 'neg'],
-      ['החזקה ממוצעת', (Math.round(st.avgHold * 10) / 10) + ' ימים', ''],
-      ['רצף שיא (W/L)', `${st.maxWS} / ${st.maxLS}`, ''],
-    ];
-    el.innerHTML = tiles.map(([l, v, cls]) => `
-      <div class="qstat"><div class="l">${l}</div><div class="v ${cls}"><bdi>${v}</bdi></div></div>`).join('');
+    const rows = PerfMetrics.monthlyRows(st);
+    const best  = rows.find(r => r.isBest);
+    const worst = rows.find(r => r.isWorst);
+    const avgSize = PerfMetrics.avgCost(APP.trades);
+
+    const tile = (l, v, cls = '', sub = '') => `
+      <div class="qstat"><div class="l">${l}</div><div class="v ${cls}"><bdi>${v}</bdi></div>${sub ? `<div class="qstat-sub"><bdi>${sub}</bdi></div>` : ''}</div>`;
+    const group = (title, tiles) => `
+      <div class="kpi-group">
+        <div class="kpi-group-title">${title}</div>
+        <div class="qstat-grid">${tiles.join('')}</div>
+      </div>`;
+
+    el.innerHTML =
+      group('רווחיות', [
+        tile('רווח נטו כולל', f$(Math.round(st.totalNet)), st.totalNet >= 0 ? 'pos' : 'neg', fILS(Math.round(st.totalNetIls))),
+        tile('Win Rate', st.winRate + '%', '', `${st.wins}W / ${st.losses}L · ${st.total} עסקאות`),
+        tile('Profit Factor', st.pf >= 99 ? '∞' : st.pf, ''),
+        tile('Expectancy / עסקה', f$(Math.round(st.expectancy)), st.expectancy >= 0 ? 'pos' : 'neg'),
+        tile('רווח ממוצע', '+' + f$(Math.round(st.avgWin)), 'pos'),
+        tile('הפסד ממוצע', f$(Math.round(st.avgLoss)), 'neg'),
+      ]) +
+      group('שיאים וקצוות', [
+        tile('העסקה הרווחית ביותר', '+' + f$(Math.round(st.largestWin)), 'pos'),
+        tile('העסקה המפסידה ביותר', f$(Math.round(st.largestLoss)), 'neg'),
+        tile('החודש הטוב ביותר', best ? f$(best.net) : '—', 'pos', best ? best.label : ''),
+        tile('החודש החלש ביותר', worst ? f$(worst.net) : '—', worst && worst.net < 0 ? 'neg' : '', worst ? worst.label : ''),
+        tile('רצף נצחונות שיא', st.maxWS, 'pos'),
+        tile('רצף הפסדים שיא', st.maxLS, st.maxLS > 0 ? 'neg' : ''),
+      ]) +
+      group('סיכון והתנהגות', [
+        tile('Max Drawdown', f$(Math.round(st.maxDD)), 'neg'),
+        tile('Recovery Factor', st.recoveryFactor, ''),
+        tile('Sharpe (חודשי)', st.sharpe, ''),
+        tile('Kelly %', (st.kelly * 100).toFixed(1) + '%', ''),
+        tile('החזקה ממוצעת', (Math.round(st.avgHold * 10) / 10) + ' ימים', ''),
+        tile('גודל עסקה ממוצע', f$(Math.round(avgSize)), ''),
+      ]);
+  }
+
+  // ── Monthly performance table ─────────────────────────────
+  // Every month, newest first: trades, win rate, net $, net ₪ (that
+  // month's rate), running cumulative, and a signed bar. Clicking a row
+  // jumps to the Trades screen pre-filtered to that month.
+  function _renderMonthlyTable(st) {
+    const el = document.getElementById('pv-monthly-table');
+    if (!el) return;
+    const rows = PerfMetrics.monthlyRows(st);
+    if (!rows.length) { el.innerHTML = ''; return; }
+    const maxAbs = Math.max(...rows.map(r => Math.abs(r.net)), 1);
+
+    const tr = r => `
+      <tr class="mrow" onclick="Trades.applyFilter({month:'${r.month}'})" title="הצג את עסקאות ${r.label}">
+        <td class="mlabel">${r.label}
+          ${r.isBest ? '<span class="mtag best">Best</span>' : ''}${r.isWorst ? '<span class="mtag worst">Worst</span>' : ''}
+        </td>
+        <td class="num">${r.trades}</td>
+        <td class="num">${r.winRate}%</td>
+        <td class="num ${r.net >= 0 ? 'green' : 'red'}" style="font-weight:700"><bdi>${f$(r.net)}</bdi></td>
+        <td class="num ${r.netIls >= 0 ? 'green' : 'red'}"><bdi>${fILS(r.netIls)}</bdi></td>
+        <td class="num ${r.cum >= 0 ? 'green' : 'red'}"><bdi>${f$(r.cum)}</bdi></td>
+        <td class="mbar-cell"><div class="mbar ${r.net >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(Math.abs(r.net) / maxAbs * 100)}%"></div></td>
+      </tr>`;
+
+    const totNet = rows.reduce((s, r) => s + r.net, 0);
+    const totIls = rows.reduce((s, r) => s + r.netIls, 0);
+    const totTr  = rows.reduce((s, r) => s + r.trades, 0);
+
+    el.innerHTML = `
+      <table class="mtable">
+        <thead><tr>
+          <th>חודש</th><th class="num">עסקאות</th><th class="num">Win</th>
+          <th class="num">נטו $</th><th class="num">נטו ₪</th><th class="num">מצטבר</th><th></th>
+        </tr></thead>
+        <tbody>${rows.map(tr).join('')}</tbody>
+        <tfoot><tr>
+          <td>סה"כ</td><td class="num">${totTr}</td><td class="num">${st.winRate}%</td>
+          <td class="num ${totNet >= 0 ? 'green' : 'red'}" style="font-weight:700"><bdi>${f$(totNet)}</bdi></td>
+          <td class="num ${totIls >= 0 ? 'green' : 'red'}"><bdi>${fILS(totIls)}</bdi></td>
+          <td class="num"><bdi>${f$(Math.round(st.totalNet))}</bdi></td><td></td>
+        </tr></tfoot>
+      </table>`;
+  }
+
+  // ── Top winners / losers ──────────────────────────────────
+  function _renderTopTrades() {
+    const el = document.getElementById('pv-top-trades');
+    if (!el) return;
+    const { winners, losers } = PerfMetrics.topTrades(APP.trades, 5);
+    const item = t => `
+      <div class="ttrade" onclick="Trades.applyFilter({symbol:'${t.symbol}'})" title="הצג את כל עסקאות ${t.symbol}">
+        <span class="tt-sym">${t.symbol}</span>
+        <span class="tt-date">${t.sell_date}</span>
+        <span class="tt-pct num"><bdi>${fpct(t.pct)}</bdi></span>
+        <span class="tt-net num ${t.net >= 0 ? 'green' : 'red'}"><bdi>${(t.net >= 0 ? '+' : '') + f$(Math.round(t.net))}</bdi></span>
+      </div>`;
+    el.innerHTML = `
+      <div class="ttcol">
+        <div class="ttcol-title green">Top Winners</div>
+        ${winners.length ? winners.map(item).join('') : '<div class="tt-empty">אין עסקאות רווחיות עדיין</div>'}
+      </div>
+      <div class="ttcol">
+        <div class="ttcol-title red">Top Losers</div>
+        ${losers.length ? losers.map(item).join('') : '<div class="tt-empty">אין עסקאות מפסידות 🎉</div>'}
+      </div>`;
+  }
+
+  // ── Profit distribution histogram ─────────────────────────
+  function _renderDistribution() {
+    const el = document.getElementById('pv-dist');
+    if (!el) return;
+    const dist = PerfMetrics.distribution(APP.trades);
+    const maxC = Math.max(...dist.map(d => d.count), 1);
+    el.innerHTML = dist.map(d => `
+      <div class="dist-col" title="${d.count} עסקאות">
+        <div class="dist-count num">${d.count || ''}</div>
+        <div class="dist-bar-wrap"><div class="dist-bar ${d.neg ? 'neg' : 'pos'}" style="height:${Math.max(d.count / maxC * 100, d.count ? 4 : 0)}%"></div></div>
+        <div class="dist-label"><bdi>${d.label}</bdi></div>
+      </div>`).join('');
   }
 
   return { render, setSegment };

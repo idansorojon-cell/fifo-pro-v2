@@ -61,7 +61,13 @@ const Positions = (() => {
       el.innerHTML = '<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;padding:20px 0">אין פוזיציות פתוחות. לחץ "+ פוזיציה חדשה" להוספה.</div>';
       return;
     }
-    el.innerHTML = APP.positions.map(p => posCard(p)).join('');
+    // Total open-positions value (live price when available, cost basis
+    // otherwise) — the denominator for each card's portfolio-weight %.
+    const totalVal = APP.positions.reduce((s, p) => {
+      const live = APP.liveData[p.symbol];
+      return s + (live?.price ? live.price : p.avg_price) * p.qty;
+    }, 0);
+    el.innerHTML = APP.positions.map(p => posCard(p, totalVal)).join('');
   }
 
   // Risk status used by both the position card and Mission Control's
@@ -111,7 +117,57 @@ const Positions = (() => {
     return `<div class="rr-labels rr-labels--flat">${parts.join('')}</div>`;
   }
 
-  function posCard(p) {
+  // ── Position depth block (2.1) ──────────────────────────
+  // Portfolio weight, days held, distance to target/stop, live R:R, $ risk
+  // now, and the trader's own closed-trade record on this symbol. All
+  // derived from data already on screen (position + live price + trades) —
+  // no new trading math, honest '—' whenever an input is missing.
+  function _depthBlock(p, price, val, totalVal) {
+    const row = (l, v, cls = '', title = '') => `
+      <div${title ? ` title="${title}"` : ''}><span class="pcard-stat-l">${l}</span><span class="pcard-stat-v num ${cls}"><bdi>${v}</bdi></span></div>`;
+
+    const weight = totalVal > 0 ? (val / totalVal * 100) : null;
+    const days   = PerfMetrics.daysOpen(p.added_date);
+
+    const toTarget = (price && p.target)    ? (p.target - price) / price * 100 : null;
+    const toStop   = (price && p.stop_loss) ? (price - p.stop_loss) / price * 100 : null;
+
+    // Live R:R — remaining reward vs. remaining risk from the CURRENT
+    // price (not entry). Only meaningful while price is above the stop.
+    let rrNow = null;
+    if (price && p.target && p.stop_loss && price > p.stop_loss && p.target > price) {
+      rrNow = (p.target - price) / (price - p.stop_loss);
+    }
+    const riskNow = (price && p.stop_loss && price > p.stop_loss)
+      ? (price - p.stop_loss) * p.qty : null;
+
+    return `
+      <div class="pcard-stats pcard-depth">
+        ${row('משקל בתיק', weight !== null ? weight.toFixed(1) + '%' : '—')}
+        ${row('ימים בפוזיציה', days !== null ? days : '—')}
+        ${row('מרחק ליעד', toTarget !== null ? fpct(toTarget) : '—', toTarget !== null ? (toTarget >= 0 ? 'pos' : 'neg') : '')}
+        ${row('מרחק לסטופ', toStop !== null ? toStop.toFixed(1) + '%' : '—', toStop !== null && toStop < 5 ? 'neg' : '')}
+        ${row('R:R נוכחי', rrNow !== null ? '1:' + rrNow.toFixed(2) : '—', rrNow !== null ? (rrNow >= 2 ? 'pos' : rrNow < 1 ? 'neg' : '') : '', 'תגמול נותר מול סיכון נותר מהמחיר הנוכחי')}
+        ${row('סיכון עד סטופ', riskNow !== null ? f$(Math.round(riskNow)) : '—', '', 'כמה דולר בין המחיר הנוכחי לסטופ על כל הכמות')}
+      </div>`;
+  }
+
+  // The trader's own historical record on this ticker — closed trades only,
+  // straight from APP.trades. Clicking jumps to Trades filtered to the symbol.
+  function _historyLine(p) {
+    const h = PerfMetrics.symbolHistory(APP.trades, p.symbol);
+    if (!h) return `<div class="pcard-history muted">אין עסקאות סגורות קודמות בסימבול הזה</div>`;
+    return `
+      <div class="pcard-history" onclick="Trades.applyFilter({symbol:'${p.symbol}'})" title="הצג את כל עסקאות ${p.symbol}">
+        <span class="ph-l">היסטוריה בסימבול</span>
+        <span class="num"><bdi>${h.count} עסקאות</bdi></span>
+        <span class="num ${h.net >= 0 ? 'green' : 'red'}"><bdi>${(h.net >= 0 ? '+' : '') + f$(h.net)}</bdi></span>
+        <span class="num">${h.winRate}% Win</span>
+        <span class="ph-last">אחרונה ${h.lastDate}</span>
+      </div>`;
+  }
+
+  function posCard(p, totalVal) {
     const live      = APP.liveData[p.symbol];
     const price     = live?.price;
     // P&L is ALWAYS vs your entry price (p.avg_price) — never touches
@@ -158,6 +214,9 @@ const Positions = (() => {
           <div><span class="pcard-stat-l">שווי</span><span class="pcard-stat-v num"><bdi>${f$(Math.round(val))}</bdi></span></div>
           <div class="pcard-pl"><span class="pcard-stat-l">P&L</span><span class="pcard-stat-v num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${pnl!==null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}</bdi></span><span class="pcard-pl-sub num">${pnl!==null ? fpct(pnlPct)+' · '+fILS(Math.round(usdToIls(pnl, currentMonthKey()))) : ''}</span></div>
         </div>
+
+        ${_depthBlock(p, price, val, totalVal)}
+        ${_historyLine(p)}
 
         ${Auth.isViewer() ? '' : `
         <div class="pcard-actions">

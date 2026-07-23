@@ -156,6 +156,24 @@ const Trades = (() => {
     render(true);
   }
 
+  // ── Programmatic drill-down (Performance → Trades) ────────
+  // Called by the monthly table / top-trades lists: jumps to the Trades
+  // screen with the month and/or symbol filter pre-applied. Uses the same
+  // <select> filters the user sees, so the active filter is visible and
+  // clearable exactly like a manual one.
+  function applyFilter({ month = '', symbol = '' } = {}) {
+    if (typeof navigate === 'function') navigate('trades');
+    setMode('bytrade');
+    updateFilters(); // ensure options exist before selecting
+    const ms = document.getElementById('filter-month');
+    const ss = document.getElementById('filter-sym');
+    if (ms) ms.value = month;
+    if (ss) ss.value = symbol;
+    const q = document.getElementById('search-input');
+    if (q) q.value = '';
+    render();
+  }
+
   function setSort(col) {
     if (APP.sortCol === col) APP.sortDir *= -1;
     else { APP.sortCol = col; APP.sortDir = -1; }
@@ -296,7 +314,7 @@ const Trades = (() => {
   const renderDebounced = Utils.debounce(render, 200);
 
   return {
-    render, renderDebounced, updateFilters, setSort, loadMore,
+    render, renderDebounced, updateFilters, setSort, loadMore, applyFilter,
     openAddForm, openEdit, closeForm, calcPreview, submit, remove,
     setMode, toggleDetail
   };
