@@ -115,6 +115,8 @@ const Trades = (() => {
     const total = rows.length;
     const shown = rows.slice(0, visibleCount);
 
+    _renderFilterSummary(rows, !!(sym || mon || q));
+
     tbody.innerHTML = shown.map(t => {
       const netIls = Math.round(usdToIls(t.net, t.month));
       const hasJ = _hasJournal(t);
@@ -154,6 +156,34 @@ const Trades = (() => {
   function loadMore() {
     visibleCount += PAGE_SIZE;
     render(true);
+  }
+
+  // ── Filtered-set summary strip (2.1) ──────────────────────
+  // Totals for the CURRENT filter/search result — the whole point of
+  // filtering to a month/symbol is seeing its bottom line, not just its
+  // rows. Sums the same rows the table shows (before pagination).
+  function _renderFilterSummary(rows, filtered) {
+    const el = document.getElementById('trades-filter-summary');
+    if (!el) return;
+    if (!rows.length) { el.innerHTML = ''; return; }
+    const net    = rows.reduce((s, t) => s + t.net, 0);
+    const netIls = rows.reduce((s, t) => s + usdToIls(t.net, t.month), 0);
+    const wins   = rows.filter(t => t.net > 0).length;
+    const losses = rows.filter(t => t.net < 0).length;
+    const wr     = Math.round(wins / rows.length * 100);
+    const avgHold = rows.reduce((s, t) => s + (t.hold_days || 0), 0) / rows.length;
+    const stat = (l, v, cls = '') => `<span class="tfs-stat">${l} <b class="num ${cls}"><bdi>${v}</bdi></b></span>`;
+    el.innerHTML = `
+      <div class="tfs ${filtered ? 'tfs--filtered' : ''}">
+        ${filtered ? `<span class="tfs-flag">${icon('search')} סיכום הסינון</span>` : `<span class="tfs-flag">${icon('list')} סה"כ</span>`}
+        ${stat('עסקאות', rows.length)}
+        ${stat('נטו', f$(Math.round(net)), net >= 0 ? 'green' : 'red')}
+        ${stat('נטו ₪', fILS(Math.round(netIls)), netIls >= 0 ? 'green' : 'red')}
+        ${stat('Win Rate', wr + '%')}
+        ${stat('W/L', wins + '/' + losses)}
+        ${stat('החזקה ממוצעת', (Math.round(avgHold * 10) / 10) + ' ימים')}
+        ${filtered ? `<button class="btn btn-ghost btn-xs" onclick="Trades.applyFilter({})">נקה סינון ✕</button>` : ''}
+      </div>`;
   }
 
   // ── Programmatic drill-down (Performance → Trades) ────────

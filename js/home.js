@@ -161,6 +161,12 @@ const Home = (() => {
         <div class="chip"><div class="chip-label">Win Rate</div><div class="chip-val">${winRate}%</div></div>
         <div class="chip"><div class="chip-label">יעד חודשי</div><div class="chip-val" style="color:${goalPct>=100?'var(--signal)':'inherit'}">${goalPct}%</div></div>
         <div class="chip"><div class="chip-label">חשיפה</div><div class="chip-val">${exposure.toFixed(0)}%</div></div>
+        <div class="chip" onclick="navigate('performance')" style="cursor:pointer" title="ריאלי כולל — לפירוט מלא: ביצועים">
+          <div class="chip-label">ריאלי כולל</div><div class="chip-val ${_tone(st.totalNet)}"><bdi>${f$(Math.round(st.totalNet))}</bdi></div></div>
+        <div class="chip" onclick="Trades.applyFilter({month:'${st.curMonth}'})" style="cursor:pointer" title="נטו החודש — לחיצה מציגה את עסקאות החודש">
+          <div class="chip-label">נטו החודש</div><div class="chip-val ${_tone(st.curMonthNet)}"><bdi>${f$(Math.round(st.curMonthNet || 0))}</bdi></div></div>
+        <div class="chip"><div class="chip-label">Profit Factor</div><div class="chip-val">${st.pf >= 99 ? '∞' : st.pf}</div></div>
+        <div class="chip"><div class="chip-label">Expectancy</div><div class="chip-val ${_tone(st.expectancy)}"><bdi>${f$(Math.round(st.expectancy))}</bdi></div></div>
       </div>
 
       ${(APP.positions || []).length ? `

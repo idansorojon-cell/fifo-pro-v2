@@ -8,11 +8,16 @@ docs live in `/docs` — this is the condensed summary. Updated
 
 ## 1. Where things stand RIGHT NOW
 
-- **Branch `premium-redesign`** (worktree `fifo/fifo-premium-redesign`)
-  holds **FIFO PRO 2.0** — a complete Design Transformation, finished
-  and synthetically QA'd, **NOT merged, NOT pushed, NOT deployed**.
-- **Production (`origin/main`) still runs v1** exactly as before.
-- **Rollback point:** `main`@`cf1d454`.
+- **Production runs FIFO PRO 2.0.1** (deployed 2026-07-23, merge
+  `4fabd2a` + build-bump `3ae3a8d`; rollback tag
+  `rollback/pre-2.0-merge` → `cf1d454` pushed too). The mandatory
+  update mechanism was proven end-to-end (detect → overlay → write-block
+  → update → draft restore → no loop) before release.
+- **Branch `premium-redesign`** now holds **2.1 "Depth with hierarchy"**
+  (Waves O/P/Q/R — owner's course-correction: density, not minimalism),
+  stamped 2.1.0, **NOT merged, NOT pushed** — awaiting owner approval.
+- **The owner mandate governing all future design:** simplify through
+  HIERARCHY, never deletion (see CLAUDE.md Golden Rules).
 - **Release gate (explicitly agreed with the owner):** the owner runs
   the real-login checklist below on the local preview → approves → then
   merge to `main` + push (which auto-deploys GitHub Pages). No Apps
