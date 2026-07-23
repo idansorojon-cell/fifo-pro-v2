@@ -41,14 +41,14 @@ const Positions = (() => {
     // <bdi> isolates each value's own direction without affecting layout
     // or the underlying number/logic. See docs/TECHNICAL_DEBT.md.
     el.innerHTML = `
-      <div title="Σ(מחיר קנייה ממוצע × כמות) — כמה כסף מושקע בפוזיציות הפתוחות"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות פוזיציות פתוחות</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
-      <div title="Σ(מחיר נוכחי × כמות) — לפי מחירים חיים ככל שזמינים"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי שוק נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">Open P&L</div>
-        <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
+      <div class="pss-item" title="Σ(מחיר קנייה ממוצע × כמות) — כמה כסף מושקע בפוזיציות הפתוחות"><div class="pss-label">עלות פוזיציות פתוחות</div><div class="pss-val num"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
+      <div class="pss-item" title="Σ(מחיר נוכחי × כמות) — לפי מחירים חיים ככל שזמינים"><div class="pss-label">שווי שוק נוכחי</div><div class="pss-val num"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
+      <div class="pss-item"><div class="pss-label">Open P&L</div>
+        <div class="pss-val num" style="color:${totalPnl>=0?'var(--green)':'var(--red)'}">
           <bdi>${f$(Math.round(totalPnl))}</bdi> ${liveCount ? `<bdi>(${liveCount}/${APP.positions.length} live)</bdi>` : ''}
         </div></div>
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">P&L %</div>
-        <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
+      <div class="pss-item"><div class="pss-label">P&L %</div>
+        <div class="pss-val num" style="color:${totalPnl>=0?'var(--green)':'var(--red)'}">
           <bdi>${totalCost ? fpct(totalPnl/totalCost*100) : '—'}</bdi>
         </div></div>
     `;
@@ -212,7 +212,7 @@ const Positions = (() => {
         <div class="pcard-stats">
           <div><span class="pcard-stat-l">כמות</span><span class="pcard-stat-v num"><bdi>${fnum(p.qty)}</bdi></span></div>
           <div><span class="pcard-stat-l">שווי</span><span class="pcard-stat-v num"><bdi>${f$(Math.round(val))}</bdi></span></div>
-          <div class="pcard-pl"><span class="pcard-stat-l">P&L</span><span class="pcard-stat-v num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${pnl!==null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}</bdi></span><span class="pcard-pl-sub num">${pnl!==null ? fpct(pnlPct)+' · '+fILS(Math.round(usdToIls(pnl, currentMonthKey()))) : ''}</span></div>
+          <div class="pcard-pl"><span class="pcard-stat-l">P&L</span><span class="pcard-stat-v num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${pnl!==null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}</bdi></span><span class="pcard-pl-sub num">${pnl!==null ? `<bdi>${fpct(pnlPct)}</bdi> · <bdi>${fILS(Math.round(usdToIls(pnl, currentMonthKey())))}</bdi>` : ''}</span></div>
         </div>
 
         ${_depthBlock(p, price, val, totalVal)}

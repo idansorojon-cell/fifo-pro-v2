@@ -10,6 +10,6 @@
  */
 window.APP_BUILD = {
   version: "2.2.0",
-  build: "2026-07-23.6",
-  cache: "fifopro-v2.2.0-2026-07-23.6"
+  build: "2026-07-23.7",
+  cache: "fifopro-v2.2.0-2026-07-23.7"
 };

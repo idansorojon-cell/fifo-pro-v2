@@ -172,7 +172,7 @@ const Watchlist = (() => {
         <div class="wl-meta">${live?.updated || ''}</div>
 
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">${icon('target')} Analyze</button>
+          <button class="btn btn-ghost btn-xs" onclick="DecisionEngine.analyzeSymbol('${w.symbol}')">${icon('target')} נתח</button>
           ${Auth.isViewer() ? '' : `<button class="btn btn-ghost btn-xs" onclick="openTradeTicket({intent:'open', symbol:'${w.symbol}'${price ? `, entry:${price}` : ''}})">${icon('plus')} טיקט</button>`}
         </div>
       </div>
