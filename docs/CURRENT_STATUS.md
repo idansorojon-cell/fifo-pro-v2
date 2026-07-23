@@ -1,21 +1,27 @@
 # FIFO PRO — Current Status
 
-_Last updated: 2026-07-23. **Production runs 2.1.0** — "Depth with
-hierarchy" (Waves O-U) released with owner approval; server-synced
-settings live (backend deployed by owner the same day). See HANDOFF.md._
+_Last updated: 2026-07-23. **Production runs 2.1.0**; branch
+`premium-redesign` now also carries **2.2.0 — typography overhaul**
+(self-hosted Heebo/JetBrains Mono + full screen audit), NOT yet
+merged/pushed. See HANDOFF.md._
 
 ## Branch state
 
-- **Production (`origin/main`):** 2.0.1, merge `4fabd2a` + bump
-  `3ae3a8d`. Rollback tag `rollback/pre-2.0-merge` → `cf1d454` (v1).
-- **Branch `premium-redesign`:** 2.1.0 — Waves O (Performance depth:
-  3-group 18-KPI board, clickable monthly table with ₪+cumulative+
-  Best/Worst, top winners/losers, P&L distribution), P (Positions
-  depth: weight/days/distances/live-R:R/$risk + per-symbol record),
-  Q (Research decision center: two-column workspace + watchlist rail,
-  open-position context, watchlist→ticket), R (Trades filtered-set
-  summary strip, Home 8-chip strip). New js/perfMetrics.js; utils.js
-  and backend untouched (0 diff).
+- **Production (`origin/main`):** 2.1.0, merge `c280b83`. Rollback tags:
+  `rollback/pre-2.1-merge` → `3ae3a8d` (2.0.1), `rollback/pre-2.0-merge`
+  → `cf1d454` (v1). Server-synced settings live (owner deployed
+  AppScript_FULL.gs 2026-07-23; getSettings/setSettings verified via a
+  13-step real-backend test series).
+- **Branch `premium-redesign`:** 2.2.0 — typography overhaul: self-hosted
+  Heebo (400-800, hebrew+latin) + JetBrains Mono (400/500/700, latin) in
+  new css/fonts.css, replacing an unloaded "Inter"/system-font stack that
+  had no real Hebrew bold weights on non-Apple platforms (browser-faked
+  bold = the reported "pixelated" look). Full screen-by-screen overflow
+  audit (automated + visual) across desktop/tablet/mobile found and
+  fixed 3 CSS grid-blowout bugs (Positions depth block, Performance
+  stats-2col/dist-grid, ttgrid) — all via the standard min-width:0 fix,
+  no markup changes. sw.js precache also gained the font files + a
+  previously-missing js/perfMetrics.js entry.
 - **Deployment gate:** owner approval, then merge+push (+15-min-max
   mandatory update for open sessions).
 

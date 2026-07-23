@@ -26,17 +26,32 @@
  * the bump script instead of edited by hand.
  */
 
-const BUILD_CACHE = 'fifopro-v2.1.0-2026-07-23.5';
+const BUILD_CACHE = 'fifopro-v2.2.0-2026-07-23.6';
 
 // NOTE: relative paths so this works both at a domain root and under a
 // GitHub Pages project subpath.
 const CORE_ASSETS = [
   './',
   'index.html',
+  'css/fonts.css',
   'css/style.css',
   'css/mobile.css',
   'css/system.css',
+  'fonts/heebo-400-hebrew.woff2',
+  'fonts/heebo-400-latin.woff2',
+  'fonts/heebo-500-hebrew.woff2',
+  'fonts/heebo-500-latin.woff2',
+  'fonts/heebo-600-hebrew.woff2',
+  'fonts/heebo-600-latin.woff2',
+  'fonts/heebo-700-hebrew.woff2',
+  'fonts/heebo-700-latin.woff2',
+  'fonts/heebo-800-hebrew.woff2',
+  'fonts/heebo-800-latin.woff2',
+  'fonts/jetbrains-mono-400-latin.woff2',
+  'fonts/jetbrains-mono-500-latin.woff2',
+  'fonts/jetbrains-mono-700-latin.woff2',
   'js/version.js',
+  'js/perfMetrics.js',
   'js/versionGuard.js',
   'js/utils.js',
   'js/home.js',

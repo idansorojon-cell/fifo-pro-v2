@@ -82,9 +82,17 @@
   /* Motion */
   --t-fast: 0.12s ease;  --t-med: 0.2s ease;  --t-slow: 0.32s ease;
 
-  /* Type */
-  --font-main: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+  /* Type (2.2 typography overhaul, 2026-07-23) — Heebo/JetBrains Mono are
+     self-hosted in css/fonts.css with REAL static weight files 400-800.
+     The previous stack listed "Inter" but never loaded it, and had no
+     Hebrew coverage beyond -apple-system/Segoe UI — on any platform
+     without those (Linux, some Windows Chrome/Edge configs), Hebrew
+     bold text (700/800 is used throughout the KPI/hero components) was
+     browser-synthesized ("faked" by thickening strokes), which is the
+     exact pixelated/blurry look reported. System fonts stay as the
+     fallback chain in case the self-hosted files ever fail to load. */
+  --font-main: "Heebo", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
 
   /* Shell metrics */
   --rail-w: 76px;
@@ -138,8 +146,18 @@ body {
   font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 h1, h2, h3 { text-wrap: balance; }
+
+/* Every element inherits the family explicitly — belt-and-braces against
+   any remaining inline style="font-family:..." or third-party widget
+   that would otherwise fall through to the browser default (which historically
+   showed up as a visually "off" glyph mixed into an otherwise consistent
+   screen). Buttons/inputs/selects/textareas don't inherit font by default
+   in most browsers, so they're named explicitly too. */
+button, input, select, textarea, .btn { font-family: inherit; }
 
 /* Tabular mono numerals — the one deliberate "instrument panel" signal.
    Applied to the new .num helper AND to the existing value classes that
@@ -851,8 +869,12 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
 .tt-empty { color: var(--text-3); font-size: 12px; padding: 8px; }
 
 /* Profit distribution histogram */
-.dist-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; min-height: 150px; padding-top: 6px; }
-.dist-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* overflow-x:auto is a safety net (same philosophy as table-wrap — content
+   scrolls inside its own container, the page never scrolls sideways) for
+   any viewport too narrow to fit all 8 columns even after they shrink to
+   their true minimum via min-width:0 below. */
+.dist-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; min-height: 150px; padding-top: 6px; overflow-x: auto; }
+.dist-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .dist-count { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono); height: 14px; }
 .dist-bar-wrap { height: 90px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
 .dist-bar { width: 70%; max-width: 34px; border-radius: 3px 3px 0 0; }
@@ -861,7 +883,19 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
 .dist-label { font-size: 9px; color: var(--text-3); white-space: nowrap; font-family: var(--font-mono); }
 
 /* Positions — depth block + symbol history */
-.pcard-depth { border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px; }
+/* .pcard-depth carries 6 stat cells (weight/days/target-dist/stop-dist/
+   R:R/$risk) — the base .pcard-stats is `display:flex` with NO wrap,
+   sized for its original 3 items (qty/value/P&L). Cramming 6 flex items
+   into one un-wrapped row overflowed the card (and the page) at every
+   width the position-card grid actually uses (~300-340px, whether one
+   column on mobile or two on tablet — found via automated overflow
+   audit, 2026-07-23). A dedicated 3-column grid — 2 rows of 3 — fits
+   the same card width the 3-item row already fit, at every breakpoint. */
+.pcard-stats.pcard-depth {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px;
+  border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px;
+}
+.pcard-depth .pcard-stat-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcard-history {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin-top: 8px; padding: 6px 8px; border-radius: var(--r-sm);
@@ -871,6 +905,18 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
 .pcard-history.muted { cursor: default; color: var(--text-3); background: transparent; padding: 4px 0; }
 .pcard-history .ph-l { color: var(--text-3); font-weight: 600; }
 .pcard-history .ph-last { color: var(--text-3); font-size: 10px; margin-inline-start: auto; }
+
+/* Grid-blowout fix (2.2 typography/layout audit, 2026-07-23): grid items
+   default to min-width:auto, so a track can be forced WIDER than its
+   container by a child's own content-driven minimum — found via
+   automated overflow audit on Performance's 2-column cards at narrow
+   widths (mobile.css collapses .stats-2col to a single 1fr column, but
+   the column itself still measured ~50px wider than the container).
+   min-width:0 lets the grid item shrink to the track's real size; its
+   own content still wraps/scrolls normally within that space. Scoped to
+   every .card that's a direct grid child, not just .stats-2col, since
+   the same footgun applies to any grid wrapping cards (kpi-group, etc). */
+.stats-2col > .card, .kpi-group .qstat-grid > *, .qstat-grid > *, .ttgrid > * { min-width: 0; }
 
 /* Responsive: KPI groups collapse gracefully */
 @media (max-width: 1100px) { .kpi-group .qstat-grid { grid-template-columns: repeat(3, 1fr); } }

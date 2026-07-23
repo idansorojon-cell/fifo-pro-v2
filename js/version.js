@@ -9,7 +9,7 @@
  * release was deployed while this bundle is still loaded.
  */
 window.APP_BUILD = {
-  version: "2.1.0",
-  build: "2026-07-23.5",
-  cache: "fifopro-v2.1.0-2026-07-23.5"
+  version: "2.2.0",
+  build: "2026-07-23.6",
+  cache: "fifopro-v2.2.0-2026-07-23.6"
 };

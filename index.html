@@ -13,6 +13,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
 <!-- CSS -->
+<!-- Self-hosted fonts (2.2 typography overhaul) — loaded first so
+     @font-face is registered before anything requests the family. -->
+<link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/mobile.css">
 <!-- FIFO PRO 2.0 — Quiet Terminal design system (loaded last: wins the cascade) -->
