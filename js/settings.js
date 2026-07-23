@@ -18,7 +18,12 @@ const Settings = (() => {
     monthlyGoal: 5000,
     weeklyGoal: 1200,
     dailyGoal: 250,
-    portfolioSize: 67000,
+    // null = NOT SET. 67000 was only ever an old default, never verified
+    // capital — the owner mandated (2026-07-23) that it must never be
+    // presented as the real portfolio size nor auto-written to the
+    // server. Everything that depends on it shows '—' + "הגדר גודל תיק"
+    // until the owner explicitly enters a value.
+    portfolioSize: null,
     riskPct: 1.0,
     stopLossPct: 2.0,
     takeProfitPct: 4.0,
@@ -55,8 +60,186 @@ const Settings = (() => {
     sessionTimeout: 0, // 0 = never
   };
 
-  function getPrefs() { return LS.get('fifo_prefs', DEFAULTS); }
+  // MUST return a COPY when falling back to defaults: callers mutate the
+  // returned object (set()/toggleModule do `p[key]=…; savePrefs(p)`), and
+  // returning the DEFAULTS reference let those writes contaminate the
+  // in-memory defaults for the rest of the session — e.g. after unset(),
+  // get() would "restore" a stale value instead of honest null. Found by
+  // the post-deploy cleanup test (2026-07-23); latent since v1.
+  function getPrefs() {
+    const stored = LS.get('fifo_prefs', null);
+    return stored || { ...DEFAULTS, showModules: { ...DEFAULTS.showModules } };
+  }
   function savePrefs(p) { LS.set('fifo_prefs', p); }
+
+  // ── Server sync layer (2.1, owner mandate 2026-07-23) ────
+  // Business settings must survive refresh / logout / re-login and sync
+  // across devices. They persist server-side in the same "Settings"
+  // key/value sheet the monthly goal uses (key 'prefs', JSON blob) via
+  // API.getSettings/saveSettings. localStorage becomes a CACHE of the
+  // server truth, not the source. Display prefs (theme) stay local by
+  // design. The monthly goal keeps its own existing server path
+  // (getGoal/setGoal) — one source of truth per value, no duplication.
+  const SYNCED_KEYS = ['portfolioSize', 'riskPct', 'maxPositionSize',
+                       'autoRefresh', 'refreshInterval', 'alertStop'];
+
+  let _serverReady = false;      // boot load settled (success OR determined fallback)
+  let _serverAvailable = false;  // deployed backend supports getSettings
+  let _saveTimer = null;
+  let _saveState = 'idle';       // idle | saving | saved | failed | local-only
+  const _dirty = new Set();      // synced keys changed locally, not yet confirmed by the server
+  const MIGRATION_DECLINED_KEY = 'fifo_settings_migration_declined_v1';
+
+  function isReady() { return _serverReady; }
+
+  // Boot-time load. Rules (owner-specified):
+  //   1. Server value ALWAYS wins over local for synced keys.
+  //   2. Empty server (nothing stored yet) → keep local; nothing is
+  //      written until the user explicitly saves. Defaults NEVER
+  //      overwrite a stored value in either direction.
+  //   3. An old backend deployment (getSettings → ok:false "Unknown
+  //      action") → honest local-only mode, surfaced in the UI badge.
+  // Never throws — boot must not break on a settings failure.
+  async function loadFromServer() {
+    try {
+      if (typeof API === 'undefined' || !API.isConfigured()) { return; }
+      const res = await API.getSettings();
+      if (res && res.ok) {
+        _serverAvailable = true;
+        if (res.settings && typeof res.settings === 'object') {
+          // Server value is the truth — it overwrites any stale local
+          // cache for every synced key it carries. Local values are only
+          // kept for keys the server has never stored.
+          const p = getPrefs();
+          SYNCED_KEYS.forEach(k => {
+            if (res.settings[k] !== undefined) p[k] = res.settings[k];
+          });
+          savePrefs(p);
+        } else {
+          // Server reachable but EMPTY (no prefs stored yet). NEVER
+          // auto-write local/default values — the owner decides. If the
+          // local cache holds explicitly-set values (≠ defaults), offer
+          // a one-time visible migration; declining is remembered.
+          _offerMigration();
+        }
+      } else {
+        _serverAvailable = false;
+      }
+    } catch (_) {
+      _serverAvailable = false;
+    } finally {
+      _serverReady = true;
+      _saveState = _serverAvailable ? 'idle' : 'local-only';
+      _updateSyncBadge();
+    }
+  }
+
+  // One-time offer to persist explicitly-set LOCAL values to an EMPTY
+  // server. Never silent: uiConfirm with the actual values listed;
+  // declining is remembered and never re-asked (the values still reach
+  // the server naturally whenever the owner next edits them).
+  function _offerMigration() {
+    try {
+      if (LS.get(MIGRATION_DECLINED_KEY)) return;
+      const p = getPrefs();
+      const userSet = SYNCED_KEYS.filter(k =>
+        p[k] !== undefined && p[k] !== null && p[k] !== DEFAULTS[k]);
+      if (!userSet.length || typeof uiConfirm !== 'function') return;
+      const list = userSet.map(k => `${k}: ${p[k]}`).join(' · ');
+      // Deferred so the boot render isn't blocked by a dialog.
+      setTimeout(async () => {
+        const yes = await uiConfirm(
+          `נמצאו הגדרות מקומיות בדפדפן הזה (${list}) ובחשבון עדיין אין הגדרות שמורות. לשמור אותן בחשבון כך שיסתנכרנו לכל המכשירים?`,
+          { title: 'שמירת הגדרות מקומיות בחשבון', confirmText: 'שמור בחשבון' });
+        if (yes) { userSet.forEach(k => _dirty.add(k)); _scheduleServerSave(); }
+        else LS.set(MIGRATION_DECLINED_KEY, true);
+      }, 1200);
+    } catch (_) {}
+  }
+
+  function _scheduleServerSave() {
+    if (!_serverAvailable) { _saveState = 'local-only'; _updateSyncBadge(); return; }
+    clearTimeout(_saveTimer);
+    _saveState = 'saving'; _updateSyncBadge();
+    _saveTimer = setTimeout(_saveToServer, 600); // coalesce rapid edits
+  }
+
+  // PARTIAL update: send ONLY the dirty keys. The server merges them
+  // into its stored blob, so two browsers editing different fields can
+  // never clobber each other, and this client can never blind-overwrite
+  // newer server values for fields it didn't touch.
+  async function _saveToServer() {
+    const p = getPrefs();
+    const sending = [..._dirty];
+    if (!sending.length) { _saveState = 'idle'; _updateSyncBadge(); return; }
+    const payload = {};
+    sending.forEach(k => { if (p[k] !== undefined && p[k] !== null) payload[k] = p[k]; });
+    if (!Object.keys(payload).length) { _saveState = 'idle'; _updateSyncBadge(); return; }
+    try {
+      const res = await API.saveSettings(payload);
+      if (res && res.ok) {
+        // Server confirmed → its merged blob is the truth; refresh the
+        // local cache from it and clear only the keys we actually sent
+        // (a key edited again mid-flight stays dirty for the next save).
+        if (res.settings && typeof res.settings === 'object') {
+          const cur = getPrefs();
+          SYNCED_KEYS.forEach(k => { if (res.settings[k] !== undefined) cur[k] = res.settings[k]; });
+          savePrefs(cur);
+        }
+        sending.forEach(k => _dirty.delete(k));
+        _saveState = _dirty.size ? 'saving' : 'saved'; _updateSyncBadge();
+        if (_dirty.size) _saveTimer = setTimeout(_saveToServer, 600);
+        else setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
+      } else {
+        // Entered values are NOT lost — they live in local prefs and the
+        // visible inputs, and stay dirty for retry. Never shown as synced.
+        _saveState = 'failed'; _updateSyncBadge(res && res.error);
+      }
+    } catch (e) {
+      _saveState = 'failed'; _updateSyncBadge(e.message);
+    }
+  }
+
+  function retryServerSave() { if (_serverAvailable) { _saveState = 'saving'; _updateSyncBadge(); _saveToServer(); } }
+
+  // Explicitly UNSET a synced key — locally and (when the backend is
+  // available) on the server, via the null-deletes-key contract in
+  // handleSetSettings_. Returns the server result so callers/tests can
+  // verify. Used by the owner's "leave it as 'not set'" flows; never
+  // called automatically.
+  async function unset(key) {
+    if (!SYNCED_KEYS.includes(key)) return { ok: false, error: 'not a synced key' };
+    const p = getPrefs();
+    delete p[key];
+    savePrefs(p);
+    _dirty.delete(key);
+    if (!_serverAvailable) { _saveState = 'local-only'; _updateSyncBadge(); return { ok: true, localOnly: true }; }
+    try {
+      const res = await API.saveSettings({ [key]: null });
+      if (res && res.ok) {
+        _saveState = 'saved'; _updateSyncBadge();
+        setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
+      } else {
+        _saveState = 'failed'; _updateSyncBadge(res && res.error);
+      }
+      return res;
+    } catch (e) {
+      _saveState = 'failed'; _updateSyncBadge(e.message);
+      return { ok: false, error: e.message };
+    }
+  }
+
+  function _updateSyncBadge(err) {
+    const el = document.getElementById('settings-sync-badge');
+    if (!el) return;
+    switch (_saveState) {
+      case 'saving':     el.innerHTML = `<span class="sync-b sync-saving">שומר לשרת…</span>`; break;
+      case 'saved':      el.innerHTML = `<span class="sync-b sync-ok">✓ נשמר בחשבון — מסונכרן לכל המכשירים</span>`; break;
+      case 'failed':     el.innerHTML = `<span class="sync-b sync-fail">✕ השמירה לשרת נכשלה${err ? ' — ' + err : ''} (הערך נשמר מקומית) <button class="btn btn-ghost btn-xs" onclick="Settings.retryServerSave()">נסה שוב</button></span>`; break;
+      case 'local-only': el.innerHTML = `<span class="sync-b sync-warn">⚠ מצב מקומי בלבד — ה-Backend הפרוס עדיין ללא סנכרון הגדרות (נדרש deploy). שינויים נשמרים בדפדפן זה בלבד.</span>`; break;
+      default:           el.innerHTML = _serverAvailable ? `<span class="sync-b sync-idle">הגדרות עסקיות מסונכרנות לחשבון</span>` : '';
+    }
+  }
 
   function get(key) {
     const p = getPrefs();
@@ -66,6 +249,7 @@ const Settings = (() => {
     const p = getPrefs();
     p[key] = val;
     savePrefs(p);
+    if (SYNCED_KEYS.includes(key)) { _dirty.add(key); _scheduleServerSave(); }
   }
 
   // ── Render ──────────────────────────────────────────────
@@ -85,6 +269,7 @@ const Settings = (() => {
         <div class="eyebrow">חשבון</div>
         <h1>הגדרות</h1>
         <div class="lede">התאמה אישית מלאה של FIFO PRO</div>
+        <div id="settings-sync-badge"></div>
       </div>
         </div>
       </div>
@@ -168,7 +353,7 @@ const Settings = (() => {
           ${_numRow('weeklyGoal','יעד שבועי ($)','יעד הרווח השבועי',p.weeklyGoal,'$')}
           ${_numRow('dailyGoal','יעד יומי ($)','יעד הרווח היומי',p.dailyGoal,'$')}
           -->
-          ${_numRow('portfolioSize','גודל תיק ($)','סך ההון המנוהל',p.portfolioSize,'$')}
+          ${_numRow('portfolioSize','גודל תיק מוגדר ($)','סך ההון המנוהל שאתה קובע — מזין את: חשיפה (בית), כמות מומלצת לפי % סיכון (טיקט מסחר), "סיכון לתיק" (Decision Engine) ומחשבון R:R בפוזיציות. נשמר בחשבון ומסונכרן בין מכשירים',p.portfolioSize,'$')}
         </div>
       </div>
 
@@ -265,7 +450,7 @@ const Settings = (() => {
           <div class="settings-row">
             <div class="settings-row-info">
               <span class="settings-row-label">רענון אוטומטי</span>
-              <span class="settings-row-sub">מחירים חיים כל 30 שניות</span>
+              <span class="settings-row-sub">מחירים חיים לפי מרווח הרענון שנבחר למטה</span>
             </div>
             <label class="switch">
               <input type="checkbox" ${p.autoRefresh?'checked':''} onchange="Settings.set('autoRefresh',this.checked);restartPolling()">
@@ -607,6 +792,7 @@ const Settings = (() => {
     </div>`;
 
     if (Auth.getRole() === 'owner') _refreshViewerStatus();
+    _updateSyncBadge(); // the badge div was just re-created — paint current state
   }
 
   // ── Row builders ────────────────────────────────────────
@@ -622,7 +808,7 @@ const Settings = (() => {
         </div>
         <div class="s-num-wrap">
           ${unit?`<span class="s-unit">${unit}</span>`:''}
-          <input class="s-input s-input-num" type="number" value="${val}" ${mn} ${mx} ${st}
+          <input class="s-input s-input-num" type="number" value="${val ?? ''}" ${val == null ? 'placeholder="טרם הוגדר"' : ''} ${mn} ${mx} ${st}
             onchange="Settings.set('${key}', +this.value);Settings._syncGoal()">
         </div>
       </div>`;
@@ -930,6 +1116,7 @@ const Settings = (() => {
 
   return {
     render, get, set, getPrefs, save, setTheme, toggleModule,
+    loadFromServer, isReady, retryServerSave, unset,
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
     showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,

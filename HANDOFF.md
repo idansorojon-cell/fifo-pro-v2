@@ -8,15 +8,59 @@ docs live in `/docs` — this is the condensed summary. Updated
 
 ## 1. Where things stand RIGHT NOW
 
-- **Branch `premium-redesign`** (worktree `fifo/fifo-premium-redesign`)
-  holds **FIFO PRO 2.0** — a complete Design Transformation, finished
-  and synthetically QA'd, **NOT merged, NOT pushed, NOT deployed**.
-- **Production (`origin/main`) still runs v1** exactly as before.
-- **Rollback point:** `main`@`cf1d454`.
+- **Production runs FIFO PRO 2.0.1** (deployed 2026-07-23, merge
+  `4fabd2a` + build-bump `3ae3a8d`; rollback tag
+  `rollback/pre-2.0-merge` → `cf1d454` pushed too). The mandatory
+  update mechanism was proven end-to-end (detect → overlay → write-block
+  → update → draft restore → no loop) before release.
+- **Production runs FIFO PRO 2.1.0** (released 2026-07-23 with owner
+  approval after the full post-deploy settings-sync test series).
+  Backend deployed by the owner the same day (synced settings live).
+- **The owner mandate governing all future design:** simplify through
+  HIERARCHY, never deletion (see CLAUDE.md Golden Rules).
 - **Release gate (explicitly agreed with the owner):** the owner runs
   the real-login checklist below on the local preview → approves → then
   merge to `main` + push (which auto-deploys GitHub Pages). No Apps
   Script redeploy is needed — the backend was not touched.
+
+## 1b. Synced settings — PENDING APPS SCRIPT DEPLOY (owner action)
+
+2.1 adds server-synced business settings (portfolioSize/riskPct/
+maxPositionSize/autoRefresh/refreshInterval/alertStop) stored in the
+same "Settings" sheet as the goal, key `prefs`. The frontend is fully
+deployed-backend-aware: an OLD backend answers getSettings with
+"Unknown action" and the app runs in an honest local-only mode (gold
+badge on the Settings screen). To activate sync, the owner must
+manually redeploy Apps Script (git push does NOT do this):
+  1. Open the Apps Script project → paste the current AppScript_FULL.gs.
+  2. Deploy → Manage deployments → edit the EXISTING deployment → New
+     version → Deploy (keeps the same /exec URL — do not create a new
+     deployment, that would change the URL).
+  3. Then run the 10-step owner test plan (below) against the PREVIEW.
+
+Hardening (2026-07-23, second pass): portfolioSize defaults to NULL —
+67000 was an unverified legacy default and is never shown as real nor
+auto-written; everything dependent shows 'הגדר תיק'/'—' until the owner
+enters a value. Empty server + explicitly-set local values → a visible
+one-time migration prompt (declining is remembered; never silent).
+Saves are PARTIAL (dirty keys only) and the server MERGES + validates
+every key (type/range/allowed values; unknown keys, oversized or
+malformed payloads rejected) and stamps updatedAt. getSettings is
+OWNER-ONLY (viewer consumes no business settings).
+
+Post-deploy owner test plan (Preview only, in order):
+  1. Login with no `prefs` row on the server → nothing shows 67,000;
+     exposure chip = 'הגדר תיק'; if this browser has old local values, a
+     migration prompt appears — decide explicitly.
+  2. Enter the REAL portfolio size in Settings → badge '✓ נשמר בחשבון'.
+  3. Check the Sheets Settings tab → a `prefs` row with that value.
+  4. Full refresh → value persists. 5. Logout+Login → persists.
+  6. Second browser → login → value appears (server-synced).
+  7. Browser A changes גודל תיק, browser B changes % סיכון → verify
+     NEITHER overwrote the other (partial merge).
+  8. Airplane-mode a save → red failure badge, value stays in the form
+     → reconnect → 'נסה שוב' → saved.
+  9. Confirm P&L/FIFO/tax/history unchanged throughout.
 
 ## 2. What FIFO PRO 2.0 is
 

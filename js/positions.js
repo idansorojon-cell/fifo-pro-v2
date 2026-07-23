@@ -41,8 +41,8 @@ const Positions = (() => {
     // <bdi> isolates each value's own direction without affecting layout
     // or the underlying number/logic. See docs/TECHNICAL_DEBT.md.
     el.innerHTML = `
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות כוללת</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
-      <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
+      <div title="Σ(מחיר קנייה ממוצע × כמות) — כמה כסף מושקע בפוזיציות הפתוחות"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">עלות פוזיציות פתוחות</div><div style="font-weight:700"><bdi>${f$(Math.round(totalCost))}</bdi></div></div>
+      <div title="Σ(מחיר נוכחי × כמות) — לפי מחירים חיים ככל שזמינים"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">שווי שוק נוכחי</div><div style="font-weight:700"><bdi>${f$(Math.round(totalVal))}</bdi></div></div>
       <div><div style="font-size:11px;color:var(--text-3);margin-bottom:3px">Open P&L</div>
         <div style="font-weight:700;color:${totalPnl>=0?'var(--green)':'var(--red)'}">
           <bdi>${f$(Math.round(totalPnl))}</bdi> ${liveCount ? `<bdi>(${liveCount}/${APP.positions.length} live)</bdi>` : ''}
@@ -61,7 +61,13 @@ const Positions = (() => {
       el.innerHTML = '<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;padding:20px 0">אין פוזיציות פתוחות. לחץ "+ פוזיציה חדשה" להוספה.</div>';
       return;
     }
-    el.innerHTML = APP.positions.map(p => posCard(p)).join('');
+    // Total open-positions value (live price when available, cost basis
+    // otherwise) — the denominator for each card's portfolio-weight %.
+    const totalVal = APP.positions.reduce((s, p) => {
+      const live = APP.liveData[p.symbol];
+      return s + (live?.price ? live.price : p.avg_price) * p.qty;
+    }, 0);
+    el.innerHTML = APP.positions.map(p => posCard(p, totalVal)).join('');
   }
 
   // Risk status used by both the position card and Mission Control's
@@ -111,7 +117,57 @@ const Positions = (() => {
     return `<div class="rr-labels rr-labels--flat">${parts.join('')}</div>`;
   }
 
-  function posCard(p) {
+  // ── Position depth block (2.1) ──────────────────────────
+  // Portfolio weight, days held, distance to target/stop, live R:R, $ risk
+  // now, and the trader's own closed-trade record on this symbol. All
+  // derived from data already on screen (position + live price + trades) —
+  // no new trading math, honest '—' whenever an input is missing.
+  function _depthBlock(p, price, val, totalVal) {
+    const row = (l, v, cls = '', title = '') => `
+      <div${title ? ` title="${title}"` : ''}><span class="pcard-stat-l">${l}</span><span class="pcard-stat-v num ${cls}"><bdi>${v}</bdi></span></div>`;
+
+    const weight = totalVal > 0 ? (val / totalVal * 100) : null;
+    const days   = PerfMetrics.daysOpen(p.added_date);
+
+    const toTarget = (price && p.target)    ? (p.target - price) / price * 100 : null;
+    const toStop   = (price && p.stop_loss) ? (price - p.stop_loss) / price * 100 : null;
+
+    // Live R:R — remaining reward vs. remaining risk from the CURRENT
+    // price (not entry). Only meaningful while price is above the stop.
+    let rrNow = null;
+    if (price && p.target && p.stop_loss && price > p.stop_loss && p.target > price) {
+      rrNow = (p.target - price) / (price - p.stop_loss);
+    }
+    const riskNow = (price && p.stop_loss && price > p.stop_loss)
+      ? (price - p.stop_loss) * p.qty : null;
+
+    return `
+      <div class="pcard-stats pcard-depth">
+        ${row('משקל בתיק', weight !== null ? weight.toFixed(1) + '%' : '—')}
+        ${row('ימים בפוזיציה', days !== null ? days : '—')}
+        ${row('מרחק ליעד', toTarget !== null ? fpct(toTarget) : '—', toTarget !== null ? (toTarget >= 0 ? 'pos' : 'neg') : '')}
+        ${row('מרחק לסטופ', toStop !== null ? toStop.toFixed(1) + '%' : '—', toStop !== null && toStop < 5 ? 'neg' : '')}
+        ${row('R:R נוכחי', rrNow !== null ? '1:' + rrNow.toFixed(2) : '—', rrNow !== null ? (rrNow >= 2 ? 'pos' : rrNow < 1 ? 'neg' : '') : '', 'תגמול נותר מול סיכון נותר מהמחיר הנוכחי')}
+        ${row('סיכון עד סטופ', riskNow !== null ? f$(Math.round(riskNow)) : '—', '', 'כמה דולר בין המחיר הנוכחי לסטופ על כל הכמות')}
+      </div>`;
+  }
+
+  // The trader's own historical record on this ticker — closed trades only,
+  // straight from APP.trades. Clicking jumps to Trades filtered to the symbol.
+  function _historyLine(p) {
+    const h = PerfMetrics.symbolHistory(APP.trades, p.symbol);
+    if (!h) return `<div class="pcard-history muted">אין עסקאות סגורות קודמות בסימבול הזה</div>`;
+    return `
+      <div class="pcard-history" onclick="Trades.applyFilter({symbol:'${p.symbol}'})" title="הצג את כל עסקאות ${p.symbol}">
+        <span class="ph-l">היסטוריה בסימבול</span>
+        <span class="num"><bdi>${h.count} עסקאות</bdi></span>
+        <span class="num ${h.net >= 0 ? 'green' : 'red'}"><bdi>${(h.net >= 0 ? '+' : '') + f$(h.net)}</bdi></span>
+        <span class="num">${h.winRate}% Win</span>
+        <span class="ph-last">אחרונה ${h.lastDate}</span>
+      </div>`;
+  }
+
+  function posCard(p, totalVal) {
     const live      = APP.liveData[p.symbol];
     const price     = live?.price;
     // P&L is ALWAYS vs your entry price (p.avg_price) — never touches
@@ -158,6 +214,9 @@ const Positions = (() => {
           <div><span class="pcard-stat-l">שווי</span><span class="pcard-stat-v num"><bdi>${f$(Math.round(val))}</bdi></span></div>
           <div class="pcard-pl"><span class="pcard-stat-l">P&L</span><span class="pcard-stat-v num ${pnl===null?'':(pnl>=0?'pos':'neg')}"><bdi>${pnl!==null ? (pnl>=0?'+':'')+f$(Math.round(pnl)) : '—'}</bdi></span><span class="pcard-pl-sub num">${pnl!==null ? fpct(pnlPct)+' · '+fILS(Math.round(usdToIls(pnl, currentMonthKey()))) : ''}</span></div>
         </div>
+
+        ${_depthBlock(p, price, val, totalVal)}
+        ${_historyLine(p)}
 
         ${Auth.isViewer() ? '' : `
         <div class="pcard-actions">
@@ -443,13 +502,21 @@ const Positions = (() => {
     const reward     = target - price;
     const ratio      = risk > 0 ? reward / risk : 0;
     const totalRisk  = risk * (qty || 0);
-    const riskPct    = (totalRisk / (APP.monthGoal > 0 ? APP.monthGoal * 13.4 : Settings.get('portfolioSize')) * 100).toFixed(1);
+    // Denominator = the ONE portfolio-size setting (Settings→portfolioSize).
+    // Was `monthGoal * 13.4` — an unexplainable magic constant that merely
+    // reproduced the old $67k default from the $5k goal; killed 2026-07-23
+    // per the owner's "every number must be explainable" mandate.
+    // null (never defined) ⇒ no % is shown at all — $ risk only.
+    const ps         = Settings.get('portfolioSize');
+    const riskPct    = ps > 0 ? (totalRisk / ps * 100).toFixed(1) : null;
     document.getElementById('rr-risk').textContent   = risk   > 0 ? `$${risk.toFixed(2)}`   : '—';
     document.getElementById('rr-reward').textContent = reward > 0 ? `$${reward.toFixed(2)}` : '—';
     const ratioEl = document.getElementById('rr-ratio');
     ratioEl.textContent = ratio > 0 ? `1:${ratio.toFixed(2)}` : '—';
     ratioEl.style.color = ratio >= 2 ? 'var(--green)' : ratio >= 1 ? 'var(--blue)' : 'var(--red)';
-    document.getElementById('rr-total-risk').textContent = qty && risk > 0 ? `$${totalRisk.toFixed(0)} (${riskPct}%)` : '—';
+    document.getElementById('rr-total-risk').textContent = qty && risk > 0
+      ? `$${totalRisk.toFixed(0)}${riskPct !== null ? ` (${riskPct}%)` : ' (הגדר גודל תיק ל-%)'}`
+      : '—';
   }
 
   // ── CRUD ────────────────────────────────────────────────

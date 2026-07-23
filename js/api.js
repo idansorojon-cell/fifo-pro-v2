@@ -254,6 +254,20 @@ const API = (() => {
     return authedGet_(authedUrl_('getWatchlist'));
   }
 
+  // ── Synced settings (2.1) ──────────────────────────────
+  // Round-trip for the server-persisted business settings (see
+  // AppScript_FULL.gs handleGetSettings_/handleSetSettings_). An OLD
+  // backend deployment answers getSettings with ok:false ("Unknown
+  // action") — Settings.loadFromServer treats that as local-only mode,
+  // never an error toast. saveSettings goes through post(), so it is
+  // version-guarded and viewer-blocked like every other write.
+  async function getSettings() {
+    return authedGet_(authedUrl_('getSettings'));
+  }
+  async function saveSettings(settings) {
+    return post({ action: 'setSettings', settings: JSON.stringify(settings) });
+  }
+
   // ── Indicators (for Decision Engine) ──────────────────
 
   async function getIndicators(symbol) {
@@ -504,6 +518,7 @@ const API = (() => {
     addPosition, updatePosition, deletePosition, upsertPositionMeta,
     appendOperation, addTradeOperation,
     addWatchlistItem, removeWatchlistItem, getWatchlist,
+    getSettings, saveSettings,
     getIndicators, getNews,
     fetchPrices, fetchPrice,
     connectWS, disconnectWS, diagnose,

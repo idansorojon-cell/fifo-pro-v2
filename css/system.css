@@ -792,3 +792,146 @@ body.is-offline .qt-status .dot { background: var(--amber); animation: none; }
   .topbar .dark-toggle { display: none; }   /* theme toggle via Settings/avatar on mobile */
   .topbar .qt-status #last-updated { display: none; }  /* keep the live dot, drop the timestamp text */
 }
+
+/* ═══════════════════════════════════════════════════════════
+   FIFO PRO 2.1 — "Depth with hierarchy"
+   Performance monthly table · top trades · distribution ·
+   KPI groups · Positions depth block + symbol history
+   ═══════════════════════════════════════════════════════════ */
+
+/* KPI groups — density organized under quiet section labels */
+.kpi-group { margin-bottom: 14px; }
+.kpi-group-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  color: var(--text-3); text-transform: uppercase; margin: 0 2px 7px;
+}
+.kpi-group .qstat-grid { grid-template-columns: repeat(6, 1fr); }
+.qstat-sub {
+  font-size: 10.5px; color: var(--text-3); margin-top: 3px;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.card-hint { font-size: 11px; font-weight: 400; color: var(--text-3); margin-inline-start: 8px; }
+
+/* Monthly performance table */
+.mtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.mtable th {
+  text-align: right; font-size: 10.5px; font-weight: 600; color: var(--text-3);
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.mtable th.num, .mtable td.num { text-align: left; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mtable td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.mtable tbody tr.mrow { cursor: pointer; transition: background var(--t-fast, .12s); }
+.mtable tbody tr.mrow:hover { background: var(--paper-2); }
+.mtable tfoot td { font-weight: 700; border-bottom: none; border-top: 1px solid var(--border-2); background: var(--paper-2); }
+.mlabel { font-weight: 700; white-space: nowrap; }
+.mtag {
+  font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: var(--r-full);
+  margin-inline-start: 6px; letter-spacing: .04em; vertical-align: 1px;
+}
+.mtag.best  { background: var(--green-dim); color: var(--green); }
+.mtag.worst { background: var(--red-dim);  color: var(--red); }
+.mbar-cell { width: 22%; min-width: 70px; }
+.mbar { height: 8px; border-radius: var(--r-full); min-width: 2px; }
+.mbar.pos { background: var(--signal); opacity: .75; }
+.mbar.neg { background: var(--alarm);  opacity: .75; }
+
+/* Top winners / losers */
+.ttgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ttcol-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; margin-bottom: 7px; }
+.ttcol-title.green { color: var(--green); } .ttcol-title.red { color: var(--red); }
+.ttrade {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: var(--r-sm); cursor: pointer; font-size: 12px;
+}
+.ttrade:hover { background: var(--paper-2); }
+.tt-sym  { font-weight: 700; min-width: 46px; }
+.tt-date { color: var(--text-3); font-size: 10.5px; flex: 1; }
+.tt-pct  { color: var(--text-3); font-size: 11px; }
+.tt-net  { font-weight: 700; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tt-empty { color: var(--text-3); font-size: 12px; padding: 8px; }
+
+/* Profit distribution histogram */
+.dist-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; min-height: 150px; padding-top: 6px; }
+.dist-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dist-count { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono); height: 14px; }
+.dist-bar-wrap { height: 90px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.dist-bar { width: 70%; max-width: 34px; border-radius: 3px 3px 0 0; }
+.dist-bar.pos { background: var(--signal); opacity: .8; }
+.dist-bar.neg { background: var(--alarm);  opacity: .8; }
+.dist-label { font-size: 9px; color: var(--text-3); white-space: nowrap; font-family: var(--font-mono); }
+
+/* Positions — depth block + symbol history */
+.pcard-depth { border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px; }
+.pcard-history {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 8px; padding: 6px 8px; border-radius: var(--r-sm);
+  background: var(--paper-2); font-size: 11px; cursor: pointer;
+}
+.pcard-history:hover { background: var(--paper-3); }
+.pcard-history.muted { cursor: default; color: var(--text-3); background: transparent; padding: 4px 0; }
+.pcard-history .ph-l { color: var(--text-3); font-weight: 600; }
+.pcard-history .ph-last { color: var(--text-3); font-size: 10px; margin-inline-start: auto; }
+
+/* Responsive: KPI groups collapse gracefully */
+@media (max-width: 1100px) { .kpi-group .qstat-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  {
+  .kpi-group .qstat-grid { grid-template-columns: 1fr 1fr; }
+  .ttgrid { grid-template-columns: 1fr; }
+  .dist-label { transform: rotate(-45deg); transform-origin: top right; }
+  .mbar-cell { display: none; }
+}
+
+/* Research — decision-center layout (2.1 Wave Q) */
+.research-grid { display: grid; grid-template-columns: 1fr 330px; gap: 18px; align-items: start; }
+.research-side { position: sticky; top: 70px; }
+.research-side .wl-grid { grid-template-columns: 1fr; }
+@media (max-width: 1100px) {
+  .research-grid { grid-template-columns: 1fr; }
+  .research-side { position: static; }
+  .research-side .wl-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+}
+
+/* Open-position context strip above Decision Engine results */
+.de-posctx {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--border-2);
+  border-inline-start: 3px solid var(--blue);
+  border-radius: var(--r-md); padding: 10px 14px; margin-bottom: 12px;
+  font-size: 12.5px;
+}
+.de-posctx .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.de-posctx-note { color: var(--text-3); font-size: 11px; width: 100%; }
+
+/* Trades — filtered-set summary strip (2.1 Wave R) */
+.tfs {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 8px 14px; margin-bottom: 12px;
+  font-size: 12px;
+}
+.tfs--filtered { border-inline-start: 3px solid var(--blue); }
+.tfs-flag { color: var(--text-3); font-weight: 700; display: flex; align-items: center; gap: 5px; }
+.tfs-stat { color: var(--text-3); }
+.tfs-stat b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-1, inherit); margin-inline-start: 3px; }
+.tfs-stat b.green { color: var(--green); } .tfs-stat b.red { color: var(--red); }
+
+/* Monthly table v2 — sortable headers, inline magnitude bar (2.1 Wave S) */
+.mtable th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.mtable th.sortable:hover { color: var(--text-2, inherit); }
+.msort { display: inline-block; width: 9px; color: var(--signal); }
+.mtable td.mnet { font-weight: 700; position: relative; }
+.mtable td.mnet .mbar { height: 3px; margin-top: 3px; }
+.lbl-hint {
+  font-size: 9.5px; font-weight: 400; color: var(--text-3);
+  border: 1px solid var(--border); border-radius: var(--r-full);
+  padding: 0 6px; margin-inline-start: 4px; vertical-align: 1px; cursor: help;
+}
+
+/* Settings — server-sync status badge (2.1 Wave T) */
+#settings-sync-badge { margin-top: 8px; min-height: 20px; }
+.sync-b { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; padding: 3px 10px; border-radius: var(--r-full); border: 1px solid var(--border); }
+.sync-idle   { color: var(--text-3); }
+.sync-saving { color: var(--blue);  border-color: var(--blue-dim); }
+.sync-ok     { color: var(--green); border-color: var(--green-dim); background: var(--green-dim); }
+.sync-fail   { color: var(--red);   border-color: var(--red-dim);   background: var(--red-dim); }
+.sync-warn   { color: var(--gold);  border-color: var(--gold-dim);  background: var(--gold-dim); }

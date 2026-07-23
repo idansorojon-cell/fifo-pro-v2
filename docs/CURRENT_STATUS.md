@@ -1,17 +1,23 @@
 # FIFO PRO — Current Status
 
-_Last updated: 2026-07-22, FIFO PRO 2.0 Design Transformation. This
-snapshot describes the `premium-redesign` branch — NOT yet merged to
-`main` or deployed to production. See HANDOFF.md for the narrative._
+_Last updated: 2026-07-23. **Production runs 2.1.0** — "Depth with
+hierarchy" (Waves O-U) released with owner approval; server-synced
+settings live (backend deployed by owner the same day). See HANDOFF.md._
 
 ## Branch state
 
-- **Branch:** `premium-redesign` (worktree at
-  `fifo/fifo-premium-redesign`), based on `main`@`cf1d454`.
-- **NOT pushed** to `origin/main` — production still runs v1
-  (deployment gate: the owner's real-login checklist, then explicit
-  approval; see HANDOFF.md §Release).
-- **Rollback point:** `main`@`cf1d454` (v1, exactly as deployed).
+- **Production (`origin/main`):** 2.0.1, merge `4fabd2a` + bump
+  `3ae3a8d`. Rollback tag `rollback/pre-2.0-merge` → `cf1d454` (v1).
+- **Branch `premium-redesign`:** 2.1.0 — Waves O (Performance depth:
+  3-group 18-KPI board, clickable monthly table with ₪+cumulative+
+  Best/Worst, top winners/losers, P&L distribution), P (Positions
+  depth: weight/days/distances/live-R:R/$risk + per-symbol record),
+  Q (Research decision center: two-column workspace + watchlist rail,
+  open-position context, watchlist→ticket), R (Trades filtered-set
+  summary strip, Home 8-chip strip). New js/perfMetrics.js; utils.js
+  and backend untouched (0 diff).
+- **Deployment gate:** owner approval, then merge+push (+15-min-max
+  mandatory update for open sessions).
 
 ## What FIFO PRO 2.0 is (on this branch)
 

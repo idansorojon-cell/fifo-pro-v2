@@ -184,7 +184,15 @@ async function load() {
   if (!data) return false;
 
   APP.trades = (data.trades || []).map(Utils.normalizeTrade);
-  if (data.goal !== null && data.goal !== undefined) APP.monthGoal = data.goal;
+  if (data.goal !== null && data.goal !== undefined) {
+    APP.monthGoal = data.goal;
+    // Mirror the server goal into prefs so the Settings screen always
+    // shows the server truth (goal has its own server path — getGoal/
+    // setGoal — but the Settings UI reads prefs.monthlyGoal).
+    if (typeof Settings !== 'undefined' && Settings.get('monthlyGoal') !== data.goal) {
+      Settings.set('monthlyGoal', data.goal);
+    }
+  }
 
   if (data.positions) {
     APP.positions = data.positions.map(p => {
@@ -358,6 +366,11 @@ function _renderDest(dest) {
     // Unified Research = Decision Engine + Watchlist on one screen.
     DecisionEngine.renderStarter();
     Watchlist.render();
+    // Portfolio-size field starts from the ONE real setting (editable per
+    // analysis; the hardcoded 67000 default was killed 2026-07-23).
+    // null = never defined — stays empty, placeholder explains.
+    const pe = document.getElementById('de-portfolio');
+    if (pe && !pe.value) { const ps = Settings.get('portfolioSize'); if (ps) pe.value = ps; }
     if (APP.watchlist.length > 0) Watchlist.refresh();
     return;
   }
@@ -728,7 +741,11 @@ async function _initApp() {
   // load() clears in-memory state first, then fetches from the authenticated backend.
   // If it returns false (401 or network failure), do NOT render — the login screen
   // will already be shown by the 401 handler. Bail out here.
-  const ok = await load();
+  // Settings load in PARALLEL and are awaited BEFORE the first render, so
+  // no exposure/risk figure is ever painted from a default the server was
+  // about to override (owner requirement, 2026-07-23). loadFromServer
+  // never throws — an old backend just means honest local-only mode.
+  const [ok] = await Promise.all([load(), Settings.loadFromServer()]);
   if (!ok) { _hideBootSkeleton(); return; }
 
   applyRoleUI();

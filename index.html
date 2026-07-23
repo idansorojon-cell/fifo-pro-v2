@@ -331,6 +331,7 @@
         <select id="filter-month" onchange="Trades.render()"><option value="">כל החודשים</option></select>
         <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="הורד CSV"><svg class="icon"><use href="#icon-download"/></svg> CSV</button>
       </div>
+      <div id="trades-filter-summary"></div>
       <div class="card card--flush">
         <div class="table-wrap">
           <table>
@@ -378,10 +379,12 @@
   <div id="screen-research" class="panel">
     <div class="screen-head">
       <div class="eyebrow">Research</div>
-      <h1>מחקר לפני עסקה</h1>
-      <div class="lede">רשימת מעקב + מנוע החלטות — זרימה אחת · מהציון ישר לטיקט המסחר</div>
+      <h1>מרכז החלטות</h1>
+      <div class="lede">מנוע החלטות + רשימת מעקב חיה + ההיסטוריה שלך בסימבול — הכל במסך אחד, מהציון ישר לטיקט</div>
     </div>
 
+    <div class="research-grid">
+    <div class="research-main">
     <!-- Decision Engine (existing module, ids unchanged) -->
     <div class="card">
       <div class="card-title"><svg class="icon"><use href="#icon-target"/></svg> Decision Engine — ניתוח לפני כניסה (Technical + Discipline + News)</div>
@@ -391,7 +394,7 @@
         <div class="form-group"><label>סטופ לוס</label><input id="de-stop"  type="number" step="0.01" placeholder="חובה ל-R:R"></div>
         <div class="form-group"><label>יעד מכירה</label><input id="de-target" type="number" step="0.01" placeholder="חובה ל-R:R"></div>
         <div class="form-group"><label>כמות (לחישוב סיכון/חשיפה)</label><input id="de-qty" type="number" placeholder="אופציונלי"></div>
-        <div class="form-group"><label>גודל תיק ($)</label><input id="de-portfolio" type="number" value="67000" placeholder="67000"></div>
+        <div class="form-group"><label>גודל תיק מוגדר ($) <span class="lbl-hint" title="ברירת המחדל מגיעה מהגדרות → גודל תיק מוגדר">מההגדרות</span></label><input id="de-portfolio" type="number" placeholder="גודל תיק"></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="DecisionEngine.run()"><svg class="icon"><use href="#icon-search"/></svg> נתח מניה</button>
@@ -404,11 +407,14 @@
         לא מחליף שיקול דעת.
       </div>
     </div>
+    <div id="decision-poscontext"></div>
     <div id="decision-result"></div>
     <div id="trade-memory"></div>
+    </div><!-- /research-main -->
 
-    <!-- Watchlist (existing module, ids unchanged) -->
-    <div class="sec-head" style="margin-top:22px"><h3>רשימת מעקב — Live</h3>
+    <!-- Watchlist rail (existing module, ids unchanged) -->
+    <aside class="research-side">
+    <div class="sec-head"><h3>רשימת מעקב — Live</h3>
       <div style="display:flex;gap:8px">
         <button id="wl-refresh-btn" class="btn btn-ghost btn-sm" onclick="Watchlist.refresh(true)"><svg class="icon"><use href="#icon-refresh"/></svg> רענן</button>
         <button class="btn btn-primary btn-sm" data-owner-only onclick="Watchlist.add()"><svg class="icon"><use href="#icon-plus"/></svg> הוסף סימבול</button>
@@ -419,6 +425,8 @@
       <input id="watchlist-note"  placeholder="הערה (אופציונלי)" style="max-width:200px">
     </div>
     <div id="watchlist-grid" class="wl-grid"></div>
+    </aside>
+    </div><!-- /research-grid -->
   </div>
 
   <!-- ═══════════════════════════════════════════════════
@@ -445,7 +453,21 @@
 
     <!-- Pane: overview -->
     <div id="pv-overview" class="trades-pane active">
-      <div class="qstat-grid" id="pv-overview-stats" style="margin-bottom:16px"></div>
+      <div id="pv-overview-stats" style="margin-bottom:16px"></div>
+      <div class="card">
+        <div class="card-title"><svg class="icon"><use href="#icon-calendar"/></svg> ביצועים חודשיים <span class="card-hint">לחיצה על חודש מציגה את כל העסקאות שלו</span></div>
+        <div class="table-wrap" id="pv-monthly-table"></div>
+      </div>
+      <div class="stats-2col">
+        <div class="card">
+          <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> העסקאות הבולטות <span class="card-hint">לחיצה מסננת לפי סימבול</span></div>
+          <div class="ttgrid" id="pv-top-trades"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><svg class="icon"><use href="#icon-dashboard"/></svg> התפלגות רווח/הפסד לעסקה</div>
+          <div class="dist-grid" id="pv-dist"></div>
+        </div>
+      </div>
       <div class="card">
         <div class="card-title"><svg class="icon"><use href="#icon-trending-up"/></svg> Equity Curve — רווח נטו מצטבר ($)</div>
         <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
@@ -775,6 +797,7 @@
 ═══════════════════════════════════════════════════ -->
 <script src="js/version.js"></script>
 <script src="js/utils.js"></script>
+<script src="js/perfMetrics.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/learningEngine.js"></script>
 <script src="js/api.js"></script>

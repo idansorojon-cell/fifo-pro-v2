@@ -35,6 +35,14 @@ Every change must improve the production system.
 refactors — the smallest correct change wins. See `docs/DEVELOPMENT_RULES.md`
 for the full methodology.
 
+**Density with hierarchy, never simplification by deletion.** (Owner
+mandate, 2026-07-23, after the 2.0 course-correction.) FIFO PRO is a
+professional trading terminal — benchmark Bloomberg / TradingView /
+Koyfin, not a minimalist app. Default to MORE well-organized information
+(KPIs, tables, drill-downs, per-symbol history); structure it with clear
+visual hierarchy. Never present "cleaner = fewer numbers" as an
+improvement.
+
 Never break existing functionality.
 
 If a feature already works:
