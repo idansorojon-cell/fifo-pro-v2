@@ -26,7 +26,7 @@
  * the bump script instead of edited by hand.
  */
 
-const BUILD_CACHE = 'fifopro-v2.1.0-2026-07-23.4';
+const BUILD_CACHE = 'fifopro-v2.1.0-2026-07-23.5';
 
 // NOTE: relative paths so this works both at a domain root and under a
 // GitHub Pages project subpath.

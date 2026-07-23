@@ -13,9 +13,9 @@ docs live in `/docs` — this is the condensed summary. Updated
   `rollback/pre-2.0-merge` → `cf1d454` pushed too). The mandatory
   update mechanism was proven end-to-end (detect → overlay → write-block
   → update → draft restore → no loop) before release.
-- **Branch `premium-redesign`** now holds **2.1 "Depth with hierarchy"**
-  (Waves O/P/Q/R — owner's course-correction: density, not minimalism),
-  stamped 2.1.0, **NOT merged, NOT pushed** — awaiting owner approval.
+- **Production runs FIFO PRO 2.1.0** (released 2026-07-23 with owner
+  approval after the full post-deploy settings-sync test series).
+  Backend deployed by the owner the same day (synced settings live).
 - **The owner mandate governing all future design:** simplify through
   HIERARCHY, never deletion (see CLAUDE.md Golden Rules).
 - **Release gate (explicitly agreed with the owner):** the owner runs

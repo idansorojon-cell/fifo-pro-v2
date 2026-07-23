@@ -60,7 +60,16 @@ const Settings = (() => {
     sessionTimeout: 0, // 0 = never
   };
 
-  function getPrefs() { return LS.get('fifo_prefs', DEFAULTS); }
+  // MUST return a COPY when falling back to defaults: callers mutate the
+  // returned object (set()/toggleModule do `p[key]=…; savePrefs(p)`), and
+  // returning the DEFAULTS reference let those writes contaminate the
+  // in-memory defaults for the rest of the session — e.g. after unset(),
+  // get() would "restore" a stale value instead of honest null. Found by
+  // the post-deploy cleanup test (2026-07-23); latent since v1.
+  function getPrefs() {
+    const stored = LS.get('fifo_prefs', null);
+    return stored || { ...DEFAULTS, showModules: { ...DEFAULTS.showModules } };
+  }
   function savePrefs(p) { LS.set('fifo_prefs', p); }
 
   // ── Server sync layer (2.1, owner mandate 2026-07-23) ────

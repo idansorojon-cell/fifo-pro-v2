@@ -1,9 +1,8 @@
 # FIFO PRO — Current Status
 
-_Last updated: 2026-07-23. **Production runs 2.0.1** (2.0 "Quiet
-Terminal" released with owner approval; mandatory-update mechanism
-proven live). The `premium-redesign` branch now carries **2.1 "Depth
-with hierarchy"** — NOT yet merged/pushed. See HANDOFF.md._
+_Last updated: 2026-07-23. **Production runs 2.1.0** — "Depth with
+hierarchy" (Waves O-U) released with owner approval; server-synced
+settings live (backend deployed by owner the same day). See HANDOFF.md._
 
 ## Branch state
 
