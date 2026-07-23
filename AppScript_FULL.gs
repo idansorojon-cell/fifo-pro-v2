@@ -2434,7 +2434,9 @@ function handleSetSettings_(data) {
     return jsonOut_({ ok: false, error: 'Missing settings object' });
   }
 
-  // Validate EVERY incoming key: unknown → reject; known → type/range check.
+  // Validate EVERY incoming key: unknown → reject; known → type/range
+  // check. An explicit null means "UNSET this key" (back to the honest
+  // 'never defined' state) — allowed for known keys, skips range checks.
   const keys = Object.keys(incoming);
   if (keys.length === 0) return jsonOut_({ ok: false, error: 'Empty settings update' });
   for (let i = 0; i < keys.length; i++) {
@@ -2442,16 +2444,21 @@ function handleSetSettings_(data) {
     if (!PREF_VALIDATORS[k]) {
       return jsonOut_({ ok: false, error: 'Unknown setting: ' + k });
     }
+    if (incoming[k] === null) continue; // explicit unset — no range check
     const verdict = PREF_VALIDATORS[k](incoming[k]);
     if (verdict !== true) {
       return jsonOut_({ ok: false, error: verdict });
     }
   }
 
-  // MERGE into the stored blob (partial update — never blind-overwrite).
+  // MERGE into the stored blob (partial update — never blind-overwrite);
+  // null deletes the key so it reads back as "not set".
   const found  = readPrefsBlob_();
   const merged = found.prefs || {};
-  keys.forEach(function(k) { merged[k] = incoming[k]; });
+  keys.forEach(function(k) {
+    if (incoming[k] === null) delete merged[k];
+    else merged[k] = incoming[k];
+  });
   merged.updatedAt = new Date().toISOString();
 
   const sh = getSheet_('Settings');

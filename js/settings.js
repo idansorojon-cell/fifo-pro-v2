@@ -193,6 +193,33 @@ const Settings = (() => {
 
   function retryServerSave() { if (_serverAvailable) { _saveState = 'saving'; _updateSyncBadge(); _saveToServer(); } }
 
+  // Explicitly UNSET a synced key — locally and (when the backend is
+  // available) on the server, via the null-deletes-key contract in
+  // handleSetSettings_. Returns the server result so callers/tests can
+  // verify. Used by the owner's "leave it as 'not set'" flows; never
+  // called automatically.
+  async function unset(key) {
+    if (!SYNCED_KEYS.includes(key)) return { ok: false, error: 'not a synced key' };
+    const p = getPrefs();
+    delete p[key];
+    savePrefs(p);
+    _dirty.delete(key);
+    if (!_serverAvailable) { _saveState = 'local-only'; _updateSyncBadge(); return { ok: true, localOnly: true }; }
+    try {
+      const res = await API.saveSettings({ [key]: null });
+      if (res && res.ok) {
+        _saveState = 'saved'; _updateSyncBadge();
+        setTimeout(() => { if (_saveState === 'saved') { _saveState = 'idle'; _updateSyncBadge(); } }, 3000);
+      } else {
+        _saveState = 'failed'; _updateSyncBadge(res && res.error);
+      }
+      return res;
+    } catch (e) {
+      _saveState = 'failed'; _updateSyncBadge(e.message);
+      return { ok: false, error: e.message };
+    }
+  }
+
   function _updateSyncBadge(err) {
     const el = document.getElementById('settings-sync-badge');
     if (!el) return;
@@ -1080,7 +1107,7 @@ const Settings = (() => {
 
   return {
     render, get, set, getPrefs, save, setTheme, toggleModule,
-    loadFromServer, isReady, retryServerSave,
+    loadFromServer, isReady, retryServerSave, unset,
     clearCache, syncNow, validateData, exportJSON, triggerImport, importJSON,
     showPasswordChange, hidePasswordChange, changePassword, revokeAllSessions, _syncGoal,
     showViewerManage, hideViewerManage, saveViewerCredentials, toggleViewerEnabled,
