@@ -263,9 +263,18 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 - [ ] Real-time price streaming (currently 15s polling only —
       intentionally deferred because it would require exposing a price
       provider API key to the browser).
-- [ ] PWA icon assets (`assets/icon-192.png`, `assets/icon-512.png`)
-      referenced in `manifest.json` were not verified to exist this
-      session — check if install prompts/icons look broken.
+- [ ] **PWA icon assets — confirmed missing (2026-08-14), real defect, not
+      cosmetic.** `manifest.json` references `assets/icon-192.png` and
+      `assets/icon-512.png` (both `purpose: "any maskable"`, the only two
+      icons declared). Neither file exists anywhere in the repo, and both
+      404 on live production (`idansorojon-cell.github.io/fifo-pro-v2/
+      assets/icon-*.png`). This can suppress the "Add to Home Screen"
+      install prompt on some Android/Chrome versions (they require a
+      valid maskable icon ≥192px) and will show a broken/placeholder icon
+      for anyone who does install it. **Not fixed this pass** — the fix
+      is creating an actual icon image, a branding/design decision, not
+      a safe mechanical maintenance edit. Needs the owner to supply or
+      approve an icon design before this can close.
 
 ## Design & UX overhaul (in progress — see docs/DESIGN_SYSTEM.md)
 
