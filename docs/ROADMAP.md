@@ -215,15 +215,22 @@ Grouped by priority. Nothing here has been started unless explicitly noted.
 
 ## P2 — Product
 
-- [ ] **Verify Polygon is actually unwired in the live backend.** Live
-      console logs observed this session show `[prices] errors: QBTX:
-      POLYGON_API_KEY חסר ב-Script Properties` on every price poll — this
-      contradicts CURRENT_STATUS.md's claim that `handleGetPrices_` calls
-      Finnhub only. Prices still load successfully (2/2), so this may be
-      a harmless fallback-attempt log rather than a real failure, but it
-      wasn't caused by this session's changes (confirmed via `git diff`
-      showing zero uncommitted changes to `AppScript_FULL.gs` at the time
-      it was observed) — worth a follow-up look at `handleGetPrices_`.
+- [x] **Verify Polygon is actually unwired in the live backend — CLOSED
+      2026-08-14, confirmed unreachable, not just unlikely.** Traced the
+      full call graph in the current `AppScript_FULL.gs`: `handleGetPrices_`
+      (the sole handler for the `getPrices` action, `doGet`'s dispatcher at
+      the `case 'getPrices':` line) calls `fetchFinnhubPrices_` only — one
+      line, no branch, no fallback chain. `fetchPolygonPrices_` has exactly
+      one other reference anywhere in the file: the comment above it
+      documenting it as disabled. There is no code path — direct, indirect,
+      or via a fallback — through which `fetchPolygonPrices_` (and therefore
+      its `POLYGON_API_KEY חסר` error string) can execute today. The
+      `[prices] errors: QBTX: POLYGON_API_KEY חסר` log observed in an
+      earlier session is therefore a historical artifact — either from a
+      moment before this disabling was in place, or from a live-deployed
+      Apps Script version that had temporarily drifted from git (both have
+      happened before on this project, see TECHNICAL_DEBT.md). It is not
+      reproducible from the code as it stands and needs no fix.
 - [ ] Revisit whether Polygon.io should be permanently removed or kept as
       a documented, dormant fallback option (currently dormant code, see
       TECHNICAL_DEBT.md).
