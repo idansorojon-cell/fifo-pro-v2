@@ -463,30 +463,40 @@ confirmed deployed.
 
 ## Security
 
-- **Authentication is fully bypassed** (`AUTH_DISABLED = true` in
-  `js/auth.js`, `js/api.js`, and `AppScript_FULL.gs`). The login screen is
+**Current state (verified directly in source, 2026-08-14): authentication
+is ENABLED.** `AUTH_DISABLED = false` in `js/auth.js`, `js/api.js`, and
+`AppScript_FULL.gs` — all three checked directly, not assumed. The login
+overlay (`#login-overlay`) is present in `index.html` and gates boot;
+owner/viewer roles are enforced server-side. This has been the case since
+2026-07-06 (see CURRENT_STATUS.md); the bypassed state described below is
+history, kept for reference only — do not treat it as current.
+
+<details>
+<summary>Historical record — the bypassed period (pre-2026-07-06)</summary>
+
+- **Authentication was fully bypassed** (`AUTH_DISABLED = true` in
+  `js/auth.js`, `js/api.js`, and `AppScript_FULL.gs`). The login screen was
   removed from the DOM entirely. Anyone with the Apps Script Web App URL
-  can read/write all trades, positions, and watchlist data, and can call
-  `getPrices`/AI Chat. This was an explicit, deliberate request (for
-  debugging convenience) — but it is a real, live exposure and should be
-  the first thing addressed if this app is used beyond a single trusted
-  device. See "Restoring authentication" below.
-- The session-token/password-hash auth system underneath is otherwise
-  intact and was working correctly before being bypassed — it does not
+  could read/write all trades, positions, and watchlist data, and could
+  call `getPrices`/AI Chat. This was an explicit, deliberate request (for
+  debugging convenience) — a real, live exposure at the time.
+- The session-token/password-hash auth system underneath stayed intact
+  throughout and was working correctly before being bypassed — it did not
   need to be rebuilt, just re-enabled.
 
-### Restoring authentication
-1. In `AppScript_FULL.gs`: set `AUTH_DISABLED = false`. Ensure
-   `LOGIN_PASSWORD` is set in Script Properties (as a `__hash__:<sha256>`
-   value, or plaintext for first-run auto-hashing — see `handleLogin_`
-   comments).
-2. In `js/auth.js` and `js/api.js`: set `AUTH_DISABLED = false`.
-3. Restore the login overlay markup in `index.html` (was removed, not just
-   hidden — check git history around the "Remove login completely" commit
-   for the exact markup to reintroduce, or rebuild from `auth.js`'s
-   `showLoginScreen()`/`hideLoginScreen()` which still reference
-   `#login-overlay`/`#login-password`/`#login-btn`/`#login-error` by ID).
-4. Redeploy Apps Script (manual step, see PROJECT_OVERVIEW.md — Deployment).
+### How authentication was restored (2026-07-06)
+1. In `AppScript_FULL.gs`: `AUTH_DISABLED` set to `false`. `LOGIN_PASSWORD`
+   set in Script Properties (as a `__hash__:<sha256>` value, or plaintext
+   for first-run auto-hashing — see `handleLogin_` comments).
+2. In `js/auth.js` and `js/api.js`: `AUTH_DISABLED` set to `false`.
+3. Login overlay markup restored in `index.html` (it had been removed, not
+   just hidden — `auth.js`'s `showLoginScreen()`/`hideLoginScreen()`
+   reference `#login-overlay`/`#login-password`/`#login-btn`/
+   `#login-error` by ID).
+4. Apps Script redeployed (manual step, see PROJECT_OVERVIEW.md —
+   Deployment).
+
+</details>
 
 ## Service worker cache strategy
 
