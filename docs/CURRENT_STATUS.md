@@ -6,16 +6,20 @@ settings live (backend deployed by owner the same day). See HANDOFF.md._
 
 ## Branch state
 
-- **Production (`origin/main`):** 2.0.1, merge `4fabd2a` + bump
-  `3ae3a8d`. Rollback tag `rollback/pre-2.0-merge` → `cf1d454` (v1).
-- **Branch `premium-redesign`:** 2.1.0 — Waves O (Performance depth:
-  3-group 18-KPI board, clickable monthly table with ₪+cumulative+
-  Best/Worst, top winners/losers, P&L distribution), P (Positions
-  depth: weight/days/distances/live-R:R/$risk + per-symbol record),
-  Q (Research decision center: two-column workspace + watchlist rail,
-  open-position context, watchlist→ticket), R (Trades filtered-set
-  summary strip, Home 8-chip strip). New js/perfMetrics.js; utils.js
-  and backend untouched (0 diff).
+- **Production (`origin/main`):** 2.1.0 (`version.json` confirms:
+  `2.1.0`, build `2026-07-23.5`), merged via `c280b83` — "Depth with
+  hierarchy" (Waves O-U: Performance depth, Positions depth, Research
+  decision center, Trades filtered-summary, Home 8-chip strip, and the
+  server-synced settings layer). Rollback tag `rollback/pre-2.1-merge`
+  → `3ae3a8d`. utils.js and the backend are untouched by this merge
+  (0 diff vs. 2.0.1). *(The line below previously said "2.0.1" — that
+  was the state of `main` before this merge; corrected 2026-08-14.)*
+- **Branch `premium-redesign`:** 2.2.0 — continues past the 2.1.0 merge
+  with a typography overhaul (self-hosted Heebo/JetBrains Mono) and a
+  visual-polish pass (type scale, weight, RTL bidi fix). Pushed to
+  `origin/premium-redesign` as of 2026-08-14 (backup only — **not
+  merged to `main`**, awaiting the owner's design review per the
+  release checklist in HANDOFF.md).
 - **Deployment gate:** owner approval, then merge+push (+15-min-max
   mandatory update for open sessions).
 

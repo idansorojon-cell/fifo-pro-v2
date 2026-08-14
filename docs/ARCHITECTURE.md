@@ -266,8 +266,11 @@ APP = {
   `js/*.js`, both CSS files, `index.html`, the Chart.js CDN URL).
 - Apps Script requests (`script.google.com`) are always network — never
   cached (data must always be live).
-- **Critical:** `CACHE_NAME`/`STATIC_CACHE` version (currently `fifopro-v4`)
-  MUST be bumped any time `index.html` or any `js/*.js` file changes.
+- **Critical:** `sw.js`'s `BUILD_CACHE` version (currently
+  `fifopro-v2.1.0-2026-07-23.5`, checked 2026-08-14 — the scheme moved
+  from a simple `fifopro-v4`-style counter to a semver+build+date stamp
+  managed by `tools/bump-version.sh`, see HANDOFF.md) MUST be bumped
+  any time `index.html` or any `js/*.js` file changes.
   Because the fetch handler is cache-first, a returning browser will keep
   serving an old cached bundle **forever** if the cache name doesn't
   change — this actually happened this session (stuck on a stale

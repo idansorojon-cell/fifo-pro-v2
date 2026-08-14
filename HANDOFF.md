@@ -8,14 +8,18 @@ docs live in `/docs` — this is the condensed summary. Updated
 
 ## 1. Where things stand RIGHT NOW
 
-- **Production runs FIFO PRO 2.0.1** (deployed 2026-07-23, merge
-  `4fabd2a` + build-bump `3ae3a8d`; rollback tag
-  `rollback/pre-2.0-merge` → `cf1d454` pushed too). The mandatory
-  update mechanism was proven end-to-end (detect → overlay → write-block
-  → update → draft restore → no loop) before release.
+- **2.0.1 was a same-day intermediate release** (deployed 2026-07-23,
+  merge `4fabd2a` + build-bump `3ae3a8d`; rollback tag
+  `rollback/pre-2.0-merge` → `cf1d454`). The mandatory update mechanism
+  was proven end-to-end (detect → overlay → write-block → update →
+  draft restore → no loop) before release. Superseded the same day —
+  see below.
 - **Production runs FIFO PRO 2.1.0** (released 2026-07-23 with owner
-  approval after the full post-deploy settings-sync test series).
+  approval after the full post-deploy settings-sync test series;
+  merge `c280b83`, rollback tag `rollback/pre-2.1-merge` → `3ae3a8d`).
   Backend deployed by the owner the same day (synced settings live).
+  **This is the current production version** (confirmed against
+  `version.json`, 2026-08-14).
 - **The owner mandate governing all future design:** simplify through
   HIERARCHY, never deletion (see CLAUDE.md Golden Rules).
 - **Release gate (explicitly agreed with the owner):** the owner runs
@@ -23,20 +27,26 @@ docs live in `/docs` — this is the condensed summary. Updated
   merge to `main` + push (which auto-deploys GitHub Pages). No Apps
   Script redeploy is needed — the backend was not touched.
 
-## 1b. Synced settings — PENDING APPS SCRIPT DEPLOY (owner action)
+## 1b. Synced settings — DEPLOYED, confirmed live (2026-07-23)
+
+*(This section originally read "PENDING APPS SCRIPT DEPLOY" — corrected
+2026-08-14: per CURRENT_STATUS.md and section 1 above, the owner already
+redeployed Apps Script the same day and synced settings are live. Kept
+below as the deploy record and the steps taken, not as an open action.)*
 
 2.1 adds server-synced business settings (portfolioSize/riskPct/
 maxPositionSize/autoRefresh/refreshInterval/alertStop) stored in the
-same "Settings" sheet as the goal, key `prefs`. The frontend is fully
-deployed-backend-aware: an OLD backend answers getSettings with
-"Unknown action" and the app runs in an honest local-only mode (gold
-badge on the Settings screen). To activate sync, the owner must
-manually redeploy Apps Script (git push does NOT do this):
+same "Settings" sheet as the goal, key `prefs`. The frontend was already
+deployed-backend-aware before the redeploy: an OLD backend answers
+getSettings with "Unknown action" and the app runs in an honest
+local-only mode (gold badge on the Settings screen) — this fallback
+stays relevant if the backend is ever rolled back. To activate sync, the
+owner redeployed Apps Script (git push does NOT do this):
   1. Open the Apps Script project → paste the current AppScript_FULL.gs.
   2. Deploy → Manage deployments → edit the EXISTING deployment → New
      version → Deploy (keeps the same /exec URL — do not create a new
      deployment, that would change the URL).
-  3. Then run the 10-step owner test plan (below) against the PREVIEW.
+  3. Then run the 9-step owner test plan (below) against the PREVIEW.
 
 Hardening (2026-07-23, second pass): portfolioSize defaults to NULL —
 67000 was an unverified legacy default and is never shown as real nor
