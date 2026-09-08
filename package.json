@@ -1,0 +1,10 @@
+{
+  "name": "fifo-pro-workspace-review",
+  "private": true,
+  "scripts": {
+    "dev": "vite --config tools/vite.config.mjs",
+    "review": "node tools/build-review.js",
+    "test": "node tools/smoke-check.js && node tools/workspace-test.js"
+  },
+  "devDependencies": { "vite": "6.1.0" }
+}

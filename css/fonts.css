@@ -1,0 +1,100 @@
+/**
+ * FIFO PRO — fonts.css
+ * Self-hosted webfonts (2.2 typography overhaul, 2026-07-23).
+ *
+ * WHY self-hosted instead of a Google Fonts <link>: this app is a PWA
+ * with a real offline mode (sw.js atomic snapshot) — a CDN font would
+ * either be missing offline or force a network-dependent FOIT/FOUT on
+ * every cold boot. Self-hosted files are precached into the same
+ * BUILD_CACHE as every other core asset (see sw.js CORE_ASSETS).
+ *
+ * Heebo — a Hebrew/Latin UI typeface designed for interface text at
+ * small sizes, with real static weight files 400-800 (not synthesized).
+ * Chosen because the previous stack (-apple-system, "Inter" unloaded,
+ * Segoe UI, Arial) had NO real Hebrew bold weights on non-Apple
+ * platforms — Arial/Segoe UI's Hebrew coverage forces the browser to
+ * FAKE-BOLD (algorithmically thicken strokes), which is exactly the
+ * "pixelated / not sharp" look reported. Loading real 700/800 files
+ * fixes this at the source.
+ *
+ * JetBrains Mono — for tabular numerals only (var(--font-mono), used
+ * exclusively on formatted $/₪/% figures per docs/DESIGN_SYSTEM.md).
+ * True monospace digit widths at every weight, unlike SF Mono/Consolas
+ * substitutes on platforms that lack them.
+ *
+ * Subsetting: only the 'hebrew' + 'latin' Google Fonts subsets are
+ * shipped (not latin-ext/cyrillic/greek/math/symbols/vietnamese) — this
+ * app only ever renders Hebrew UI text and Latin/ASCII numbers/tickers.
+ * unicode-range below is copied verbatim from Google Fonts' own CSS so
+ * the browser only downloads a subset file when a fetched glyph is
+ * actually in its range.
+ */
+
+/* ── Heebo (UI text) ─────────────────────────────────────── */
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/heebo-400-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/heebo-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../fonts/heebo-500-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../fonts/heebo-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/heebo-600-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/heebo-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/heebo-700-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/heebo-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 800; font-display: swap;
+  src: url('../fonts/heebo-800-hebrew.woff2') format('woff2');
+  unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Heebo'; font-style: normal; font-weight: 800; font-display: swap;
+  src: url('../fonts/heebo-800-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ── JetBrains Mono (tabular numerals only) ──────────────── */
+@font-face {
+  font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/jetbrains-mono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../fonts/jetbrains-mono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/jetbrains-mono-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

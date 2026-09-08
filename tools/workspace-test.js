@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const root = path.resolve(__dirname,'..');
+const read = f => fs.readFileSync(path.join(root,f),'utf8');
+const context = vm.createContext({console,window:{},document:{addEventListener(){}},localStorage:{getItem(){return null;},setItem(){}},Date,Intl,Set});
+context.window = context;
+vm.runInContext(read('js/utils.js')+'\n'+read('js/workspace.js')+'\nthis.W = Workspace;this.U = Utils;',context);
+const trade = (id,date,net) => ({id,symbol:'TEST',sell_date:date,buy_date:date,net,gross:net/.75,qty:1,buy_price:100,sell_price:100+net/.75,cost:100,hold_days:0,month:date.split('/').reverse().slice(0,2).join('-')});
+const sample=[trade(1,'03/08/2026',150),trade(2,'07/09/2026',-75),trade(3,'08/09/2026',225)];
+assert.equal(context.W.chartData(sample,'all').totalNet,300);
+assert.equal(context.W.chartData(sample,'month',new Date(2026,8,8)).totalNet,150);
+assert.equal(context.W.chartData([], 'all').total,0);
+for(const dataset of [[],sample,[trade(1,'01/09/2026',0)],[trade(1,'01/09/2026',-500)]]) {
+  const svg=context.W.equitySVG(context.U.calcStats(dataset));
+  assert.ok(!/NaN|Infinity/.test(svg),'chart must have finite coordinates');
+}
+const live=context.U.calcLiveStats([], [{symbol:'TEST',qty:10,avg_price:100}], {});
+assert.equal(live.liveCount,0);
+assert.ok(read('js/home.js').includes("hasLive && !live.liveCount ? '—'"));
+const html=read('index.html');
+const assets=[...html.matchAll(/(?:src|href)="((?:js|css)\/[^"#]+)"/g)].map(m=>m[1]);
+for(const asset of assets) assert.ok(fs.existsSync(path.join(root,asset)),asset);
+const precache=read('sw.js');
+for(const asset of assets) assert.ok(precache.includes(`'${asset}'`),`precache includes ${asset}`);
+for(const icon of [...read('js/workspace.js').matchAll(/icon\('([^']+)'\)/g)].map(m=>m[1])) assert.ok(html.includes(`id="icon-${icon}"`),icon);
+const demo=read('review-dist/index.html');
+assert.ok(demo.includes("connect-src 'none'"));
+assert.ok(!demo.includes('src="js/api.js"'));
+assert.ok(!demo.includes('src="js/auth.js"'));
+assert.ok(read('review-dist/js/app.js').includes('const SEED = [];'));
+assert.ok(!read('review-dist/js/app.js').includes('serviceWorker.register'));
+assert.ok(!fs.existsSync(path.join(root,'review-dist/js/api.js')));
+console.log('Workspace regression checks passed: monthly/all/empty/loss/zero charts, missing quotes, local assets, precache, icons and review isolation.');
