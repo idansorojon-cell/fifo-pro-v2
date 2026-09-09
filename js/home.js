@@ -21,7 +21,7 @@
  */
 
 const Home = (() => {
-
+  let breakdownOpen = false;
 
   // Signed money display, bidi-safe. Zero is NEUTRAL (mist), not profit-
   // green — a $0 day is not a win. Always <bdi>-wrapped: mixed LTR
@@ -146,19 +146,20 @@ const Home = (() => {
     el.innerHTML = `
       <div class="home-greet">
         <h1>${_greeting()}</h1>
-        <div class="lede">${_dateLine()} · דשבורד אחד, מספר אחד לכל מדד</div>
+        <div class="lede">${_dateLine()} · תמונת התיק שלך, לפני ההחלטה הבאה</div>
       </div>
 
       ${_attentionHTML()}
 
       <div class="hero-metric">
         <div class="hero-metric-label">Open P&L — פוזיציות פתוחות בלבד <span class="live-dot" title="מתעדכן כל 15 שניות"></span></div>
-        <div class="hero-metric-value ${_tone(openPnl)}">${_money(openPnl)}</div>
+        <div class="hero-metric-value ${live.liveCount ? _tone(openPnl) : 'zero'}">${hasLive && !live.liveCount ? '—' : _money(openPnl)}</div>
+        ${hasLive && live.liveCount < live.positionsCount ? '<div class="workspace-warning">מחירים חסרים — הסכום כולל רק פוזיציות עם מחיר זמין, ואינו תמונת התיק המלאה.</div>' : ''}
         <div class="hero-metric-sub">${heroSub}${live.realizedNet!=null ? ` · ריאלי מצטבר <span class="num"><bdi>${f$(Math.round(live.combinedNet - live.unrealizedNet))}</bdi></span>` : ''}</div>
-        <button class="hero-expand" id="home-hero-expand" onclick="Home.toggleBreakdown()">
+        <button class="hero-expand" id="home-hero-expand" aria-expanded="${breakdownOpen}" onclick="Home.toggleBreakdown()">
           ${icon('trending-down')} פירוק רווח ריאלי: היום · השבוע · החודש
         </button>
-        <div class="hero-detail" id="home-hero-detail" hidden>
+        <div class="hero-detail" id="home-hero-detail" ${breakdownOpen ? '' : 'hidden'}>
           <div class="hero-detail-item"><div class="l">ריאלי היום</div><div class="v ${_tone(rw.today)}">${_money(rw.today)}</div></div>
           <div class="hero-detail-item"><div class="l">ריאלי השבוע</div><div class="v ${_tone(rw.week)}">${_money(rw.week)}</div></div>
           <div class="hero-detail-item"><div class="l">ריאלי החודש</div><div class="v ${_tone(rw.month)}">${_money(rw.month)}</div></div>
@@ -191,6 +192,7 @@ const Home = (() => {
 
       ${_coachLine(st)}
     `;
+    if (typeof Workspace !== 'undefined') Workspace.enrichHome(el, st);
   }
 
   function toggleBreakdown() {
@@ -198,7 +200,8 @@ const Home = (() => {
     const b = document.getElementById('home-hero-expand');
     if (!d) return;
     d.hidden = !d.hidden;
-    if (b) b.classList.toggle('open', !d.hidden);
+    breakdownOpen = !d.hidden;
+    if (b) { b.classList.toggle('open', breakdownOpen); b.setAttribute('aria-expanded',String(breakdownOpen)); }
   }
 
   return { render, toggleBreakdown };
